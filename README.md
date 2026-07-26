@@ -43,9 +43,9 @@ Skill Manager 提供一个桌面 GUI，让你在一个地方管理所有 Skill�
 - **冲突管理** — 检测不同工具间的版本冲突，支持 diff 预览和裁决
 - **变更忽略** — 持久化忽略特定工具的变更，hash 匹配则不再提示
 - **项目级管理** — 为不同项目配置独立的 Skill 集合，支持编辑
-- **差异检测** — 内置 LCS unified diff 视图，精确展示文件级变更
+- **差异检测** — 内置 LCS diff 视图（并排 / 统一两种模式），精确展示文件级变更
 - **主题切换** — 亮色 / 暗色 / 跟随系统
-- **多语言** — 中文 / English
+- **多语言** — 中文 / English / 日本語
 - **活动日志** — 完整的操作审计记录
 
 ## 架构
@@ -84,43 +84,53 @@ Skill Manager 提供一个桌面 GUI，让你在一个地方管理所有 Skill�
 **构建步骤：**
 
 ```bash
-git clone https://github.com/your-org/sync-skills.git
+git clone https://github.com/huang-yi-dae/sync-skills.git
 cd sync-skills
-npm install
-npm run tauri build
+pnpm install
+pnpm tauri build
 ```
 
-构建产物位于 `src-tauri/target/release/`。
+构建产物（安装包）位于 `src-tauri/target/release/bundle/`。
 
 ### 开发模式
 
 ```bash
-npm install
-npm run tauri dev
+pnpm install
+pnpm tauri dev
 ```
+
+### 发布（Release）
+
+本项目通过 GitHub Actions 自动构建多平台安装包，**无需本地打包**：
+
+1. 确保 `main` 已更新；
+2. 打版本标签并推送：
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+3. CI（`.github/workflows/release.yml`）在 Windows / macOS / Linux 三个 runner 上分别构建
+   `.msi` / `.nsis.exe`、`.dmg` / `.app`（universal）、`.deb` / `.AppImage`，
+   并汇总到一个 **GitHub Release 草稿**；
+4. 在仓库 Releases 页面将草稿发布即可。
+
+> 当前安装包未做代码签名，Windows / macOS 会提示 SmartScreen / Gatekeeper 警告。
 
 ## 开发
 
 ```
 sync-skills/
 ├── src/                    # 前端 (React + TypeScript)
-│   ├── App.tsx             # 主组件（单文件架构）
+│   ├── App.tsx             # 主组件
 │   ├── App.css             # 样式（CSS 变量主题系统）
 │   ├── types.ts            # TypeScript 类型定义
 │   └── main.tsx            # 入口
-├── src-tauri/
-│   └── src/
-│       ├── lib.rs          # IPC 命令入口 (25 commands)
-│       ├── db.rs           # SQLite 数据层
-│       ├── scanner.rs      # Skill 目录扫描
-│       ├── sync.rs         # 文件同步引擎
-│       ├── diff.rs         # LCS unified diff
-│       ├── hash.rs         # SHA-256 内容哈希
-│       ├── discovery.rs    # 工具自动发现
-│       ├── models.rs       # 数据模型
-│       └── settings.rs     # 设置持久化
-├── doc/                    # 文档与 PRD
-└── plan/                   # 开发计划
+├── src-tauri/src/          # Rust 后端（lib.rs / db.rs / scanner.rs / sync.rs / diff.rs / hash.rs / discovery.rs / models.rs / settings.rs）
+├── doc/                    # 规划文档（PRD、设计、阶段计划、DDL）
+├── docs/                   # 问题清单与已解决记录（如 testing-issues-triage.md）
+└── .github/workflows/      # CI：release.yml 自动构建多平台安装包
 ```
 
 ### 验证

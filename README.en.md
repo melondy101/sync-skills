@@ -43,9 +43,9 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
 - **Conflict Management** — Detect version conflicts between tools with diff preview and resolution
 - **Change Dismissal** — Persistently ignore specific tool changes until content changes again
 - **Project-level Management** — Configure independent skill sets per project, with edit support
-- **Diff Detection** — Built-in LCS unified diff view showing precise file-level changes
+- **Diff Detection** — Built-in LCS diff view (side-by-side / unified) showing precise file-level changes
 - **Theme Switching** — Light / Dark / Follow System
-- **i18n** — 中文 / English
+- **i18n** — 中文 / English / 日本語
 - **Activity Logs** — Complete audit trail of all operations
 
 ## Architecture
@@ -84,43 +84,53 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
 **Build:**
 
 ```bash
-git clone https://github.com/your-org/sync-skills.git
+git clone https://github.com/huang-yi-dae/sync-skills.git
 cd sync-skills
-npm install
-npm run tauri build
+pnpm install
+pnpm tauri build
 ```
 
-Build artifacts are in `src-tauri/target/release/`.
+Build artifacts (installers) are in `src-tauri/target/release/bundle/`.
 
 ### Development Mode
 
 ```bash
-npm install
-npm run tauri dev
+pnpm install
+pnpm tauri dev
 ```
+
+### Release
+
+Installers for all platforms are built automatically via GitHub Actions — no local packaging needed:
+
+1. Make sure `main` is up to date;
+2. Push a version tag:
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+3. CI (`.github/workflows/release.yml`) builds `.msi` / `.nsis.exe` (Windows),
+   `.dmg` / `.app` (universal, macOS) and `.deb` / `.AppImage` (Linux) on three runners,
+   and collects them into a **GitHub Release draft**;
+4. Publish the draft from the Releases page.
+
+> Installers are currently unsigned, so Windows / macOS will show SmartScreen / Gatekeeper warnings.
 
 ## Development
 
 ```
 sync-skills/
 ├── src/                    # Frontend (React + TypeScript)
-│   ├── App.tsx             # Main component (single-file architecture)
+│   ├── App.tsx             # Main component
 │   ├── App.css             # Styles (CSS variable theme system)
 │   ├── types.ts            # TypeScript type definitions
 │   └── main.tsx            # Entry point
-├── src-tauri/
-│   └── src/
-│       ├── lib.rs          # IPC command entry (25 commands)
-│       ├── db.rs           # SQLite data layer
-│       ├── scanner.rs      # Skill directory scanner
-│       ├── sync.rs         # File sync engine
-│       ├── diff.rs         # LCS unified diff
-│       ├── hash.rs         # SHA-256 content hashing
-│       ├── discovery.rs    # Tool auto-discovery
-│       ├── models.rs       # Data models
-│       └── settings.rs     # Settings persistence
-├── doc/                    # Documentation & PRD
-└── plan/                   # Development plans
+├── src-tauri/src/          # Rust backend (lib.rs / db.rs / scanner.rs / sync.rs / diff.rs / hash.rs / discovery.rs / models.rs / settings.rs)
+├── doc/                    # Planning docs (PRD, design, phase plan, DDL)
+├── docs/                   # Issue tracker & resolution notes (e.g. testing-issues-triage.md)
+└── .github/workflows/      # CI: release.yml builds multi-platform installers
 ```
 
 ### Verification

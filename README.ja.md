@@ -43,9 +43,9 @@ Skill Manager はデスクトップ GUI を提供し、すべての Skill を一
 - **コンフリクト管理** — ツール間のバージョンコンフリクトを検出し、diff プレビューと解決を提供
 - **変更の却下** — 特定のツールの変更を永続的に無視。内容が再度変更されるまで再通知しない
 - **プロジェクト別管理** — プロジェクトごとに独立した Skill セットを構成、編集対応
-- **差分検出** — LCS unified diff ビューを内蔵し、ファイル単位の変更を正確に表示
+- **差分検出** — LCS diff ビュー（並べて表示 / 統合の 2 モード）を内蔵し、ファイル単位の変更を正確に表示
 - **テーマ切替** — ライト / ダーク / システムに従う
-- **多言語対応** — 中文 / English
+- **多言語対応** — 中文 / English / 日本語
 - **アクティビティログ** — すべての操作の完全な監査記録
 
 ## アーキテクチャ
@@ -84,43 +84,53 @@ Skill Manager はデスクトップ GUI を提供し、すべての Skill を一
 **ビルド手順：**
 
 ```bash
-git clone https://github.com/your-org/sync-skills.git
+git clone https://github.com/huang-yi-dae/sync-skills.git
 cd sync-skills
-npm install
-npm run tauri build
+pnpm install
+pnpm tauri build
 ```
 
-ビルド成果物は `src-tauri/target/release/` に出力されます。
+ビルド成果物（インストーラー）は `src-tauri/target/release/bundle/` に出力されます。
 
 ### 開発モード
 
 ```bash
-npm install
-npm run tauri dev
+pnpm install
+pnpm tauri dev
 ```
+
+### リリース
+
+各プラットフォームのインストーラーは GitHub Actions で自動ビルドされ、**ローカルでのパッケージングは不要**です：
+
+1. `main` が最新であることを確認；
+2. バージョンタグを push：
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+3. CI（`.github/workflows/release.yml`）が Windows / macOS / Linux の 3 ランナーで
+   `.msi` / `.nsis.exe`、`.dmg` / `.app`（universal）、`.deb` / `.AppImage` をビルドし、
+   **GitHub Release のドラフト**にまとめます；
+4. Releases ページでドラフトを公開します。
+
+> 現在インストーラーにはコード署名されていないため、Windows / macOS で SmartScreen / Gatekeeper の警告が出ます。
 
 ## 開発
 
 ```
 sync-skills/
 ├── src/                    # フロントエンド (React + TypeScript)
-│   ├── App.tsx             # メインコンポーネント（単一ファイル構成）
+│   ├── App.tsx             # メインコンポーネント
 │   ├── App.css             # スタイル（CSS 変数テーマシステム）
 │   ├── types.ts            # TypeScript 型定義
 │   └── main.tsx            # エントリーポイント
-├── src-tauri/
-│   └── src/
-│       ├── lib.rs          # IPC コマンドエントリー (25 コマンド)
-│       ├── db.rs           # SQLite データレイヤー
-│       ├── scanner.rs      # Skill ディレクトリスキャナー
-│       ├── sync.rs         # ファイル同期エンジン
-│       ├── diff.rs         # LCS unified diff
-│       ├── hash.rs         # SHA-256 コンテンツハッシュ
-│       ├── discovery.rs    # ツール自動検出
-│       ├── models.rs       # データモデル
-│       └── settings.rs     # 設定の永続化
-├── doc/                    # ドキュメント & PRD
-└── plan/                   # 開発計画
+├── src-tauri/src/          # Rust バックエンド（lib.rs / db.rs / scanner.rs / sync.rs / diff.rs / hash.rs / discovery.rs / models.rs / settings.rs）
+├── doc/                    # 計画ドキュメント（PRD、設計、フェーズ計画、DDL）
+├── docs/                   # 問題管理と解決記録（例: testing-issues-triage.md）
+└── .github/workflows/      # CI: release.yml がマルチプラットフォーム・インストーラーをビルド
 ```
 
 ### 検証
