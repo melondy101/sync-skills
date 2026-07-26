@@ -1276,11 +1276,121 @@ body::before {
 
 .updates-modal {
   min-width: 680px;
-  max-width: 860px;
+  width: 860px;
+  max-width: 92vw;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
+  /* P2-1: allow drag-resize of the diff window */
+  resize: both;
+  overflow: auto;
 }
+
+/* P2-1: fullscreen/maximize toggle */
+.updates-modal.maximized {
+  width: 96vw;
+  height: 96vh;
+  max-width: 96vw;
+  max-height: 96vh;
+  resize: none;
+}
+
+/* P2-1: shared diff view controls (split/unified toggle + maximize) */
+.diff-view-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.diff-view-toggle .btn {
+  border: none;
+  border-radius: 0;
+}
+
+.diff-view-toggle .btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* P2-2: side-by-side diff */
+.diff-hunk-split .diff-split {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+  border-top: none;
+}
+
+.diff-split-col {
+  flex: 1 1 50%;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.diff-split-old {
+  border-right: 1px solid var(--border);
+}
+
+.diff-line-empty {
+  background: var(--bg-subtle, rgba(127, 127, 127, 0.08));
+}
+
+.diff-line-empty .diff-line-content {
+  color: transparent;
+}
+
+/* P2-3: per-tool expandable blocks */
+.tool-diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tool-diff-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.tool-diff-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tool-diff-caret {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tool-diff-block-body {
+  padding: 0 12px 12px;
+}
+
+.diff-loading {
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 
 .updates-list {
   display: flex;

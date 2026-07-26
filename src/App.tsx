@@ -7,7 +7,7 @@ import "./App.css";
 import type {
   Tool, ToolTemplate, Project, SkillView, ScanResult, SyncResult,
   SkillUpdate, SkillDiff, SyncLog, Settings, Toast, InstallationInfo,
-  ConflictView,
+  ConflictView, DiffHunk, DiffLine,
 } from "./types";
 
 type Lang = "zh" | "en";
@@ -135,6 +135,12 @@ const translations: Record<Lang, Record<string, string>> = {
     skip: "跳过",
     updateToSsot: "更新到 SSOT",
     noChanges: "文件已同步，无实际差异。",
+    splitView: "并排",
+    unifiedView: "统一",
+    maximize: "最大化",
+    restore: "还原",
+    viewDiffAll: "查看全部差异",
+    sourceLabel: "源",
 
     // Toast messages
     failedLoadTools: "加载工具失败",
@@ -342,6 +348,12 @@ const translations: Record<Lang, Record<string, string>> = {
     skip: "Skip",
     updateToSsot: "Update to SSOT",
     noChanges: "Files are in sync, no actual differences.",
+    splitView: "Split",
+    unifiedView: "Unified",
+    maximize: "Maximize",
+    restore: "Restore",
+    viewDiffAll: "View All Diffs",
+    sourceLabel: "Source",
 
     // Toast messages
     failedLoadTools: "Failed to load tools",
@@ -500,6 +512,15 @@ function App() {
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [selectedUpdateDiff, setSelectedUpdateDiff] = useState<{ update: SkillUpdate; diff: SkillDiff } | null>(null);
   const [loadingDiff, setLoadingDiff] = useState<number | null>(null);
+  // P2-1/2/3: diff UX state
+  const [diffMaximized, setDiffMaximized] = useState(false);
+  const [diffSideBySide, setDiffSideBySide] = useState(true);
+  const [selectedSkillDiffs, setSelectedSkillDiffs] = useState<{
+    skillId: number;
+    skillName: string;
+    tools: { tool: string | null; toolId: number | null; sourcePath: string; diff: SkillDiff | null; loading: boolean }[];
+  } | null>(null);
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
 
   // Project editing
   const [showAddProject, setShowAddProject] = useState(false);
@@ -517,6 +538,7 @@ function App() {
   const [resolvingConflict, setResolvingConflict] = useState<number | null>(null);
   const [conflictDiff, setConflictDiff] = useState<{ conflictId: number; diff: SkillDiff; toolName: string } | null>(null);
   const [loadingConflictDiff, setLoadingConflictDiff] = useState<number | null>(null);
+  const [conflictMaximized, setConflictMaximized] = useState(false);
   const [reversingSync, setReversingSync] = useState<number | null>(null);
 
   // Load data on mount
@@ -787,6 +809,45 @@ function App() {
     } finally {
       setLoadingDiff(null);
     }
+  }
+
+  // P2-3: open a skill's diff showing every divergent tool as an expandable block.
+  async function handleViewSkillDiffs(skillId: number, skillName: string, skillUpdates: SkillUpdate[]) {
+    const tools = skillUpdates.map((u) => ({
+      tool: u.changed_tool,
+      toolId: u.changed_tool_id,
+      sourcePath: u.source_path,
+      diff: null as SkillDiff | null,
+      loading: true,
+    }));
+    setSelectedSkillDiffs({ skillId, skillName, tools });
+    // Expand every tool block by default so the SSOT (left) view is visible for each.
+    setExpandedTools(new Set(tools.map((_, i) => String(i))));
+    setDiffMaximized(false);
+    setDiffSideBySide(true);
+
+    for (let i = 0; i < skillUpdates.length; i++) {
+      const u = skillUpdates[i];
+      try {
+        const diff = await invoke<SkillDiff>("get_skill_diff", { skillId, sourcePath: u.source_path });
+        setSelectedSkillDiffs((prev) =>
+          prev ? { ...prev, tools: prev.tools.map((t, idx) => (idx === i ? { ...t, diff, loading: false } : t)) } : prev
+        );
+      } catch {
+        setSelectedSkillDiffs((prev) =>
+          prev ? { ...prev, tools: prev.tools.map((t, idx) => (idx === i ? { ...t, loading: false } : t)) } : prev
+        );
+      }
+    }
+  }
+
+  function toggleToolBlock(key: string) {
+    setExpandedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   async function handleUpdateFromDiff(skillId: number) {
@@ -1613,42 +1674,30 @@ function App() {
 
       {/* Conflict Diff Modal */}
       {conflictDiff && (
-        <div className="modal-overlay" onClick={() => setConflictDiff(null)}>
-          <div className="modal updates-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => { setConflictDiff(null); setConflictMaximized(false); }}>
+          <div className={`modal updates-modal${conflictMaximized ? " maximized" : ""}`} onClick={(e) => e.stopPropagation()}>
             <div className="diff-header">
               <button className="btn btn-small" onClick={() => setConflictDiff(null)}>&larr; {t("back")}</button>
               <h3 className="diff-title">{t("comparingVersions")}: {conflictDiff.toolName}</h3>
+              <DiffViewControls
+                t={t}
+                sideBySide={diffSideBySide}
+                onToggleSideBySide={() => setDiffSideBySide((v) => !v)}
+                maximized={conflictMaximized}
+                onToggleMaximize={() => setConflictMaximized((v) => !v)}
+              />
             </div>
-            <div className="diff-files">
-              {conflictDiff.diff.files.map((file, fi) => (
-                <div key={fi} className="diff-file">
-                  <div className={`diff-file-header diff-file-${file.change}`}>
-                    <span className="diff-change-badge">{file.change}</span>
-                    <span className="diff-file-path">{file.path}</span>
-                  </div>
-                  {file.hunks.map((hunk, hi) => (
-                    <div key={hi} className="diff-hunk">
-                      <div className="diff-hunk-header">
-                        @@ -{hunk.old_start},{hunk.old_count} +{hunk.new_start},{hunk.new_count} @@
-                      </div>
-                      <pre className="diff-lines">
-                        {hunk.lines.map((line, li) => (
-                          <div key={li} className={`diff-line diff-line-${line.op === "+" ? "add" : line.op === "-" ? "del" : "ctx"}`}>
-                            <span className="diff-line-op">{line.op === " " ? "\u00a0" : line.op}</span>
-                            <span className="diff-line-content">{line.content}</span>
-                          </div>
-                        ))}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              {!conflictDiff.diff.has_changes && (
-                <div className="diff-no-changes">{t("noChanges")}</div>
-              )}
+            <div className="diff-meta">
+              <span className="diff-path" title={conflictDiff.diff.source_path}>
+                source: {conflictDiff.diff.source_path}
+              </span>
+              <span className="diff-path" title={conflictDiff.diff.ssot_path}>
+                ssot: {conflictDiff.diff.ssot_path}
+              </span>
             </div>
+            <DiffFilesView diff={conflictDiff.diff} sideBySide={diffSideBySide} noChangesLabel={t("noChanges")} />
             <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setConflictDiff(null)}>{t("close")}</button>
+              <button className="btn btn-secondary" onClick={() => { setConflictDiff(null); setConflictMaximized(false); }}>{t("close")}</button>
             </div>
           </div>
         </div>
@@ -1805,8 +1854,8 @@ function App() {
 
       {/* Updates Modal */}
       {showUpdatesModal && (
-        <div className="modal-overlay" onClick={() => { setShowUpdatesModal(false); setSelectedUpdateDiff(null); }}>
-          <div className="modal updates-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => { setShowUpdatesModal(false); setSelectedUpdateDiff(null); setSelectedSkillDiffs(null); setDiffMaximized(false); }}>
+          <div className={`modal updates-modal${diffMaximized ? " maximized" : ""}`} onClick={(e) => e.stopPropagation()}>
             {selectedUpdateDiff ? (
               <>
                 <div className="diff-header">
@@ -1815,6 +1864,13 @@ function App() {
                   {selectedUpdateDiff.update.changed_tool && (
                     <span className="diff-tool-badge">{selectedUpdateDiff.update.changed_tool}</span>
                   )}
+                  <DiffViewControls
+                    t={t}
+                    sideBySide={diffSideBySide}
+                    onToggleSideBySide={() => setDiffSideBySide((v) => !v)}
+                    maximized={diffMaximized}
+                    onToggleMaximize={() => setDiffMaximized((v) => !v)}
+                  />
                 </div>
                 <div className="diff-meta">
                   <span className="diff-path" title={selectedUpdateDiff.diff.source_path}>
@@ -1824,34 +1880,7 @@ function App() {
                     ssot: {selectedUpdateDiff.diff.ssot_path}
                   </span>
                 </div>
-                <div className="diff-files">
-                  {selectedUpdateDiff.diff.files.map((file, fi) => (
-                    <div key={fi} className="diff-file">
-                      <div className={`diff-file-header diff-file-${file.change}`}>
-                        <span className="diff-change-badge">{file.change}</span>
-                        <span className="diff-file-path">{file.path}</span>
-                      </div>
-                      {file.hunks.map((hunk, hi) => (
-                        <div key={hi} className="diff-hunk">
-                          <div className="diff-hunk-header">
-                            @@ -{hunk.old_start},{hunk.old_count} +{hunk.new_start},{hunk.new_count} @@
-                          </div>
-                          <pre className="diff-lines">
-                            {hunk.lines.map((line, li) => (
-                              <div key={li} className={`diff-line diff-line-${line.op === "+" ? "add" : line.op === "-" ? "del" : "ctx"}`}>
-                                <span className="diff-line-op">{line.op === " " ? "\u00a0" : line.op}</span>
-                                <span className="diff-line-content">{line.content}</span>
-                              </div>
-                            ))}
-                          </pre>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                  {!selectedUpdateDiff.diff.has_changes && (
-                    <div className="diff-no-changes">{t("noChanges")}</div>
-                  )}
-                </div>
+                <DiffFilesView diff={selectedUpdateDiff.diff} sideBySide={diffSideBySide} noChangesLabel={t("noChanges")} />
                 <div className="modal-actions">
                   <button
                     className="btn btn-primary"
@@ -1884,6 +1913,66 @@ function App() {
                   )}
                 </div>
               </>
+            ) : selectedSkillDiffs ? (
+              <>
+                <div className="diff-header">
+                  <button className="btn btn-small" onClick={() => setSelectedSkillDiffs(null)}>&larr; {t("back")}</button>
+                  <h3 className="diff-title">{selectedSkillDiffs.skillName}</h3>
+                  <DiffViewControls
+                    t={t}
+                    sideBySide={diffSideBySide}
+                    onToggleSideBySide={() => setDiffSideBySide((v) => !v)}
+                    maximized={diffMaximized}
+                    onToggleMaximize={() => setDiffMaximized((v) => !v)}
+                  />
+                </div>
+                <div className="diff-meta">
+                  <span className="diff-path" title={selectedSkillDiffs.tools[0]?.diff?.ssot_path}>
+                    ssot: {selectedSkillDiffs.tools[0]?.diff?.ssot_path ?? "—"}
+                  </span>
+                </div>
+                {/* P2-3: each divergent tool is an expandable block; left column = SSOT (synced) */}
+                <div className="tool-diff-list">
+                  {selectedSkillDiffs.tools.map((tool, i) => {
+                    const key = String(i);
+                    const open = expandedTools.has(key);
+                    return (
+                      <div key={key} className="tool-diff-block">
+                        <div className="tool-diff-block-header" onClick={() => toggleToolBlock(key)}>
+                          <span className="tool-diff-caret">{open ? "▾" : "▸"}</span>
+                          <span className="update-tool-name">{tool.tool ?? t("sourceLabel")}</span>
+                          <code className="update-path" title={tool.sourcePath}>{tool.sourcePath}</code>
+                        </div>
+                        {open && (
+                          <div className="tool-diff-block-body">
+                            {tool.loading ? (
+                              <div className="diff-loading">{t("loading")}</div>
+                            ) : tool.diff ? (
+                              <DiffFilesView diff={tool.diff} sideBySide={diffSideBySide} noChangesLabel={t("noChanges")} />
+                            ) : (
+                              <div className="diff-loading">{t("failedLoadDiff")}</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="modal-actions">
+                  <button
+                    className="btn btn-small btn-primary"
+                    onClick={() => handleUpdateFromDiff(selectedSkillDiffs.skillId)}
+                  >
+                    {t("updateToSsot")}
+                  </button>
+                  <button
+                    className="btn btn-small"
+                    onClick={() => handleSkipUpdate(selectedSkillDiffs.skillId)}
+                  >
+                    {t("skip")}
+                  </button>
+                </div>
+              </>
             ) : (
               <>
                 <h3>{t("updatesAvailable")} ({updates.length})</h3>
@@ -1901,6 +1990,12 @@ function App() {
                         <div className="update-item-header">
                           <span className="update-skill-name">{skillUpdates[0].skill_name}</span>
                           <span className="update-count-badge">{skillUpdates.length} {t("toolUnit")}</span>
+                          <button
+                            className="btn btn-small"
+                            onClick={() => handleViewSkillDiffs(skillId, skillUpdates[0].skill_name, skillUpdates)}
+                          >
+                            {t("viewDiffAll")}
+                          </button>
                         </div>
                         {skillUpdates.map((u, idx) => (
                           <div key={idx} className="update-item update-item-tool">
@@ -1946,7 +2041,7 @@ function App() {
                   })()}
                 </div>
                 <div className="modal-actions">
-                  <button className="btn btn-secondary" onClick={() => setShowUpdatesModal(false)}>{t("close")}</button>
+                  <button className="btn btn-secondary" onClick={() => { setShowUpdatesModal(false); setSelectedUpdateDiff(null); setSelectedSkillDiffs(null); setDiffMaximized(false); }}>{t("close")}</button>
                 </div>
               </>
             )}
@@ -1954,6 +2049,136 @@ function App() {
         </div>
       )}
     </main>
+  );
+}
+
+// P2-1/2/3: shared diff rendering controls (side-by-side toggle + maximize).
+function DiffViewControls({
+  t,
+  sideBySide,
+  onToggleSideBySide,
+  maximized,
+  onToggleMaximize,
+}: {
+  t: (key: string) => string;
+  sideBySide: boolean;
+  onToggleSideBySide: () => void;
+  maximized: boolean;
+  onToggleMaximize: () => void;
+}) {
+  return (
+    <div className="diff-view-controls">
+      <div className="diff-view-toggle">
+        <button
+          className={`btn btn-small${sideBySide ? " active" : ""}`}
+          onClick={sideBySide ? undefined : onToggleSideBySide}
+        >
+          {t("splitView")}
+        </button>
+        <button
+          className={`btn btn-small${!sideBySide ? " active" : ""}`}
+          onClick={sideBySide ? onToggleSideBySide : undefined}
+        >
+          {t("unifiedView")}
+        </button>
+      </div>
+      <button className="btn btn-small" onClick={onToggleMaximize}>
+        {maximized ? t("restore") : t("maximize")}
+      </button>
+    </div>
+  );
+}
+
+function UnifiedHunk({ hunk }: { hunk: DiffHunk }) {
+  return (
+    <div className="diff-hunk">
+      <div className="diff-hunk-header">
+        @@ -{hunk.old_start},{hunk.old_count} +{hunk.new_start},{hunk.new_count} @@
+      </div>
+      <pre className="diff-lines">
+        {hunk.lines.map((line, li) => (
+          <div key={li} className={`diff-line diff-line-${line.op === "+" ? "add" : line.op === "-" ? "del" : "ctx"}`}>
+            <span className="diff-line-op">{line.op === " " ? " " : line.op}</span>
+            <span className="diff-line-content">{line.content}</span>
+          </div>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
+// P2-2: pair deletions/insertions into left (SSOT/old) + right (current/new) columns.
+function SideBySideHunk({ hunk }: { hunk: DiffHunk }) {
+  const rows: { left?: DiffLine; right?: DiffLine }[] = [];
+  let pendL: DiffLine[] = [];
+  let pendR: DiffLine[] = [];
+  const flush = () => {
+    const n = Math.max(pendL.length, pendR.length);
+    for (let i = 0; i < n; i++) {
+      rows.push({ left: pendL[i], right: pendR[i] });
+    }
+    pendL = [];
+    pendR = [];
+  };
+  for (const line of hunk.lines) {
+    if (line.op === " ") {
+      flush();
+      rows.push({ left: line, right: line });
+    } else if (line.op === "-") {
+      pendL.push(line);
+    } else if (line.op === "+") {
+      pendR.push(line);
+    }
+  }
+  flush();
+
+  const leftClass = (l?: DiffLine) => (l ? (l.op === "-" ? "del" : "ctx") : "empty");
+  const rightClass = (r?: DiffLine) => (r ? (r.op === "+" ? "add" : "ctx") : "empty");
+  const opSym = (op?: string) => (op === " " ? " " : op ?? " ");
+
+  return (
+    <div className="diff-hunk diff-hunk-split">
+      <div className="diff-hunk-header">
+        @@ -{hunk.old_start},{hunk.old_count} +{hunk.new_start},{hunk.new_count} @@
+      </div>
+      <div className="diff-split">
+        <div className="diff-split-col diff-split-old">
+          {rows.map((r, i) => (
+            <div key={i} className={`diff-line diff-line-${leftClass(r.left)}`}>
+              <span className="diff-line-op">{opSym(r.left?.op)}</span>
+              <span className="diff-line-content">{r.left?.content ?? ""}</span>
+            </div>
+          ))}
+        </div>
+        <div className="diff-split-col diff-split-new">
+          {rows.map((r, i) => (
+            <div key={i} className={`diff-line diff-line-${rightClass(r.right)}`}>
+              <span className="diff-line-op">{opSym(r.right?.op)}</span>
+              <span className="diff-line-content">{r.right?.content ?? ""}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DiffFilesView({ diff, sideBySide, noChangesLabel }: { diff: SkillDiff; sideBySide: boolean; noChangesLabel: string }) {
+  return (
+    <div className="diff-files">
+      {diff.files.map((file, fi) => (
+        <div key={fi} className="diff-file">
+          <div className={`diff-file-header diff-file-${file.change}`}>
+            <span className="diff-change-badge">{file.change}</span>
+            <span className="diff-file-path">{file.path}</span>
+          </div>
+          {file.hunks.map((hunk, hi) =>
+            sideBySide ? <SideBySideHunk key={hi} hunk={hunk} /> : <UnifiedHunk key={hi} hunk={hunk} />
+          )}
+        </div>
+      ))}
+      {!diff.has_changes && <div className="diff-no-changes">{noChangesLabel}</div>}
+    </div>
   );
 }
 
