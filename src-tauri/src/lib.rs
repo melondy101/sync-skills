@@ -4,6 +4,8 @@
 mod db;
 mod diff;
 mod discovery;
+#[cfg(test)]
+mod edge_tests;
 mod hash;
 mod lock;
 mod models;
