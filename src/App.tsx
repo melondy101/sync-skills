@@ -55,6 +55,7 @@ const translations: Record<Lang, Record<string, string>> = {
     actionSync: "同步",
     actionEnable: "启用",
     actionDisable: "禁用",
+    actionRemove: "移除",
     actionAddTool: "添加工具",
     actionDeleteTool: "删除工具",
     actionAddProject: "添加项目",
@@ -87,6 +88,7 @@ const translations: Record<Lang, Record<string, string>> = {
     checking: "检查中...",
     syncAllActive: "同步所有激活",
     searchPlaceholder: "搜索 Skill...",
+    allTools: "所有工具",
     sortName: "名称",
     sortUpdated: "更新时间",
     sortCreated: "创建时间",
@@ -268,6 +270,7 @@ const translations: Record<Lang, Record<string, string>> = {
     actionSync: "Sync",
     actionEnable: "Enable",
     actionDisable: "Disable",
+    actionRemove: "Remove",
     actionAddTool: "Add Tool",
     actionDeleteTool: "Delete Tool",
     actionAddProject: "Add Project",
@@ -300,6 +303,7 @@ const translations: Record<Lang, Record<string, string>> = {
     checking: "Checking...",
     syncAllActive: "Sync All Active",
     searchPlaceholder: "Search skills...",
+    allTools: "All tools",
     sortName: "Name",
     sortUpdated: "Updated",
     sortCreated: "Created",
@@ -493,6 +497,7 @@ function App() {
   const [updates, setUpdates] = useState<SkillUpdate[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterTool, setFilterTool] = useState<number>(-1); // -1 = all tools
   const [sortBy, setSortBy] = useState<"name" | "updated_at" | "created_at">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedProject, setSelectedProject] = useState<number>(0);
@@ -854,9 +859,7 @@ function App() {
     try {
       await invoke("sync_skill", { skillId, projectId: null, sourcePath: selectedUpdateDiff?.update.source_path ?? null });
       addToast("success", t("skillUpdated"));
-      setSelectedUpdateDiff(null);
-      // Remove from updates list
-      setUpdates((prev) => prev.filter((u) => u.skill_id !== skillId));
+      closeUpdateEntry(skillId);
       await loadSkills();
     } catch (e) {
       addToast("error", `${t("syncFailed")}: ${e}`);
@@ -864,8 +867,20 @@ function App() {
   }
 
   function handleSkipUpdate(skillId: number) {
+    closeUpdateEntry(skillId);
+  }
+
+  // Remove a skill's entries from the updates list, return to the list view,
+  // and close the modal entirely once no updates remain.
+  function closeUpdateEntry(skillId: number) {
+    const remaining = updates.filter((u) => u.skill_id !== skillId);
+    setUpdates(remaining);
     setSelectedUpdateDiff(null);
-    setUpdates((prev) => prev.filter((u) => u.skill_id !== skillId));
+    setSelectedSkillDiffs(null);
+    if (remaining.length === 0) {
+      setShowUpdatesModal(false);
+      setDiffMaximized(false);
+    }
   }
 
   async function handleToggle(skillId: number, toolId: number, active: boolean) {
@@ -1120,7 +1135,7 @@ function App() {
       } else {
         addToast("success", t("revertedToSsot"));
       }
-      setUpdates((prev) => prev.filter((u) => u.skill_id !== skillId));
+      closeUpdateEntry(skillId);
       await loadSkills();
     } catch (e) {
       addToast("error", `${t("failedRevert")}: ${e}`);
@@ -1137,7 +1152,7 @@ function App() {
         toolId: update.changed_tool_id,
         currentHash: update.new_hash,
       });
-      setUpdates((prev) => prev.filter((u) => u.skill_id !== update.skill_id));
+      closeUpdateEntry(update.skill_id);
       addToast("info", t("dismissed"));
     } catch (e) {
       addToast("error", `${t("failedRevert")}: ${e}`);
@@ -1170,13 +1185,18 @@ function App() {
   }
 
   const filteredSkills = (() => {
+    const byTool = filterTool >= 0
+      ? skills.filter((s) =>
+          s.installed_tools.some((inst) => inst.tool_id === filterTool && inst.status === "active"),
+        )
+      : skills;
     const filtered = searchQuery
-      ? skills.filter(
+      ? byTool.filter(
           (s) =>
             s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (s.description && s.description.toLowerCase().includes(searchQuery.toLowerCase())),
         )
-      : [...skills];
+      : [...byTool];
     filtered.sort((a, b) => {
       let cmp = 0;
       if (sortBy === "name") {
@@ -1272,6 +1292,7 @@ function App() {
     const actionLabels: Record<string, string> = {
       scan: t("actionScan"),
       sync: t("actionSync"),
+      remove: t("actionRemove"),
       toggle_on: t("actionEnable"),
       toggle_off: t("actionDisable"),
       add_tool: t("actionAddTool"),
@@ -1614,6 +1635,16 @@ function App() {
           </div>
           <select
             className="sort-select"
+            value={filterTool}
+            onChange={(e) => setFilterTool(parseInt(e.target.value, 10))}
+          >
+            <option value={-1}>{t("allTools")}</option>
+            {tools.map((tool) => (
+              <option key={tool.id} value={tool.id}>{tool.name}</option>
+            ))}
+          </select>
+          <select
+            className="sort-select"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           >
@@ -1718,7 +1749,7 @@ function App() {
           </div>
         ) : filteredSkills.length === 0 ? (
           <div className="empty-state">
-            {searchQuery ? (
+            {searchQuery || filterTool >= 0 ? (
               <p>{t("noMatch")} "{searchQuery}"</p>
             ) : (
               <>
@@ -1783,15 +1814,13 @@ function App() {
                   >
                     {checkingSingle === skill.id ? t("checkingUpdate") : t("checkUpdate")}
                   </button>
-                  {skill.install_count > 0 && (
-                    <button
-                      className="btn btn-small btn-primary"
-                      onClick={() => handleSyncSkill(skill.id)}
-                      disabled={syncing.has(skill.id)}
-                    >
-                      {syncing.has(skill.id) ? t("syncingCard") : t("syncNow")}
-                    </button>
-                  )}
+                  <button
+                    className="btn btn-small btn-primary"
+                    onClick={() => handleSyncSkill(skill.id)}
+                    disabled={syncing.has(skill.id)}
+                  >
+                    {syncing.has(skill.id) ? t("syncingCard") : t("syncNow")}
+                  </button>
                 </div>
               </div>
             ))}

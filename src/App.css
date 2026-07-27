@@ -1396,7 +1396,8 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 50vh;
+  max-height: 60vh;
+  min-height: 0;
   overflow-y: auto;
   margin-bottom: 4px;
 }
@@ -1406,6 +1407,8 @@ body::before {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
+  /* Prevent flex children from being squeezed together when the list overflows */
+  flex-shrink: 0;
 }
 
 .update-item-header {
@@ -1476,6 +1479,7 @@ body::before {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  flex-shrink: 0;
 }
 
 .update-item-info {
