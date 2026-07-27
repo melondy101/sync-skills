@@ -84,6 +84,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Skill Manager ${{ github.ref_name }}"
           releaseBody: "See the assets below to download and install Skill Manager for your platform."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
