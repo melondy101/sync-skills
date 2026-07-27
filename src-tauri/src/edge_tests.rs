@@ -494,10 +494,9 @@ fn diff_crlf_vs_lf_marked_modified_with_empty_hunks() {
 }
 
 #[test]
-fn diff_differing_binary_files_are_invisible() {
-    // Boundary (documents current behavior): non-UTF8 files both collapse to the
-    // "[binary file]" placeholder, so two DIFFERENT binaries compare as equal
-    // and the change is silently missed — flagged as a finding in the report.
+fn diff_differing_binary_files_detected() {
+    // Fixed: raw-byte comparison — two DIFFERENT binaries must be reported as
+    // Modified with a size-only placeholder hunk (no lossy text collapse).
     let dir = tempdir().unwrap();
     let src = dir.path().join("src");
     let ssot = dir.path().join("ssot");
@@ -506,7 +505,39 @@ fn diff_differing_binary_files_are_invisible() {
     fs::write(src.join("img.bin"), [0xFFu8, 0xFE, 0x01]).unwrap();
     fs::write(ssot.join("img.bin"), [0xFFu8, 0xFE, 0x99, 0x77]).unwrap();
     let d = diff::compute_skill_diff(&src, &ssot, "s").unwrap();
-    assert!(!d.has_changes, "differing binary files are currently NOT detected");
+    assert!(d.has_changes, "differing binary files must be detected");
+    assert!(matches!(d.files[0].change, diff::FileChange::Modified));
+    let hunk = &d.files[0].hunks[0];
+    assert!(hunk.lines.iter().any(|l| l.op == "-" && l.content.contains("4 bytes")));
+    assert!(hunk.lines.iter().any(|l| l.op == "+" && l.content.contains("3 bytes")));
+}
+
+#[test]
+fn diff_identical_binary_files_no_changes() {
+    let dir = tempdir().unwrap();
+    let src = dir.path().join("src");
+    let ssot = dir.path().join("ssot");
+    fs::create_dir_all(&src).unwrap();
+    fs::create_dir_all(&ssot).unwrap();
+    fs::write(src.join("img.bin"), [0xFFu8, 0xFE, 0x01]).unwrap();
+    fs::write(ssot.join("img.bin"), [0xFFu8, 0xFE, 0x01]).unwrap();
+    let d = diff::compute_skill_diff(&src, &ssot, "s").unwrap();
+    assert!(!d.has_changes);
+}
+
+#[test]
+fn diff_added_binary_file_has_placeholder_hunk() {
+    let dir = tempdir().unwrap();
+    let src = dir.path().join("src");
+    let ssot = dir.path().join("ssot");
+    fs::create_dir_all(&ssot).unwrap();
+    fs::create_dir_all(&src).unwrap();
+    fs::write(src.join("new.bin"), [0x00u8, 0xFF, 0xFE]).unwrap();
+    let d = diff::compute_skill_diff(&src, &ssot, "s").unwrap();
+    assert!(matches!(d.files[0].change, diff::FileChange::Added));
+    let hunk = &d.files[0].hunks[0];
+    assert_eq!(hunk.lines.len(), 1);
+    assert!(hunk.lines[0].content.contains("binary file"));
 }
 
 #[test]

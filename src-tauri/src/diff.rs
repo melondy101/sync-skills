@@ -81,7 +81,10 @@ pub fn compute_skill_diff(source: &Path, ssot: &Path, skill_name: &str) -> Resul
                 files.push(FileDiff {
                     path: rel_path.clone(),
                     change: FileChange::Added,
-                    hunks: make_full_hunk(source_files.get(rel_path).unwrap(), "+"),
+                    hunks: match as_text(source_files.get(rel_path).unwrap()) {
+                        Some(text) => make_full_hunk(text, "+"),
+                        None => make_binary_hunk(None, source_files.get(rel_path).map(|b| b.len())),
+                    },
                 });
             }
             (false, true) => {
@@ -89,14 +92,22 @@ pub fn compute_skill_diff(source: &Path, ssot: &Path, skill_name: &str) -> Resul
                 files.push(FileDiff {
                     path: rel_path.clone(),
                     change: FileChange::Deleted,
-                    hunks: make_full_hunk(ssot_files.get(rel_path).unwrap(), "-"),
+                    hunks: match as_text(ssot_files.get(rel_path).unwrap()) {
+                        Some(text) => make_full_hunk(text, "-"),
+                        None => make_binary_hunk(ssot_files.get(rel_path).map(|b| b.len()), None),
+                    },
                 });
             }
             (true, true) => {
-                let src_content = source_files.get(rel_path).unwrap();
-                let ssot_content = ssot_files.get(rel_path).unwrap();
-                if src_content != ssot_content {
-                    let hunks = compute_unified_diff(ssot_content, src_content);
+                let src_bytes = source_files.get(rel_path).unwrap();
+                let ssot_bytes = ssot_files.get(rel_path).unwrap();
+                if src_bytes != ssot_bytes {
+                    // Compare raw bytes so binary changes are never missed;
+                    // fall back to a size-only hunk when either side is not UTF-8.
+                    let hunks = match (as_text(ssot_bytes), as_text(src_bytes)) {
+                        (Some(old_text), Some(new_text)) => compute_unified_diff(old_text, new_text),
+                        _ => make_binary_hunk(Some(ssot_bytes.len()), Some(src_bytes.len())),
+                    };
                     files.push(FileDiff {
                         path: rel_path.clone(),
                         change: FileChange::Modified,
@@ -120,8 +131,9 @@ pub fn compute_skill_diff(source: &Path, ssot: &Path, skill_name: &str) -> Resul
     })
 }
 
-/// Collect all non-hidden files in a directory, returning (relative_path → content).
-fn collect_files(dir: &Path) -> Result<BTreeMap<String, String>, String> {
+/// Collect all non-hidden files in a directory, returning (relative_path → raw bytes).
+/// Raw bytes (not lossy text) so binary file changes are detected reliably.
+fn collect_files(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let mut map = BTreeMap::new();
     if !dir.exists() {
         return Ok(map);
@@ -130,7 +142,7 @@ fn collect_files(dir: &Path) -> Result<BTreeMap<String, String>, String> {
     Ok(map)
 }
 
-fn collect_recursive(base: &Path, current: &Path, map: &mut BTreeMap<String, String>) {
+fn collect_recursive(base: &Path, current: &Path, map: &mut BTreeMap<String, Vec<u8>>) {
     let entries = match fs::read_dir(current) {
         Ok(e) => e,
         Err(_) => return,
@@ -152,11 +164,43 @@ fn collect_recursive(base: &Path, current: &Path, map: &mut BTreeMap<String, Str
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .replace('\\', "/");
-            // Read as text; if binary, store a placeholder
-            let content = fs::read_to_string(&path).unwrap_or_else(|_| "[binary file]".to_string());
+            // Read raw bytes; text/binary decision happens at diff time
+            let content = fs::read(&path).unwrap_or_default();
             map.insert(rel, content);
         }
     }
+}
+
+/// Interpret raw bytes as UTF-8 text; None means binary.
+fn as_text(bytes: &[u8]) -> Option<&str> {
+    std::str::from_utf8(bytes).ok()
+}
+
+/// Placeholder hunk for binary files: shows size change instead of line diff.
+fn make_binary_hunk(old_size: Option<usize>, new_size: Option<usize>) -> Vec<DiffHunk> {
+    let mut lines = Vec::new();
+    if let Some(s) = old_size {
+        lines.push(DiffLine {
+            op: "-".to_string(),
+            content: format!("[binary file, {} bytes]", s),
+        });
+    }
+    if let Some(s) = new_size {
+        lines.push(DiffLine {
+            op: "+".to_string(),
+            content: format!("[binary file, {} bytes]", s),
+        });
+    }
+    if lines.is_empty() {
+        return vec![];
+    }
+    vec![DiffHunk {
+        old_start: 1,
+        old_count: old_size.map(|_| 1).unwrap_or(0),
+        new_start: 1,
+        new_count: new_size.map(|_| 1).unwrap_or(0),
+        lines,
+    }]
 }
 
 /// Create a full hunk showing all lines as added (+) or deleted (-).
