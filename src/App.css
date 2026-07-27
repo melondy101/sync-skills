@@ -977,6 +977,57 @@ body::before {
   line-height: 1.5;
 }
 
+/* App update check (Settings) */
+.app-update-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.app-version {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.update-latest {
+  color: var(--success, #22c55e);
+}
+
+.update-available {
+  color: var(--accent, #3b82f6);
+  font-weight: 600;
+}
+
+.update-error {
+  color: var(--danger, #ef4444);
+}
+
+/* Collapsible section header (tool paths) */
+.section-title-toggle {
+  cursor: pointer;
+  user-select: none;
+  gap: 6px;
+}
+
+.section-title-toggle:hover {
+  color: var(--text-primary);
+}
+
+.collapse-chevron {
+  font-size: 12px;
+  width: 14px;
+  display: inline-block;
+  color: var(--text-muted);
+}
+
+.collapsed-count {
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .settings-row {
   display: flex;
   gap: 16px;

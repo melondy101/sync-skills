@@ -3,6 +3,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import "./App.css";
 import type {
   Tool, ToolTemplate, Project, SkillView, ScanResult, SyncResult,
@@ -38,6 +40,17 @@ const translations: Record<Lang, Record<string, string>> = {
     preferSymlink: "优先使用符号链接代替复制",
     symlinkHint: "符号链接节省磁盘空间，但 Windows 需要开启开发者模式。失败时自动回退到复制。",
     saveSettings: "保存设置",
+    appUpdateSection: "应用更新",
+    currentVersion: "当前版本",
+    checkAppUpdate: "检查最新更新",
+    checkingAppUpdate: "检查中...",
+    upToDate: "已是最新版本",
+    newVersionFound: "发现新版本",
+    viewRelease: "前往下载",
+    updateCheckFailed: "检查更新失败",
+    noReleases: "尚未发布任何版本",
+    collapse: "收起",
+    expand: "展开",
 
     // Logs panel
     activityLogs: "活动日志",
@@ -253,6 +266,17 @@ const translations: Record<Lang, Record<string, string>> = {
     preferSymlink: "Prefer symlinks over copies",
     symlinkHint: "Symlinks save disk space but require developer mode on Windows. Falls back to copy on failure.",
     saveSettings: "Save Settings",
+    appUpdateSection: "App Updates",
+    currentVersion: "Current version",
+    checkAppUpdate: "Check for Updates",
+    checkingAppUpdate: "Checking...",
+    upToDate: "You're up to date",
+    newVersionFound: "New version available",
+    viewRelease: "Download",
+    updateCheckFailed: "Update check failed",
+    noReleases: "No releases published yet",
+    collapse: "Collapse",
+    expand: "Expand",
 
     // Logs panel
     activityLogs: "Activity Logs",
@@ -513,6 +537,18 @@ function App() {
   const [discoveredTools, setDiscoveredTools] = useState<ToolTemplate[]>([]);
   const [templates, setTemplates] = useState<ToolTemplate[]>([]);
   const [addingDiscovered, setAddingDiscovered] = useState(false);
+  // Collapsible tool paths section (persisted across sessions)
+  const [toolPathsCollapsed, setToolPathsCollapsed] = useState(
+    () => localStorage.getItem("toolPathsCollapsed") === "1",
+  );
+  // App self-update check (Settings panel)
+  const [appVersion, setAppVersion] = useState("");
+  const [updateCheck, setUpdateCheck] = useState<{
+    status: "idle" | "checking" | "latest" | "outdated" | "none" | "error";
+    latest?: string;
+    url?: string;
+    error?: string;
+  }>({ status: "idle" });
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [selectedUpdateDiff, setSelectedUpdateDiff] = useState<{ update: SkillUpdate; diff: SkillDiff } | null>(null);
@@ -967,6 +1003,56 @@ function App() {
     }
   }
 
+  // ==================== App update check ====================
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
+
+  /** Compare semver-ish strings numerically; returns >0 if a is newer than b. */
+  function compareVersions(a: string, b: string): number {
+    const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
+    const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+      if (d !== 0) return d;
+    }
+    return 0;
+  }
+
+  async function handleCheckAppUpdate() {
+    setUpdateCheck({ status: "checking" });
+    try {
+      const resp = await fetch(
+        "https://api.github.com/repos/huang-yi-dae/sync-skills/releases/latest",
+        { headers: { Accept: "application/vnd.github+json" } },
+      );
+      if (resp.status === 404) {
+        // Repo has no published releases yet
+        setUpdateCheck({ status: "none" });
+        return;
+      }
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const rel = await resp.json();
+      const latest = String(rel.tag_name || "").replace(/^v/, "");
+      const url = rel.html_url || "https://github.com/huang-yi-dae/sync-skills/releases";
+      if (latest && compareVersions(latest, appVersion) > 0) {
+        setUpdateCheck({ status: "outdated", latest, url });
+      } else {
+        setUpdateCheck({ status: "latest", latest: latest || appVersion });
+      }
+    } catch (e) {
+      setUpdateCheck({ status: "error", error: String(e) });
+    }
+  }
+
+  function toggleToolPaths() {
+    setToolPathsCollapsed((c) => {
+      localStorage.setItem("toolPathsCollapsed", c ? "0" : "1");
+      return !c;
+    });
+  }
+
   // ==================== Tool CRUD ====================
 
   function startEdit(tool: Tool) {
@@ -1293,6 +1379,42 @@ function App() {
           </p>
         </div>
 
+        <div className="settings-group">
+          <label className="settings-label">{t("appUpdateSection")}</label>
+          <div className="app-update-row">
+            <span className="app-version">{t("currentVersion")}: v{appVersion || "?"}</span>
+            <button
+              className="btn btn-small"
+              onClick={handleCheckAppUpdate}
+              disabled={updateCheck.status === "checking"}
+            >
+              {updateCheck.status === "checking" ? t("checkingAppUpdate") : t("checkAppUpdate")}
+            </button>
+          </div>
+          {updateCheck.status === "latest" && (
+            <p className="settings-hint update-latest">✓ {t("upToDate")} (v{updateCheck.latest})</p>
+          )}
+          {updateCheck.status === "none" && (
+            <p className="settings-hint">{t("noReleases")}</p>
+          )}
+          {updateCheck.status === "outdated" && (
+            <div className="app-update-row">
+              <span className="settings-hint update-available">
+                {t("newVersionFound")}: v{updateCheck.latest}
+              </span>
+              <button
+                className="btn btn-primary btn-small"
+                onClick={() => updateCheck.url && openUrl(updateCheck.url)}
+              >
+                {t("viewRelease")}
+              </button>
+            </div>
+          )}
+          {updateCheck.status === "error" && (
+            <p className="settings-hint update-error">{t("updateCheckFailed")}: {updateCheck.error}</p>
+          )}
+        </div>
+
         <button className="btn btn-primary" onClick={handleSaveSettings}>
           {t("saveSettings")}
         </button>
@@ -1532,12 +1654,28 @@ function App() {
       {/* Tool configuration */}
       <section className="section">
         <div className="section-header">
-          <h2 className="section-title">{t("toolPaths")}</h2>
-          <button className="btn btn-small" onClick={() => setShowAddTool(!showAddTool)}>
+          <h2
+            className="section-title section-title-toggle"
+            onClick={toggleToolPaths}
+            title={toolPathsCollapsed ? t("expand") : t("collapse")}
+          >
+            <span className="collapse-chevron">{toolPathsCollapsed ? "\u25B8" : "\u25BE"}</span>
+            {t("toolPaths")}
+            {toolPathsCollapsed && <span className="collapsed-count">({tools.length})</span>}
+          </h2>
+          <button
+            className="btn btn-small"
+            onClick={() => {
+              // Opening the add form should also expand a collapsed section
+              if (toolPathsCollapsed && !showAddTool) toggleToolPaths();
+              setShowAddTool(!showAddTool);
+            }}
+          >
             {showAddTool ? t("cancel") : t("addTool")}
           </button>
         </div>
 
+        {!toolPathsCollapsed && (<>
         {discoveredTools.length > 0 && (
           <div className="discovery-banner">
             <span className="discovery-text">
@@ -1621,6 +1759,7 @@ function App() {
             </div>
           ))}
         </div>
+        </>)}
       </section>
 
       {/* Action bar */}
