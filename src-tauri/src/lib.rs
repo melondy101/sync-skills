@@ -575,12 +575,20 @@ fn check_single_skill(db: &Database, locks: &LockManager, skill_id: i64, project
     // Check all active installation paths (scoped to project) against SSOT
     if let Ok(installations) = db.get_active_installation_paths(skill_id, project_id) {
         for (tool_id, install_path) in &installations {
-            let path = PathBuf::from(install_path);
-            if !path.exists() {
+            // install_path is the tool's skills ROOT (e.g. ~/.claude/skills/);
+            // expand ~ and join the skill name, mirroring do_sync_skill's targeting.
+            // Hashing the root directly would compare ALL skills against one SSOT
+            // and flag a phantom update forever.
+            let expanded = match scanner::expand_path(install_path) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            let skill_dir = expanded.join(&skill.name);
+            if !skill_dir.exists() {
                 continue;
             }
 
-            if let Ok(install_hash) = hash::compute_content_hash(&path) {
+            if let Ok(install_hash) = hash::compute_content_hash(&skill_dir) {
                 match &ssot_hash {
                     Some(sh) if *sh == install_hash => continue, // in sync
                     _ => {
@@ -593,7 +601,7 @@ fn check_single_skill(db: &Database, locks: &LockManager, skill_id: i64, project
                         updates.push(SkillUpdate {
                             skill_id,
                             skill_name: skill.name.clone(),
-                            source_path: install_path.clone(),
+                            source_path: scanner::normalize_path(&skill_dir),
                             old_hash,
                             new_hash: install_hash,
                             changed_tool: Some(tool_name),
