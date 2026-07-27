@@ -10,6 +10,9 @@ use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 ///
 /// This is NOT an OS file lock. It prevents concurrent sync/scan operations
 /// within the same process from conflicting on the same skill directory.
+///
+/// All sync/check work runs inside `tokio::task::spawn_blocking` threads,
+/// so the acquire methods here are blocking (safe off the async runtime).
 pub struct LockManager {
     locks: AsyncMutex<HashMap<String, Arc<AsyncMutex<()>>>>,
 }
@@ -40,31 +43,33 @@ impl LockManager {
         format!("{}:{}", project_id, skill_name)
     }
 
-    /// Acquire the lock for a skill (blocks until available).
+    /// Acquire the lock for a skill, blocking the current thread until available.
+    /// Must be called from a blocking context (e.g. inside spawn_blocking) —
+    /// never from an async task, or the runtime would stall.
     /// The lock is released when the returned guard is dropped.
-    pub async fn acquire(&self, project_id: i64, skill_name: &str) -> SkillLockGuard {
+    pub fn acquire_blocking(&self, project_id: i64, skill_name: &str) -> SkillLockGuard {
         let key = Self::key(project_id, skill_name);
 
         // Get or create the per-skill mutex
         let mutex = {
-            let mut map = self.locks.lock().await;
+            let mut map = self.locks.blocking_lock();
             map.entry(key.clone())
                 .or_insert_with(|| Arc::new(AsyncMutex::new(())))
                 .clone()
         };
 
         // Acquire the per-skill lock
-        let guard = mutex.lock_owned().await;
+        let guard = mutex.blocking_lock_owned();
         SkillLockGuard { _guard: guard, key }
     }
 
     /// Try to acquire the lock without blocking.
-    /// Returns None if the lock is already held.
-    pub async fn try_acquire(&self, project_id: i64, skill_name: &str) -> Option<SkillLockGuard> {
+    /// Returns None if the lock is already held (skill busy syncing).
+    pub fn try_acquire_blocking(&self, project_id: i64, skill_name: &str) -> Option<SkillLockGuard> {
         let key = Self::key(project_id, skill_name);
 
         let mutex = {
-            let mut map = self.locks.lock().await;
+            let mut map = self.locks.blocking_lock();
             map.entry(key.clone())
                 .or_insert_with(|| Arc::new(AsyncMutex::new(())))
                 .clone()

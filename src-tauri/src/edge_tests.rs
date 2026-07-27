@@ -9,6 +9,7 @@
 use crate::db::Database;
 use crate::diff;
 use crate::hash;
+use crate::lock::LockManager;
 use crate::scanner;
 use crate::sync;
 use std::fs;
@@ -696,4 +697,61 @@ fn db_ensure_installation_preserves_explicit_disable() {
     // Explicit re-enable works
     db.toggle_installation(skill_id, tool_id, 0, true).unwrap();
     assert_eq!(db.get_active_installations(skill_id, 0).unwrap().len(), 1);
+}
+
+// ==================== lock::LockManager ====================
+
+#[test]
+fn lock_try_acquire_fails_while_held_and_recovers_after_drop() {
+    let locks = LockManager::new();
+
+    let guard = locks.acquire_blocking(0, "my-skill");
+    assert!(
+        locks.try_acquire_blocking(0, "my-skill").is_none(),
+        "same skill must be busy while the guard is held"
+    );
+
+    drop(guard);
+    assert!(
+        locks.try_acquire_blocking(0, "my-skill").is_some(),
+        "lock must be free again after the guard drops"
+    );
+}
+
+#[test]
+fn lock_scopes_are_independent() {
+    let locks = LockManager::new();
+    let _guard = locks.acquire_blocking(0, "my-skill");
+
+    // Different skill name → independent lock
+    assert!(locks.try_acquire_blocking(0, "other-skill").is_some());
+    // Same name, different project → independent lock
+    assert!(locks.try_acquire_blocking(7, "my-skill").is_some());
+}
+
+#[test]
+fn lock_serializes_concurrent_threads_on_same_skill() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // Two threads hammer the same skill; the lock must make their critical
+    // sections mutually exclusive (in_critical never observes a peer inside).
+    let locks = std::sync::Arc::new(LockManager::new());
+    let in_critical = std::sync::Arc::new(AtomicUsize::new(0));
+
+    let mut handles = Vec::new();
+    for _ in 0..2 {
+        let locks = locks.clone();
+        let in_critical = in_critical.clone();
+        handles.push(std::thread::spawn(move || {
+            for _ in 0..50 {
+                let _g = locks.acquire_blocking(0, "contended");
+                let inside = in_critical.fetch_add(1, Ordering::SeqCst);
+                assert_eq!(inside, 0, "another thread was inside the critical section");
+                in_critical.fetch_sub(1, Ordering::SeqCst);
+            }
+        }));
+    }
+    for h in handles {
+        h.join().unwrap();
+    }
 }

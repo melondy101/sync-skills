@@ -16,6 +16,7 @@ mod sync;
 use db::Database;
 use diff::SkillDiff;
 use discovery::ToolTemplate;
+use lock::LockManager;
 use models::{
     ConflictView, Project, ScanDetail, ScanResult, SkillUpdate, SkillView, SyncLog, SyncResult, Tool,
 };
@@ -25,6 +26,7 @@ use std::sync::Arc;
 use tauri::State;
 
 type DbState = Arc<Database>;
+type LockState = Arc<LockManager>;
 
 // ==================== Shared Helpers ====================
 
@@ -199,12 +201,15 @@ fn scan_tool_paths(
 /// Core sync logic: sync a skill to all its active installation targets.
 fn do_sync_skill(
     db: &Database,
+    locks: &LockManager,
     skill_id: i64,
     project_id: i64,
     prefer_symlink: bool,
     source_override: Option<&str>,
 ) -> Result<SyncResult, String> {
     let skill = db.get_skill_by_id(skill_id)?;
+    // Serialize all operations touching this skill's directories (SSOT + tools)
+    let _lock = locks.acquire_blocking(project_id, &skill.name);
     let source = PathBuf::from(source_override.unwrap_or(&skill.source_path));
 
     if !source.exists() {
@@ -454,24 +459,27 @@ fn toggle_skill(
 #[tauri::command]
 async fn sync_skill(
     db: State<'_, DbState>,
+    locks: State<'_, LockState>,
     skill_id: i64,
     project_id: Option<i64>,
     source_path: Option<String>,
 ) -> Result<SyncResult, String> {
     let db = db.inner().clone();
+    let locks = locks.inner().clone();
     let settings = Settings::load();
     let pid = project_id.unwrap_or(0);
 
     tokio::task::spawn_blocking(move || -> Result<SyncResult, String> {
-        do_sync_skill(&db, skill_id, pid, settings.prefer_symlink, source_path.as_deref())
+        do_sync_skill(&db, &locks, skill_id, pid, settings.prefer_symlink, source_path.as_deref())
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
-async fn sync_all_pending(db: State<'_, DbState>) -> Result<Vec<SyncResult>, String> {
+async fn sync_all_pending(db: State<'_, DbState>, locks: State<'_, LockState>) -> Result<Vec<SyncResult>, String> {
     let db = db.inner().clone();
+    let locks = locks.inner().clone();
     let settings = Settings::load();
 
     tokio::task::spawn_blocking(move || -> Result<Vec<SyncResult>, String> {
@@ -484,7 +492,7 @@ async fn sync_all_pending(db: State<'_, DbState>) -> Result<Vec<SyncResult>, Str
             for skill in &skills {
                 let installations = db.get_active_installations(skill.id, project.id)?;
                 if !installations.is_empty() {
-                    match do_sync_skill(&db, skill.id, project.id, settings.prefer_symlink, None) {
+                    match do_sync_skill(&db, &locks, skill.id, project.id, settings.prefer_symlink, None) {
                         Ok(result) => results.push(result),
                         Err(e) => {
                             results.push(SyncResult {
@@ -508,8 +516,14 @@ async fn sync_all_pending(db: State<'_, DbState>) -> Result<Vec<SyncResult>, Str
 /// Check if any tool directory for a skill differs from SSOT.
 /// Returns a Vec of SkillUpdate — one per divergent tool (P0-3 fix: no early return).
 /// Scoped to project_id (P0-2 fix: only checks installations in the given project).
-fn check_single_skill(db: &Database, skill_id: i64, project_id: i64) -> Result<Vec<SkillUpdate>, String> {
+fn check_single_skill(db: &Database, locks: &LockManager, skill_id: i64, project_id: i64) -> Result<Vec<SkillUpdate>, String> {
     let skill = db.get_skill_by_id(skill_id)?;
+    // Skip skills that are being synced right now — hashing a half-written
+    // directory would produce bogus "update available" results
+    let _lock = match locks.try_acquire_blocking(project_id, &skill.name) {
+        Some(guard) => guard,
+        None => return Ok(Vec::new()),
+    };
     let ssot = sync::ssot_path(&skill.name, project_id)?;
 
     // Compute SSOT hash (None if SSOT doesn't exist yet)
@@ -594,9 +608,11 @@ fn check_single_skill(db: &Database, skill_id: i64, project_id: i64) -> Result<V
 #[tauri::command]
 async fn check_updates(
     db: State<'_, DbState>,
+    locks: State<'_, LockState>,
     project_id: Option<i64>,
 ) -> Result<Vec<SkillUpdate>, String> {
     let db = db.inner().clone();
+    let locks = locks.inner().clone();
     let pid = project_id.unwrap_or(0);
 
     tokio::task::spawn_blocking(move || -> Result<Vec<SkillUpdate>, String> {
@@ -606,7 +622,7 @@ async fn check_updates(
 
         for (skill_id, _skill_name, _source_path, _old_hash) in &skills {
             // P0-3 fix: collect ALL divergent tools per skill
-            match check_single_skill(&db, *skill_id, pid) {
+            match check_single_skill(&db, &locks, *skill_id, pid) {
                 Ok(mut skill_updates) => updates.append(&mut skill_updates),
                 Err(_) => continue,
             }
@@ -621,13 +637,15 @@ async fn check_updates(
 #[tauri::command]
 async fn check_skill_update(
     db: State<'_, DbState>,
+    locks: State<'_, LockState>,
     skill_id: i64,
     project_id: Option<i64>,
 ) -> Result<Vec<SkillUpdate>, String> {
     let db = db.inner().clone();
+    let locks = locks.inner().clone();
     let pid = project_id.unwrap_or(0);
 
-    tokio::task::spawn_blocking(move || check_single_skill(&db, skill_id, pid))
+    tokio::task::spawn_blocking(move || check_single_skill(&db, &locks, skill_id, pid))
         .await
         .map_err(|e| format!("Task join error: {}", e))?
 }
@@ -664,11 +682,13 @@ fn list_conflicts(db: State<DbState>, project_id: Option<i64>) -> Result<Vec<Con
 #[tauri::command]
 async fn resolve_conflict(
     db: State<'_, DbState>,
+    locks: State<'_, LockState>,
     conflict_id: i64,
     keep_tool_name: String,
     project_id: Option<i64>,
 ) -> Result<SyncResult, String> {
     let db = db.inner().clone();
+    let locks = locks.inner().clone();
     let pid = project_id.unwrap_or(0);
 
     tokio::task::spawn_blocking(move || -> Result<SyncResult, String> {
@@ -679,6 +699,8 @@ async fn resolve_conflict(
 
         let skill_id = conflict.skill_id;
         let skill = db.get_skill_by_id(skill_id)?;
+        // Serialize with other sync operations on this skill
+        let _lock = locks.acquire_blocking(pid, &skill.name);
 
         // Find the version to keep
         let keep_version = conflict.versions.iter()
@@ -765,15 +787,19 @@ async fn resolve_conflict(
 #[tauri::command]
 async fn reverse_sync_skill(
     db: State<'_, DbState>,
+    locks: State<'_, LockState>,
     skill_id: i64,
     tool_id: i64,
     project_id: Option<i64>,
 ) -> Result<SyncResult, String> {
     let db = db.inner().clone();
+    let locks = locks.inner().clone();
     let pid = project_id.unwrap_or(0);
 
     tokio::task::spawn_blocking(move || -> Result<SyncResult, String> {
         let skill = db.get_skill_by_id(skill_id)?;
+        // Serialize with other sync operations on this skill
+        let _lock = locks.acquire_blocking(pid, &skill.name);
         let ssot = sync::ssot_path(&skill.name, pid)?;
 
         if !ssot.exists() {
@@ -906,10 +932,13 @@ pub fn run() {
     // Initialize database
     let db = Database::new().expect("Failed to initialize database");
     let db_state = Arc::new(db);
+    // Per-skill lock manager: serializes sync/check operations on the same skill
+    let lock_state: LockState = Arc::new(LockManager::new());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(db_state)
+        .manage(lock_state)
         .invoke_handler(tauri::generate_handler![
             // Tools
             list_tools,
