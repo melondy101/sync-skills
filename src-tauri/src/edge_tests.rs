@@ -478,10 +478,9 @@ fn diff_large_file_uses_full_replace_fallback() {
 }
 
 #[test]
-fn diff_crlf_vs_lf_marked_modified_with_empty_hunks() {
-    // Boundary (documents current behavior): raw bytes differ (CRLF vs LF) so the
-    // file is Modified, but line-based hunks see identical lines → empty hunks.
-    // UI would show "modified" with nothing to display.
+fn diff_crlf_vs_lf_shows_format_only_hunk() {
+    // Fixed: bytes differ (CRLF vs LF) but lines are identical — instead of a
+    // blank "modified" entry, an informational format hunk is emitted.
     let dir = tempdir().unwrap();
     let src = dir.path().join("src");
     let ssot = dir.path().join("ssot");
@@ -490,7 +489,23 @@ fn diff_crlf_vs_lf_marked_modified_with_empty_hunks() {
     let d = diff::compute_skill_diff(&src, &ssot, "s").unwrap();
     assert!(d.has_changes);
     assert!(matches!(d.files[0].change, diff::FileChange::Modified));
-    assert!(d.files[0].hunks.is_empty());
+    let hunk = &d.files[0].hunks[0];
+    assert!(hunk.lines.iter().any(|l| l.op == "-" && l.content.contains("LF")));
+    assert!(hunk.lines.iter().any(|l| l.op == "+" && l.content.contains("CRLF")));
+}
+
+#[test]
+fn diff_trailing_newline_only_shows_format_only_hunk() {
+    let dir = tempdir().unwrap();
+    let src = dir.path().join("src");
+    let ssot = dir.path().join("ssot");
+    write_file(&src.join("f.md"), "a\nb"); // no trailing newline
+    write_file(&ssot.join("f.md"), "a\nb\n");
+    let d = diff::compute_skill_diff(&src, &ssot, "s").unwrap();
+    assert!(d.has_changes);
+    let hunk = &d.files[0].hunks[0];
+    assert!(hunk.lines.iter().any(|l| l.op == "-" && l.content.contains("with trailing newline")));
+    assert!(hunk.lines.iter().any(|l| l.op == "+" && l.content.contains("no trailing newline")));
 }
 
 #[test]

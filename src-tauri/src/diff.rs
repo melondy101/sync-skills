@@ -105,7 +105,16 @@ pub fn compute_skill_diff(source: &Path, ssot: &Path, skill_name: &str) -> Resul
                     // Compare raw bytes so binary changes are never missed;
                     // fall back to a size-only hunk when either side is not UTF-8.
                     let hunks = match (as_text(ssot_bytes), as_text(src_bytes)) {
-                        (Some(old_text), Some(new_text)) => compute_unified_diff(old_text, new_text),
+                        (Some(old_text), Some(new_text)) => {
+                            let mut hunks = compute_unified_diff(old_text, new_text);
+                            if hunks.is_empty() {
+                                // Bytes differ but lines are identical — the change is
+                                // line endings (CRLF/LF) or a trailing newline. Emit an
+                                // informational hunk so the UI isn't a blank "modified".
+                                hunks = make_format_only_hunk(old_text, new_text);
+                            }
+                            hunks
+                        }
                         _ => make_binary_hunk(Some(ssot_bytes.len()), Some(src_bytes.len())),
                     };
                     files.push(FileDiff {
@@ -200,6 +209,38 @@ fn make_binary_hunk(old_size: Option<usize>, new_size: Option<usize>) -> Vec<Dif
         new_start: 1,
         new_count: new_size.map(|_| 1).unwrap_or(0),
         lines,
+    }]
+}
+
+/// Describe the text formatting traits (line endings, trailing newline) of a file.
+fn describe_text_format(text: &str) -> String {
+    let eol = if text.contains("\r\n") { "CRLF" } else { "LF" };
+    let trailing = if text.ends_with('\n') {
+        "with trailing newline"
+    } else {
+        "no trailing newline"
+    };
+    format!("[text format: {} line endings, {}]", eol, trailing)
+}
+
+/// Informational hunk for changes invisible to a line-based diff
+/// (line-ending conversion or trailing-newline change).
+fn make_format_only_hunk(old_text: &str, new_text: &str) -> Vec<DiffHunk> {
+    vec![DiffHunk {
+        old_start: 1,
+        old_count: 1,
+        new_start: 1,
+        new_count: 1,
+        lines: vec![
+            DiffLine {
+                op: "-".to_string(),
+                content: describe_text_format(old_text),
+            },
+            DiffLine {
+                op: "+".to_string(),
+                content: describe_text_format(new_text),
+            },
+        ],
     }]
 }
 
