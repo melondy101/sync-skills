@@ -210,18 +210,50 @@ fn do_sync_skill(
     let skill = db.get_skill_by_id(skill_id)?;
     // Serialize all operations touching this skill's directories (SSOT + tools)
     let _lock = locks.acquire_blocking(project_id, &skill.name);
-    let source = PathBuf::from(source_override.unwrap_or(&skill.source_path));
-
-    if !source.exists() {
-        return Err(format!("Source path does not exist: {}", source.display()));
-    }
 
     // Ensure SSOT directory exists
     sync::ensure_ssot_dir()?;
     let ssot_target = sync::ssot_path(&skill.name, project_id)?;
 
-    // Step 1: Copy to SSOT (replace if target already exists)
-    let to_ssot_result = if prefer_symlink {
+    // Resolve the sync source. An explicit override must exist; otherwise fall
+    // back gracefully so a stale source_path (e.g. pointing at a missing SSOT
+    // copy) doesn't wedge the skill in a permanent sync-error state.
+    let source = if let Some(over) = source_override {
+        let p = PathBuf::from(over);
+        if !p.exists() {
+            return Err(format!("Source path does not exist: {}", p.display()));
+        }
+        p
+    } else {
+        let recorded = PathBuf::from(&skill.source_path);
+        if recorded.exists() {
+            recorded
+        } else if ssot_target.exists() {
+            // Recorded source is gone but SSOT is intact: distribute from SSOT.
+            ssot_target.clone()
+        } else {
+            // Neither source nor SSOT exists: rebuild SSOT from the first
+            // surviving tool copy (self-heal after a corrupted source_path).
+            db.get_active_installation_paths(skill_id, project_id)?
+                .iter()
+                .filter_map(|(_, target_path)| scanner::expand_path(target_path).ok())
+                .map(|expanded| expanded.join(&skill.name))
+                .find(|dir| dir.exists())
+                .ok_or_else(|| {
+                    format!(
+                        "Source path does not exist and no tool copy of '{}' was found: {}",
+                        skill.name, skill.source_path
+                    )
+                })?
+        }
+    };
+
+    // Step 1: Copy to SSOT (replace if target already exists).
+    // Skip when the source IS the SSOT — replacing a directory with itself
+    // would delete it first and lose the content.
+    let to_ssot_result = if source == ssot_target {
+        Ok("noop".to_string())
+    } else if prefer_symlink {
         sync::symlink_or_copy(&source, &ssot_target)
     } else if ssot_target.exists() {
         sync::replace_directory(&source, &ssot_target).map(|_| "replace".to_string())

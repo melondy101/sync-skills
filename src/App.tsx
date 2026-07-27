@@ -855,9 +855,18 @@ function App() {
     });
   }
 
-  async function handleUpdateFromDiff(skillId: number) {
+  async function handleUpdateFromDiff(skillId: number, sourcePath?: string) {
     try {
-      await invoke("sync_skill", { skillId, projectId: null, sourcePath: selectedUpdateDiff?.update.source_path ?? null });
+      const result = await invoke<SyncResult>("sync_skill", {
+        skillId,
+        projectId: null,
+        sourcePath: sourcePath ?? selectedUpdateDiff?.update.source_path ?? null,
+      });
+      if (result.errors.length > 0) {
+        // Keep the update entry so the user can retry after fixing the cause
+        addToast("error", `${t("syncFailed")}: ${result.errors.join(", ")}`);
+        return;
+      }
       addToast("success", t("skillUpdated"));
       closeUpdateEntry(skillId);
       await loadSkills();
@@ -1913,7 +1922,7 @@ function App() {
                 <div className="modal-actions">
                   <button
                     className="btn btn-primary"
-                    onClick={() => handleUpdateFromDiff(selectedUpdateDiff.update.skill_id)}
+                    onClick={() => handleUpdateFromDiff(selectedUpdateDiff.update.skill_id, selectedUpdateDiff.update.source_path)}
                   >
                     {t("updateToSsot")}
                   </button>
@@ -1990,7 +1999,7 @@ function App() {
                 <div className="modal-actions">
                   <button
                     className="btn btn-small btn-primary"
-                    onClick={() => handleUpdateFromDiff(selectedSkillDiffs.skillId)}
+                    onClick={() => handleUpdateFromDiff(selectedSkillDiffs.skillId, selectedSkillDiffs.tools[0]?.sourcePath)}
                   >
                     {t("updateToSsot")}
                   </button>
@@ -2054,7 +2063,7 @@ function App() {
                         <div className="update-item-actions update-group-actions">
                           <button
                             className="btn btn-small btn-primary"
-                            onClick={() => handleUpdateFromDiff(skillId)}
+                            onClick={() => handleUpdateFromDiff(skillId, skillUpdates[0].source_path)}
                           >
                             {t("updateToSsot")}
                           </button>
