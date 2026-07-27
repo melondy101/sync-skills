@@ -661,22 +661,6 @@ impl Database {
         .map_err(|e| format!("Failed to get skill: {}", e))
     }
 
-    /// Look up a skill by its core_hash (SKILL.md content hash).
-    /// Returns the skill ID if found, None otherwise.
-    pub fn get_skill_id_by_core_hash(&self, core_hash: &str) -> Result<Option<i64>, String> {
-        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let result = conn.query_row(
-            "SELECT id FROM skills WHERE core_hash = ?1 AND core_hash != ''",
-            params![core_hash],
-            |row| row.get(0),
-        );
-        match result {
-            Ok(id) => Ok(Some(id)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Query error: {}", e)),
-        }
-    }
-
     /// List skills with installation status (SkillView)
     /// Filters by project_id directly (name-as-identity model).
     pub fn list_skills_with_status(&self, project_id: i64) -> Result<Vec<SkillView>, String> {
@@ -1093,30 +1077,6 @@ impl Database {
             .collect();
 
         Ok(logs)
-    }
-
-    /// Check for skill updates by comparing DB hashes with current file hashes
-    pub fn get_all_skills_for_update_check(&self) -> Result<Vec<(i64, String, String, String)>, String> {
-        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
-
-        let mut stmt = conn
-            .prepare("SELECT id, name, source_path, content_hash FROM skills")
-            .map_err(|e| format!("Prepare error: {}", e))?;
-
-        let skills = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
-            })
-            .map_err(|e| format!("Query error: {}", e))?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        Ok(skills)
     }
 
     /// Get skills for update check, filtered by project_id
