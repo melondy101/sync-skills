@@ -27,6 +27,19 @@ impl Database {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open database: {}", e))?;
 
+        Self::from_connection(conn)
+    }
+
+    /// Open an in-memory database (tests only — never touches the user's real DB)
+    #[cfg(test)]
+    pub fn new_in_memory() -> Result<Self, String> {
+        let conn = Connection::open_in_memory()
+            .map_err(|e| format!("Failed to open in-memory database: {}", e))?;
+        Self::from_connection(conn)
+    }
+
+    /// Shared initialization: pragmas, schema, seed data
+    fn from_connection(conn: Connection) -> Result<Self, String> {
         // Enable foreign keys
         conn.execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|e| format!("Failed to enable foreign keys: {}", e))?;
@@ -353,25 +366,28 @@ impl Database {
                 ).map_err(|e| format!("M4 backfill installation_synced_at failed: {}", e))?;
             }
 
-            // 5. Create skill_conflicts table
-            conn.execute_batch(
-                "CREATE TABLE IF NOT EXISTS skill_conflicts (
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    skill_id        INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
-                    detected_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-                    resolved_at     TEXT,
-                    resolved_by     TEXT,
-                    detail          TEXT,
-                    created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
-                );
-                CREATE INDEX IF NOT EXISTS idx_conflicts_skill ON skill_conflicts(skill_id);
-                CREATE INDEX IF NOT EXISTS idx_conflicts_unresolved ON skill_conflicts(skill_id) WHERE resolved_at IS NULL;",
-            ).map_err(|e| format!("M4 create skill_conflicts failed: {}", e))?;
-
-            // 6. Drop old core_hash unique index (no longer needed — name is identity)
+            // 5. Drop old core_hash unique index (no longer needed — name is identity)
             conn.execute_batch("DROP INDEX IF EXISTS idx_skills_core_hash;")
                 .map_err(|e| format!("M4 drop core_hash index failed: {}", e))?;
         }
+
+        // Create skill_conflicts table.
+        // NOTE: must run unconditionally — fresh databases skip the M4 branch
+        // (skills is created with project_id already), so creating it only
+        // inside `needs_m4` would leave new installs without this table.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS skill_conflicts (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_id        INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+                detected_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+                resolved_at     TEXT,
+                resolved_by     TEXT,
+                detail          TEXT,
+                created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_conflicts_skill ON skill_conflicts(skill_id);
+            CREATE INDEX IF NOT EXISTS idx_conflicts_unresolved ON skill_conflicts(skill_id) WHERE resolved_at IS NULL;",
+        ).map_err(|e| format!("Create skill_conflicts failed: {}", e))?;
 
         // Create dismissed_updates table (for ignoring specific tool changes)
         conn.execute_batch(

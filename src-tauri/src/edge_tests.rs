@@ -6,6 +6,7 @@
 
 #![cfg(test)]
 
+use crate::db::Database;
 use crate::diff;
 use crate::hash;
 use crate::scanner;
@@ -591,4 +592,108 @@ fn scan_then_copy_preserves_core_hash_but_content_hash_gains_marker() {
     let src_content = hash::compute_content_hash(&src).unwrap();
     let dst_content = hash::compute_content_hash(&dst).unwrap();
     assert_eq!(src_content, dst_content, "local.md must not affect content hash");
+}
+
+// ==================== db::Database (in-memory, never touches user data) ====================
+
+#[test]
+fn db_seed_data_populates_preset_tools_and_global_project() {
+    let db = Database::new_in_memory().unwrap();
+    let tools = db.list_tools().unwrap();
+    assert_eq!(tools.len(), 5, "expected 5 preset tools");
+    assert!(tools.iter().any(|t| t.name == "Claude Code"));
+    // Global project (id=0) must exist so project_id=0 FKs are valid
+    assert_eq!(db.get_project_name(0).unwrap(), "Global");
+}
+
+#[test]
+fn db_upsert_skill_name_as_identity() {
+    let db = Database::new_in_memory().unwrap();
+
+    // First upsert creates the record
+    let (id1, is_new1) = db
+        .upsert_skill("my-skill", Some("v1"), "/path/a", "hash-a", "core-a", 0)
+        .unwrap();
+    assert!(is_new1);
+
+    // Same (name, project) from a different tool path → same record, updated in place
+    let (id2, is_new2) = db
+        .upsert_skill("my-skill", Some("v2"), "/path/b", "hash-b", "core-b", 0)
+        .unwrap();
+    assert_eq!(id1, id2, "same name+project must merge into one record");
+    assert!(!is_new2);
+
+    let skill = db.get_skill_by_id(id1).unwrap();
+    assert_eq!(skill.content_hash, "hash-b", "upsert must refresh hashes");
+    assert_eq!(skill.source_path, "/path/b");
+
+    // Same name in a different project scope → separate record
+    let project = db.add_project("proj", "/tmp/proj").unwrap();
+    let (id3, is_new3) = db
+        .upsert_skill("my-skill", None, "/path/c", "hash-c", "core-c", project.id)
+        .unwrap();
+    assert!(is_new3);
+    assert_ne!(id1, id3, "different project must not share the skill record");
+}
+
+#[test]
+fn db_conflict_lifecycle() {
+    let db = Database::new_in_memory().unwrap();
+    let (skill_id, _) = db
+        .upsert_skill("conflicted", None, "/p", "h", "c", 0)
+        .unwrap();
+
+    assert!(!db.has_unresolved_conflict(skill_id).unwrap());
+
+    let detail = r#"[{"tool_id":1,"tool_name":"Claude Code","core_hash":"aaa","source_path":"/x"},
+                     {"tool_id":2,"tool_name":"Codex CLI","core_hash":"bbb","source_path":"/y"}]"#;
+    let conflict_id = db.insert_conflict(skill_id, detail).unwrap();
+
+    assert!(db.has_unresolved_conflict(skill_id).unwrap());
+    let list = db.list_unresolved_conflicts(0).unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].skill_name, "conflicted");
+    assert_eq!(list[0].versions.len(), 2, "detail JSON must parse into versions");
+
+    db.resolve_conflict_record(conflict_id, "keep_ssot").unwrap();
+    assert!(!db.has_unresolved_conflict(skill_id).unwrap());
+    assert!(db.list_unresolved_conflicts(0).unwrap().is_empty());
+}
+
+#[test]
+fn db_conflict_with_invalid_detail_json_does_not_break_listing() {
+    // Boundary: corrupted detail must degrade to empty versions, not fail the query
+    let db = Database::new_in_memory().unwrap();
+    let (skill_id, _) = db.upsert_skill("bad-json", None, "/p", "h", "c", 0).unwrap();
+    db.insert_conflict(skill_id, "not valid json {{{").unwrap();
+
+    let list = db.list_unresolved_conflicts(0).unwrap();
+    assert_eq!(list.len(), 1);
+    assert!(list[0].versions.is_empty());
+}
+
+#[test]
+fn db_ensure_installation_preserves_explicit_disable() {
+    let db = Database::new_in_memory().unwrap();
+    let tool_id = db.list_tools().unwrap()[0].id;
+    let (skill_id, _) = db.upsert_skill("inst", None, "/p", "h", "c", 0).unwrap();
+
+    // Fresh scan → auto-detected as active
+    db.ensure_installation(skill_id, tool_id, 0).unwrap();
+    assert_eq!(db.get_active_installations(skill_id, 0).unwrap().len(), 1);
+
+    // User explicitly disables
+    db.toggle_installation(skill_id, tool_id, 0, false).unwrap();
+    assert!(db.get_active_installations(skill_id, 0).unwrap().is_empty());
+
+    // Re-scan must NOT override the explicit disable
+    db.ensure_installation(skill_id, tool_id, 0).unwrap();
+    assert!(
+        db.get_active_installations(skill_id, 0).unwrap().is_empty(),
+        "ensure_installation must not re-activate a user-disabled installation"
+    );
+
+    // Explicit re-enable works
+    db.toggle_installation(skill_id, tool_id, 0, true).unwrap();
+    assert_eq!(db.get_active_installations(skill_id, 0).unwrap().len(), 1);
 }
