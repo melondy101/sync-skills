@@ -699,6 +699,40 @@ fn db_ensure_installation_preserves_explicit_disable() {
     assert_eq!(db.get_active_installations(skill_id, 0).unwrap().len(), 1);
 }
 
+#[test]
+fn db_disabled_installation_paths_after_toggle_off() {
+    // Unchecking a tool must move it from the active list to the disabled list,
+    // so sync can clean up the stale copy (problem: uncheck + sync should delete).
+    let db = Database::new_in_memory().unwrap();
+    let tool_id = db.list_tools().unwrap()[0].id;
+    let (skill_id, _) = db.upsert_skill("cleanup", None, "/p", "h", "c", 0).unwrap();
+
+    db.ensure_installation(skill_id, tool_id, 0).unwrap();
+    assert!(db.get_disabled_installation_paths(skill_id, 0).unwrap().is_empty());
+
+    db.toggle_installation(skill_id, tool_id, 0, false).unwrap();
+    let disabled = db.get_disabled_installation_paths(skill_id, 0).unwrap();
+    assert_eq!(disabled.len(), 1);
+    assert_eq!(disabled[0].0, tool_id);
+    assert!(!disabled[0].1.is_empty(), "disabled path must resolve to the tool's global_path");
+    assert!(db.get_active_installation_paths(skill_id, 0).unwrap().is_empty());
+}
+
+#[test]
+fn sync_remove_installed_skill_dir_and_missing() {
+    let dir = tempdir().unwrap();
+    let skill_dir = dir.path().join("my-skill");
+    write_file(&skill_dir.join("SKILL.md"), "# s");
+    write_file(&skill_dir.join("sub/extra.txt"), "x");
+
+    // Existing directory: removed recursively
+    assert!(sync::remove_installed_skill(&skill_dir).unwrap());
+    assert!(!skill_dir.exists());
+
+    // Already gone: no-op, not an error
+    assert!(!sync::remove_installed_skill(&skill_dir).unwrap());
+}
+
 // ==================== lock::LockManager ====================
 
 #[test]

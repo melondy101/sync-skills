@@ -779,6 +779,11 @@ impl Database {
 
     /// Get all active installations for a skill (for sync targeting)
     pub fn get_active_installations(&self, skill_id: i64, project_id: i64) -> Result<Vec<(i64, String)>, String> {
+        self.get_installations_by_status(skill_id, project_id, "active")
+    }
+
+    /// Installations for a skill filtered by status, paired with the tool's global_path
+    fn get_installations_by_status(&self, skill_id: i64, project_id: i64, status: &str) -> Result<Vec<(i64, String)>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
 
         let mut stmt = conn
@@ -786,12 +791,12 @@ impl Database {
                 "SELECT si.tool_id, t.global_path
                  FROM skill_installations si
                  JOIN tools t ON t.id = si.tool_id
-                 WHERE si.skill_id = ?1 AND si.project_id = ?2 AND si.status = 'active'",
+                 WHERE si.skill_id = ?1 AND si.project_id = ?2 AND si.status = ?3",
             )
             .map_err(|e| format!("Prepare error: {}", e))?;
 
         let results = stmt
-            .query_map(params![skill_id, project_id], |row| {
+            .query_map(params![skill_id, project_id, status], |row| {
                 Ok((row.get(0)?, row.get(1)?))
             })
             .map_err(|e| format!("Query error: {}", e))?
@@ -809,9 +814,28 @@ impl Database {
         skill_id: i64,
         project_id: i64,
     ) -> Result<Vec<(i64, String)>, String> {
+        self.get_installation_paths_by_status(skill_id, project_id, "active")
+    }
+
+    /// Get disabled installation target paths (same resolution as active).
+    /// Used on sync to remove stale copies from tools the user has unchecked.
+    pub fn get_disabled_installation_paths(
+        &self,
+        skill_id: i64,
+        project_id: i64,
+    ) -> Result<Vec<(i64, String)>, String> {
+        self.get_installation_paths_by_status(skill_id, project_id, "disabled")
+    }
+
+    fn get_installation_paths_by_status(
+        &self,
+        skill_id: i64,
+        project_id: i64,
+        status: &str,
+    ) -> Result<Vec<(i64, String)>, String> {
         if project_id == 0 {
             // Global: use global_path directly
-            return self.get_active_installations(skill_id, 0);
+            return self.get_installations_by_status(skill_id, 0, status);
         }
 
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
@@ -827,12 +851,12 @@ impl Database {
                 "SELECT si.tool_id, t.project_rel_path
                  FROM skill_installations si
                  JOIN tools t ON t.id = si.tool_id
-                 WHERE si.skill_id = ?1 AND si.project_id = ?2 AND si.status = 'active'",
+                 WHERE si.skill_id = ?1 AND si.project_id = ?2 AND si.status = ?3",
             )
             .map_err(|e| format!("Prepare error: {}", e))?;
 
         let results = stmt
-            .query_map(params![skill_id, project_id], |row| {
+            .query_map(params![skill_id, project_id, status], |row| {
                 Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
             })
             .map_err(|e| format!("Query error: {}", e))?

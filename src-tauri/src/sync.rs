@@ -63,6 +63,32 @@ pub fn replace_directory(src: &Path, dst: &Path) -> Result<(), String> {
     copy_directory(src, dst)
 }
 
+/// Remove an installed skill (directory or symlink) from a tool's skills folder.
+/// Symlinks are removed without following them, so the SSOT copy is never touched.
+/// Returns Ok(true) if something was removed, Ok(false) if nothing existed.
+pub fn remove_installed_skill(dir: &Path) -> Result<bool, String> {
+    let meta = match fs::symlink_metadata(dir) {
+        Ok(m) => m,
+        Err(_) => return Ok(false), // nothing to remove
+    };
+
+    if meta.file_type().is_symlink() {
+        // Delete the link itself, never its target
+        #[cfg(windows)]
+        let res = fs::remove_dir(dir).or_else(|_| fs::remove_file(dir));
+        #[cfg(not(windows))]
+        let res = fs::remove_file(dir);
+        res.map_err(|e| format!("Failed to remove symlink {:?}: {}", dir, e))?;
+    } else if meta.is_dir() {
+        fs::remove_dir_all(dir)
+            .map_err(|e| format!("Failed to remove directory {:?}: {}", dir, e))?;
+    } else {
+        fs::remove_file(dir)
+            .map_err(|e| format!("Failed to remove file {:?}: {}", dir, e))?;
+    }
+    Ok(true)
+}
+
 /// Try to create a symlink from `link_path` pointing to `target`.
 /// On failure (e.g., Windows without developer mode), falls back to copy.
 pub fn symlink_or_copy(target: &Path, link_path: &Path) -> Result<String, String> {

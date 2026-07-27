@@ -310,6 +310,43 @@ fn do_sync_skill(
         }
     }
 
+    // Step 3: Remove the skill from tools the user has unchecked (disabled
+    // installations), so stale copies don't linger after a sync.
+    let disabled = db.get_disabled_installation_paths(skill_id, project_id)?;
+    for (tool_id, target_path) in &disabled {
+        let expanded = match scanner::expand_path(target_path) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let target_dir = expanded.join(&skill.name);
+        match sync::remove_installed_skill(&target_dir) {
+            Ok(true) => {
+                log::info!("Removed {} from disabled tool {}", skill.name, tool_id);
+                let _ = db.insert_action_log(
+                    "remove",
+                    Some(skill_id),
+                    Some(*tool_id),
+                    project_id,
+                    "success",
+                    Some(&format!("removed {}", target_dir.display())),
+                );
+            }
+            Ok(false) => {} // nothing installed there — no-op
+            Err(e) => {
+                log::error!("Failed to remove {} from tool {}: {}", skill.name, tool_id, e);
+                errors.push(format!("Tool {}: {}", tool_id, e));
+                let _ = db.insert_action_log(
+                    "remove",
+                    Some(skill_id),
+                    Some(*tool_id),
+                    project_id,
+                    "failed",
+                    Some(&e),
+                );
+            }
+        }
+    }
+
     // After successful sync, refresh stored hashes from SSOT (the canonical copy)
     // so check_updates doesn't flag it as "needs update" anymore
     if synced_to > 0 || ssot_target.exists() {
