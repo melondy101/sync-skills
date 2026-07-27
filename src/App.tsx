@@ -859,7 +859,10 @@ function App() {
     try {
       const result = await invoke<SyncResult>("sync_skill", {
         skillId,
-        projectId: null,
+        // Must match the scope used by check_updates — a project skill's SSOT
+        // lives under _p<project_id>/, so syncing with the wrong scope writes
+        // to the global SSOT and the update never clears.
+        projectId: selectedProject,
         sourcePath: sourcePath ?? selectedUpdateDiff?.update.source_path ?? null,
       });
       if (result.errors.length > 0) {
