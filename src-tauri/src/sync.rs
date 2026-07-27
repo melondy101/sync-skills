@@ -132,10 +132,30 @@ pub fn is_local_skill(dir: &Path) -> bool {
     dir.join("local.md").exists()
 }
 
+/// Validate a skill name before using it as a single path component.
+/// Skill names come from YAML front matter (untrusted input), so reject
+/// anything that could escape the SSOT base directory or break the filesystem.
+fn validate_skill_name(skill_name: &str) -> Result<(), String> {
+    if skill_name.trim().is_empty() {
+        return Err("Skill name is empty".to_string());
+    }
+    if skill_name == "." || skill_name == ".." {
+        return Err(format!("Invalid skill name: '{}'", skill_name));
+    }
+    if skill_name.contains('/') || skill_name.contains('\\') || skill_name.contains('\0') {
+        return Err(format!(
+            "Invalid skill name '{}': path separators are not allowed",
+            skill_name
+        ));
+    }
+    Ok(())
+}
+
 /// Get the SSOT path for a skill.
 /// Global (project_id=0): `~/.agents/skills/local/<skill-name>/`
 /// Project (project_id>0): `~/.agents/skills/local/_p<project_id>/<skill-name>/`
 pub fn ssot_path(skill_name: &str, project_id: i64) -> Result<PathBuf, String> {
+    validate_skill_name(skill_name)?;
     let home = dirs::home_dir().ok_or("Cannot find home directory")?;
     let base = home.join(".agents").join("skills").join("local");
     if project_id == 0 {

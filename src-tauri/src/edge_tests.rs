@@ -372,13 +372,19 @@ fn ssot_path_global_vs_project_layout() {
 }
 
 #[test]
-fn ssot_path_does_not_sanitize_traversal_names() {
-    // Boundary (documents current behavior): "../evil" escapes the SSOT base dir.
-    // Skill names come from YAML front matter, so a crafted SKILL.md could
-    // write outside ~/.agents/skills/local — flagged as a finding in the report.
-    let p = sync::ssot_path("../evil", 0).unwrap();
-    let s = p.to_string_lossy().replace('\\', "/");
-    assert!(s.contains("local/../evil"), "actual path: {}", s);
+fn ssot_path_rejects_traversal_and_separator_names() {
+    // Security fix: skill names come from YAML front matter (untrusted input).
+    // Names that could escape ~/.agents/skills/local must be rejected.
+    for bad in ["../evil", "..", ".", "a/b", "a\\b", "", "   "] {
+        assert!(
+            sync::ssot_path(bad, 0).is_err(),
+            "name {:?} should be rejected",
+            bad
+        );
+    }
+    // Normal names still work
+    assert!(sync::ssot_path("my-skill", 0).is_ok());
+    assert!(sync::ssot_path("中文技能名", 7).is_ok());
 }
 
 #[test]
