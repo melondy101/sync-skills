@@ -8,7 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Tool, ToolTemplate, Project, SkillView, ScanResult, SyncResult,
   SkillUpdate, SkillDiff, SyncLog, Settings, ConflictView,
-  SkillFile, SkillLint,
+  SkillFile, SkillLint, AppUpdateInfo,
 } from "./types";
 
 // ==================== Tools ====================
@@ -86,6 +86,16 @@ export const getSettings = () => invoke<Settings>("get_settings");
 
 export const updateSettings = (newSettings: Settings) =>
   invoke("update_settings", { newSettings });
+
+// ==================== App self-update ====================
+
+export const checkAppUpdate = () => invoke<AppUpdateInfo>("check_app_update");
+
+export const downloadAppUpdate = (url: string, fileName: string) =>
+  invoke<string>("download_app_update", { url, fileName });
+
+export const installAppUpdate = (installerPath: string) =>
+  invoke("install_app_update", { installerPath });
 
 // ==================== Projects ====================
 

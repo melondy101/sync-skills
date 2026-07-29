@@ -81,6 +81,10 @@ pub fn run() {
             // Reverse sync & dismiss
             commands::syncing::reverse_sync_skill,
             commands::syncing::dismiss_skill_update,
+            // App self-update
+            commands::updater::check_app_update,
+            commands::updater::download_app_update,
+            commands::updater::install_app_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

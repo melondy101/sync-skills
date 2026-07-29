@@ -80,6 +80,16 @@ export interface SkillUpdate {
   changed_tool_id: number | null;
 }
 
+export interface AppUpdateInfo {
+  latest_version: string;
+  release_url: string;
+  update_available: boolean;
+  no_releases: boolean;
+  asset_name: string | null;
+  asset_url: string | null;
+  asset_size: number | null;
+}
+
 export interface SyncLog {
   id: number;
   skill_id: number | null;

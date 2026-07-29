@@ -12,3 +12,4 @@ pub mod scan;
 pub mod skills;
 pub mod syncing;
 pub mod tools;
+pub mod updater;

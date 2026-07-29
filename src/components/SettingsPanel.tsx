@@ -3,20 +3,22 @@
 
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
+import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { Settings } from "../types";
+import * as api from "../api";
+import type { AppUpdateInfo, Settings } from "../types";
 import type { TranslateFn } from "../i18n";
 
-/** Compare semver-ish strings numerically; returns >0 if a is newer than b. */
-function compareVersions(a: string, b: string): number {
-  const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
-  const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (d !== 0) return d;
-  }
-  return 0;
-}
+type UpdateCheckState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "latest"; latest: string }
+  | { status: "none" }
+  | { status: "outdated"; info: AppUpdateInfo }
+  | { status: "downloading"; info: AppUpdateInfo; percent: number }
+  | { status: "downloaded"; info: AppUpdateInfo; path: string }
+  | { status: "installing" }
+  | { status: "error"; error: string };
 
 export function SettingsPanel({
   t,
@@ -33,12 +35,7 @@ export function SettingsPanel({
 }) {
   // App self-update check (local to this panel)
   const [appVersion, setAppVersion] = useState("");
-  const [updateCheck, setUpdateCheck] = useState<{
-    status: "idle" | "checking" | "latest" | "outdated" | "none" | "error";
-    latest?: string;
-    url?: string;
-    error?: string;
-  }>({ status: "idle" });
+  const [updateCheck, setUpdateCheck] = useState<UpdateCheckState>({ status: "idle" });
 
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => {});
@@ -47,24 +44,50 @@ export function SettingsPanel({
   async function handleCheckAppUpdate() {
     setUpdateCheck({ status: "checking" });
     try {
-      const resp = await fetch(
-        "https://api.github.com/repos/huang-yi-dae/sync-skills/releases/latest",
-        { headers: { Accept: "application/vnd.github+json" } },
-      );
-      if (resp.status === 404) {
-        // Repo has no published releases yet
+      const info = await api.checkAppUpdate();
+      if (info.no_releases) {
         setUpdateCheck({ status: "none" });
-        return;
-      }
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const rel = await resp.json();
-      const latest = String(rel.tag_name || "").replace(/^v/, "");
-      const url = rel.html_url || "https://github.com/huang-yi-dae/sync-skills/releases";
-      if (latest && compareVersions(latest, appVersion) > 0) {
-        setUpdateCheck({ status: "outdated", latest, url });
+      } else if (info.update_available) {
+        setUpdateCheck({ status: "outdated", info });
       } else {
-        setUpdateCheck({ status: "latest", latest: latest || appVersion });
+        setUpdateCheck({ status: "latest", latest: info.latest_version });
       }
+    } catch (e) {
+      setUpdateCheck({ status: "error", error: String(e) });
+    }
+  }
+
+  async function handleDownloadUpdate(info: AppUpdateInfo) {
+    // No installer asset for this platform: fall back to the release page
+    if (!info.asset_url || !info.asset_name) {
+      openUrl(info.release_url);
+      return;
+    }
+    setUpdateCheck({ status: "downloading", info, percent: 0 });
+    const unlisten = await listen<{ downloaded: number; total: number }>(
+      "app-update-progress",
+      (e) => {
+        const { downloaded, total } = e.payload;
+        const size = total > 0 ? total : info.asset_size ?? 0;
+        const percent = size > 0 ? Math.min(100, Math.round((downloaded / size) * 100)) : 0;
+        setUpdateCheck({ status: "downloading", info, percent });
+      },
+    );
+    try {
+      const path = await api.downloadAppUpdate(info.asset_url, info.asset_name);
+      setUpdateCheck({ status: "downloaded", info, path });
+    } catch (e) {
+      setUpdateCheck({ status: "error", error: String(e) });
+    } finally {
+      unlisten();
+    }
+  }
+
+  async function handleInstallUpdate(path: string) {
+    setUpdateCheck({ status: "installing" });
+    try {
+      await api.installAppUpdate(path);
+      // App exits here on success
     } catch (e) {
       setUpdateCheck({ status: "error", error: String(e) });
     }
@@ -144,7 +167,7 @@ export function SettingsPanel({
           <button
             className="btn btn-small"
             onClick={handleCheckAppUpdate}
-            disabled={updateCheck.status === "checking"}
+            disabled={["checking", "downloading", "installing"].includes(updateCheck.status)}
           >
             {updateCheck.status === "checking" ? t("checkingAppUpdate") : t("checkAppUpdate")}
           </button>
@@ -158,15 +181,43 @@ export function SettingsPanel({
         {updateCheck.status === "outdated" && (
           <div className="app-update-row">
             <span className="settings-hint update-available">
-              {t("newVersionFound")}: v{updateCheck.latest}
+              {t("newVersionFound")}: v{updateCheck.info.latest_version}
             </span>
             <button
               className="btn btn-primary btn-small"
-              onClick={() => updateCheck.url && openUrl(updateCheck.url)}
+              onClick={() => handleDownloadUpdate(updateCheck.info)}
             >
-              {t("viewRelease")}
+              {updateCheck.info.asset_url ? t("downloadUpdate") : t("viewRelease")}
             </button>
           </div>
+        )}
+        {updateCheck.status === "downloading" && (
+          <div className="app-update-row">
+            <div className="update-progress-track">
+              <div
+                className="update-progress-fill"
+                style={{ width: `${updateCheck.percent}%` }}
+              />
+            </div>
+            <span className="settings-hint">
+              {t("downloadingUpdate")}... {updateCheck.percent}%
+            </span>
+          </div>
+        )}
+        {updateCheck.status === "downloaded" && (
+          <div className="app-update-row">
+            <span className="settings-hint update-latest">✓ {t("downloadComplete")}</span>
+            <button
+              className="btn btn-primary btn-small"
+              onClick={() => handleInstallUpdate(updateCheck.path)}
+            >
+              {t("installNow")}
+            </button>
+            <span className="settings-hint">{t("installHint")}</span>
+          </div>
+        )}
+        {updateCheck.status === "installing" && (
+          <p className="settings-hint">{t("installingUpdate")}</p>
         )}
         {updateCheck.status === "error" && (
           <p className="settings-hint update-error">{t("updateCheckFailed")}: {updateCheck.error}</p>
