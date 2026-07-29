@@ -21,6 +21,10 @@ src-tauri/target/
 # Temp files
 *.tmp
 .tmp-*
+.learn-tmp/
+
+# Agent memory
+.workbuddy/
 
 # Database
 *.db

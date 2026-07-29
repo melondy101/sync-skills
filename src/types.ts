@@ -149,3 +149,23 @@ export interface Toast {
   message: string;
   id: number;
 }
+
+// Built-in SKILL.md editor
+export interface SkillFile {
+  path: string;
+  content: string;
+}
+
+// Skill health check (Lint)
+export interface LintIssue {
+  code: string;
+  severity: "error" | "warning";
+  param?: string | null;
+  fixable: boolean;
+}
+
+export interface SkillLint {
+  skill_id: number;
+  skill_name: string;
+  issues: LintIssue[];
+}
