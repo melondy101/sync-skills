@@ -33,6 +33,20 @@ pub fn run() {
     // Initialize database
     let db = Database::new().expect("Failed to initialize database");
     let db_state = Arc::new(db);
+
+    // One-time SSOT relocation: ~/.agents/skills/local -> ~/.agents/skill-manager/ssot.
+    // Tools scanning ~/.agents/skills/ (Codex CLI, OpenCode) were loading the old
+    // SSOT store as duplicate skills; move it out and fix stored source_paths.
+    if let Some((old, new)) = sync::migrate_legacy_ssot() {
+        let old_s = scanner::normalize_path(&old);
+        let new_s = scanner::normalize_path(&new);
+        match db_state.migrate_ssot_prefix(&old_s, &new_s) {
+            Ok(n) if n > 0 => log::info!("Rewrote {} skill source_path entries to new SSOT", n),
+            Ok(_) => {}
+            Err(e) => log::error!("SSOT source_path migration failed: {}", e),
+        }
+    }
+
     // Per-skill lock manager: serializes sync/check operations on the same skill
     let lock_state: LockState = Arc::new(LockManager::new());
 

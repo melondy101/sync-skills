@@ -16,7 +16,7 @@ Tauri v2 桌面应用（Rust + React 19 + TypeScript + SQLite），用于跨 AI 
 
 ## 领域规则（写代码前必看）
 - SSOT 模型为「名字即身份」：同名 skill 跨工具合并为一条记录，多份安装。
-- SSOT 路径按域隔离：`sync.rs` 的 `ssot_path(name, project_id)` —— 全局 `~/.agents/skills/local/<name>/`，项目 `_p<project_id>/<name>/`。改路径逻辑时注意域隔离，避免同名覆盖。
+- SSOT 路径按域隔离：`sync.rs` 的 `ssot_path(name, project_id)` —— 全局 `~/.agents/skill-manager/ssot/<name>/`，项目 `_p<project_id>/<name>/`。改路径逻辑时注意域隔离，避免同名覆盖；SSOT 必须位于任何工具扫描的 `skills/` 目录树之外（Codex/OpenCode 会扫 `~/.agents/skills/`，放里面会被重复识别为 skill）。
 - 差异算法：`diff.rs` 基于 LCS（阈值 5000 行），前端以 unified / 并排两种视图展示。
 
 ## 文档指向
