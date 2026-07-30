@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Skill Manager Contributors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
