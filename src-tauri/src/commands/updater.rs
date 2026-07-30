@@ -190,12 +190,24 @@ pub fn install_app_update(app: tauri::AppHandle, installer_path: String) -> Resu
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        // `start` detaches the installer so it survives app exit; covers .exe and .msi
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", &installer_path])
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        // Spawned children are detached on Windows, so they survive app exit.
+        if installer_path.to_lowercase().ends_with(".msi") {
+            // Passive upgrade: progress bar only, msiexec removes the old
+            // version itself instead of asking the user to uninstall first
+            std::process::Command::new("msiexec")
+                .args(["/i", &installer_path, "/passive", "/norestart"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        } else {
+            // Tauri NSIS installer: /P = passive upgrade-in-place (silently
+            // replaces the old version), /R = relaunch the app when done
+            std::process::Command::new(&installer_path)
+                .args(["/P", "/R"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
     }
     #[cfg(target_os = "macos")]
     {

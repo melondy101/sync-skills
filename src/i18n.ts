@@ -45,7 +45,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     downloadComplete: "下载完成",
     installNow: "立即安装",
     installingUpdate: "正在启动安装程序，应用即将退出...",
-    installHint: "安装时将退出应用并启动安装程序",
+    installHint: "安装时应用将退出，安装程序会自动覆盖旧版本，无需手动卸载",
     collapse: "收起",
     expand: "展开",
 
@@ -328,7 +328,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     downloadComplete: "Download complete",
     installNow: "Install Now",
     installingUpdate: "Launching installer, the app will exit...",
-    installHint: "Installing will close the app and launch the installer",
+    installHint: "The app will exit and the installer will upgrade the existing version in place",
     collapse: "Collapse",
     expand: "Expand",
 
