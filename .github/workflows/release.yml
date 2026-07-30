@@ -1,7 +1,8 @@
 name: Release
 
-# Build installers for Windows, macOS and Linux and publish them to a
-# GitHub Release. Triggered by pushing a tag like `v0.1.0`.
+# Build installers for Windows, macOS and Linux and collect them into a
+# draft GitHub Release for manual publishing. Triggered by pushing a tag
+# like `v0.1.0`.
 on:
   push:
     tags:
@@ -84,6 +85,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Skill Manager ${{ github.ref_name }}"
           releaseBody: "See the assets below to download and install Skill Manager for your platform."
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
