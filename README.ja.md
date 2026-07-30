@@ -78,7 +78,7 @@ Skill Manager はデスクトップ GUI を提供し、すべての Skill を一
 **前提条件：**
 
 - [Rust](https://www.rust-lang.org/tools/install)（2021 edition）
-- [Node.js](https://nodejs.org/) >= 18
+- [Node.js](https://nodejs.org/) >= 22 と [pnpm](https://pnpm.io/) >= 11（**pnpm を使用してください。npm / yarn は使わないでください**）
 - [Tauri の前提条件](https://v2.tauri.app/start/prerequisites/)
 
 **ビルド手順：**
@@ -127,18 +127,15 @@ sync-skills/
 │   ├── App.css             # スタイル（CSS 変数テーマシステム）
 │   ├── types.ts            # TypeScript 型定義
 │   └── main.tsx            # エントリーポイント
-├── src-tauri/src/          # Rust バックエンド（lib.rs / db.rs / scanner.rs / sync.rs / diff.rs / hash.rs / discovery.rs / models.rs / settings.rs）
+├── src-tauri/src/          # Rust バックエンド（lib.rs / commands/ / ops.rs / sync.rs / db.rs / scanner.rs / diff.rs / lock.rs / lint.rs など）
 ├── doc/                    # 計画ドキュメント（PRD、設計、フェーズ計画、DDL）
 ├── docs/                   # 問題管理と解決記録（例: testing-issues-triage.md）
-└── .github/workflows/      # CI: release.yml がマルチプラットフォーム・インストーラーをビルド
+└── .github/workflows/      # CI: verify.yml 品質ゲート + release.yml マルチプラットフォーム・インストーラー
 ```
 
 ### 検証
 
-```bash
-cd src-tauri && cargo check    # Rust 型チェック
-npx tsc --noEmit               # TypeScript 型チェック
-```
+コミット前の完全な検証チェックリスト（型チェック / lint / ユニットテスト、フロントエンド + Rust で全 6 コマンド）は [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。CI（`.github/workflows/verify.yml`）が push / PR ごとに同じチェックを強制実行します。
 
 ## ロードマップ
 

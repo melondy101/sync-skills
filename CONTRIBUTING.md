@@ -17,7 +17,10 @@ pnpm tauri dev      # 启动开发环境
 
 ```bash
 npx tsc --noEmit                 # 前端类型检查
+pnpm lint                        # 前端规范检查（SPDX 头、禁止直接 invoke 等）
+pnpm test                        # 前端单元测试
 cd src-tauri && cargo check      # Rust 编译检查
+cd src-tauri && cargo clippy --all-targets -- -D warnings   # Rust 规范检查
 cd src-tauri && cargo test       # Rust 单元测试
 ```
 
@@ -25,7 +28,7 @@ cd src-tauri && cargo test       # Rust 单元测试
 
 ### 通用
 
-- 每个源码文件头部保留版权与 SPDX 声明：
+- 每个源码文件头部保留版权与 SPDX 声明（由 `pnpm lint` 强制检查）：
   ```
   // Copyright (c) 2026 Skill Manager Contributors
   // SPDX-License-Identifier: AGPL-3.0-only
@@ -35,7 +38,7 @@ cd src-tauri && cargo test       # Rust 单元测试
 
 ### 前端（TypeScript + React 19）
 
-- 所有后端调用统一走 [src/api.ts](src/api.ts) 的封装，组件内**禁止**直接 `invoke`。
+- 所有后端调用统一走 [src/api.ts](src/api.ts) 的封装，组件内**禁止**直接 `invoke`（由 `pnpm lint` 强制检查，规则见 [eslint.config.js](eslint.config.js)）。
 - 类型定义集中在 [src/types.ts](src/types.ts)，与 Rust 侧结构体字段保持 snake_case 对齐。
 - 用户可见文案一律通过 [src/i18n.ts](src/i18n.ts) 的 key 引用，新增文案需同时提供 zh / en 两种语言。
 - 组件放在 `src/components/`，复用逻辑放在 `src/hooks/`；组件只关注展示与交互，业务规则放在后端。
@@ -43,10 +46,11 @@ cd src-tauri && cargo test       # Rust 单元测试
 ### 后端（Rust + Tauri v2）
 
 - 遵循四层结构：`lib.rs` 只做注册；`commands/` 是按资源域划分的薄命令层；领域逻辑写在 `ops.rs` / `sync.rs` 等核心模块；数据访问收敛在 `db.rs`。
+- Rust 代码须通过 `cargo clippy --all-targets -- -D warnings`（CI 中强制）。
 - 新增 Tauri command 时：放入 `commands/` 对应域文件（或新建域文件并在 `commands/mod.rs` 注册），并加入 `lib.rs` 的 `invoke_handler` 列表。
 - 涉及同一 skill 的同步 / 检测操作必须经过 `LockManager` 串行化。
 - 错误统一以 `Result<T, String>` 返回给前端，不要 panic；字符串处理注意按字符而非字节索引，避免多字节字符 panic。
-- 修改 SSOT 路径逻辑时注意「名字即身份」与路径域隔离规则（详见 [CLAUDE.md](CLAUDE.md)）。
+- 修改 SSOT 路径逻辑时注意「名字即身份」与路径域隔离规则（详见 [AGENTS.md](AGENTS.md)）。
 
 ## Git 工作流
 

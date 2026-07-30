@@ -78,7 +78,7 @@ Skill Manager 提供一个桌面 GUI，让你在一个地方管理所有 Skill�
 **前置要求：**
 
 - [Rust](https://www.rust-lang.org/tools/install) (2021 edition)
-- [Node.js](https://nodejs.org/) >= 18
+- [Node.js](https://nodejs.org/) >= 22 与 [pnpm](https://pnpm.io/) >= 11（**请使用 pnpm，不要使用 npm / yarn**）
 - [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
 
 **构建步骤：**
@@ -127,18 +127,15 @@ sync-skills/
 │   ├── App.css             # 样式（CSS 变量主题系统）
 │   ├── types.ts            # TypeScript 类型定义
 │   └── main.tsx            # 入口
-├── src-tauri/src/          # Rust 后端（lib.rs / db.rs / scanner.rs / sync.rs / diff.rs / hash.rs / discovery.rs / models.rs / settings.rs）
+├── src-tauri/src/          # Rust 后端（lib.rs / commands/ / ops.rs / sync.rs / db.rs / scanner.rs / diff.rs / lock.rs / lint.rs 等）
 ├── doc/                    # 规划文档（PRD、设计、阶段计划、DDL）
 ├── docs/                   # 问题清单与已解决记录（如 testing-issues-triage.md）
-└── .github/workflows/      # CI：release.yml 自动构建多平台安装包
+└── .github/workflows/      # CI：verify.yml 质量门禁 + release.yml 多平台安装包构建
 ```
 
 ### 验证
 
-```bash
-cd src-tauri && cargo check    # Rust 类型检查
-npx tsc --noEmit               # TypeScript 类型检查
-```
+提交前的完整校验清单（类型检查 / lint / 单元测试，前端 + Rust 共 6 条命令）见 [CONTRIBUTING.md](CONTRIBUTING.md)；CI（`.github/workflows/verify.yml`）会在 push / PR 时强制执行同一组检查。
 
 ## 路线图
 

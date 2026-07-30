@@ -1,0 +1,13 @@
+# Reviewed core boundary for change-watch tooling.
+# One pattern per line; `!` prefix excludes; `#` starts a comment.
+
+# Rust risk core: sync/lock/db/ops/scanner own SSOT paths, locking,
+# persistence and skill discovery — regressions here corrupt user data.
+src-tauri/src/sync.rs
+src-tauri/src/db.rs
+src-tauri/src/lock.rs
+src-tauri/src/ops.rs
+src-tauri/src/scanner.rs
+
+# Frontend seam: the single gateway for all backend invocations.
+src/api.ts

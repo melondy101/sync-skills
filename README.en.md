@@ -78,7 +78,7 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
 **Prerequisites:**
 
 - [Rust](https://www.rust-lang.org/tools/install) (2021 edition)
-- [Node.js](https://nodejs.org/) >= 18
+- [Node.js](https://nodejs.org/) >= 22 and [pnpm](https://pnpm.io/) >= 11 (**use pnpm, not npm / yarn**)
 - [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
 
 **Build:**
@@ -127,18 +127,15 @@ sync-skills/
 │   ├── App.css             # Styles (CSS variable theme system)
 │   ├── types.ts            # TypeScript type definitions
 │   └── main.tsx            # Entry point
-├── src-tauri/src/          # Rust backend (lib.rs / db.rs / scanner.rs / sync.rs / diff.rs / hash.rs / discovery.rs / models.rs / settings.rs)
+├── src-tauri/src/          # Rust backend (lib.rs / commands/ / ops.rs / sync.rs / db.rs / scanner.rs / diff.rs / lock.rs / lint.rs, etc.)
 ├── doc/                    # Planning docs (PRD, design, phase plan, DDL)
 ├── docs/                   # Issue tracker & resolution notes (e.g. testing-issues-triage.md)
-└── .github/workflows/      # CI: release.yml builds multi-platform installers
+└── .github/workflows/      # CI: verify.yml quality gate + release.yml multi-platform installers
 ```
 
 ### Verification
 
-```bash
-cd src-tauri && cargo check    # Rust type check
-npx tsc --noEmit               # TypeScript type check
-```
+The full pre-commit checklist (type check / lint / unit tests, 6 commands across frontend + Rust) lives in [CONTRIBUTING.md](CONTRIBUTING.md); CI (`.github/workflows/verify.yml`) enforces the same set of checks on every push / PR.
 
 ## Roadmap
 
