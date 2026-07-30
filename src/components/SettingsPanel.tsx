@@ -53,7 +53,12 @@ export function SettingsPanel({
         setUpdateCheck({ status: "latest", latest: info.latest_version });
       }
     } catch (e) {
-      setUpdateCheck({ status: "error", error: String(e) });
+      const raw = String(e);
+      // Backend sentinel for "could not reach GitHub at all"
+      setUpdateCheck({
+        status: "error",
+        error: raw.includes("NETWORK_ERROR") ? t("updateNetworkError") : raw,
+      });
     }
   }
 
@@ -157,6 +162,21 @@ export function SettingsPanel({
         </label>
         <p className="settings-hint">
           {t("symlinkHint")}
+        </p>
+      </div>
+
+      <div className="settings-group">
+        <label className="settings-label">{t("closeAction")}</label>
+        <select
+          className="settings-select"
+          value={settings.close_action}
+          onChange={(e) => onChange({ ...settings, close_action: e.target.value })}
+        >
+          <option value="exit">{t("closeActionExit")}</option>
+          <option value="minimize">{t("closeActionMinimize")}</option>
+        </select>
+        <p className="settings-hint">
+          {t("closeActionHint")}
         </p>
       </div>
 

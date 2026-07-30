@@ -62,6 +62,7 @@ const mockSettings: Settings = {
   prefer_symlink: false,
   theme: "light",
   language: "en",
+  close_action: "exit",
 };
 
 beforeEach(() => {

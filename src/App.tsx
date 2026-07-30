@@ -35,7 +35,7 @@ function App() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [skills, setSkills] = useState<SkillView[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [settings, setSettings] = useState<Settings>({ sync_mode: "semi-auto", prefer_symlink: false, theme: "light", language: "zh" });
+  const [settings, setSettings] = useState<Settings>({ sync_mode: "semi-auto", prefer_symlink: false, theme: "light", language: "zh", close_action: "exit" });
 
   const t = makeT(settings.language as Lang);
   useTheme(settings.theme);

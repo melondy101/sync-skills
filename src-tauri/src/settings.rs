@@ -16,6 +16,13 @@ pub struct Settings {
     pub theme: String,
     /// Language: "zh" (default) or "en"
     pub language: String,
+    /// Window close behavior: "exit" (default) or "minimize"
+    #[serde(default = "default_close_action")]
+    pub close_action: String,
+}
+
+fn default_close_action() -> String {
+    "exit".to_string()
 }
 
 impl Default for Settings {
@@ -25,6 +32,7 @@ impl Default for Settings {
             prefer_symlink: false,
             theme: "light".to_string(),
             language: "zh".to_string(),
+            close_action: default_close_action(),
         }
     }
 }

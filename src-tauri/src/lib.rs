@@ -54,6 +54,15 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(db_state)
         .manage(lock_state)
+        // Honor the "close_action" setting: minimize instead of exiting
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if settings::Settings::load().close_action == "minimize" {
+                    api.prevent_close();
+                    let _ = window.minimize();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             // Tools
             commands::tools::list_tools,

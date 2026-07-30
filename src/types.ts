@@ -109,6 +109,7 @@ export interface Settings {
   prefer_symlink: boolean;
   theme: string;
   language: string;
+  close_action: string;
 }
 
 export interface DiffLine {
