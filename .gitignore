@@ -26,6 +26,9 @@ src-tauri/target/
 # Agent memory
 .workbuddy/
 
+# Agent tooling reports
+.qoder/
+
 # Database
 *.db
 *.db-journal
