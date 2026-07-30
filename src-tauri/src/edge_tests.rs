@@ -369,14 +369,18 @@ fn symlink_or_copy_replaces_existing_dst() {
 fn ssot_path_global_vs_project_layout() {
     let g = sync::ssot_path("skill-a", 0).unwrap();
     let p = sync::ssot_path("skill-a", 42).unwrap();
-    assert!(g.ends_with(Path::new("local").join("skill-a")));
-    assert!(p.ends_with(Path::new("local").join("_p42").join("skill-a")));
+    assert!(g.ends_with(Path::new("skill-manager").join("ssot").join("skill-a")));
+    assert!(p.ends_with(Path::new("ssot").join("_p42").join("skill-a")));
+    // SSOT must live outside ~/.agents/skills/ — tools like Codex/OpenCode
+    // scan that tree and would double-load SSOT copies as duplicate skills
+    let base = sync::ssot_base().unwrap();
+    assert!(!base.starts_with(dirs::home_dir().unwrap().join(".agents").join("skills")));
 }
 
 #[test]
 fn ssot_path_rejects_traversal_and_separator_names() {
     // Security fix: skill names come from YAML front matter (untrusted input).
-    // Names that could escape ~/.agents/skills/local must be rejected.
+    // Names that could escape the SSOT base directory must be rejected.
     for bad in ["../evil", "..", ".", "a/b", "a\\b", "", "   "] {
         assert!(
             sync::ssot_path(bad, 0).is_err(),
@@ -719,6 +723,39 @@ fn db_disabled_installation_paths_after_toggle_off() {
 }
 
 #[test]
+fn db_migrate_ssot_prefix_rewrites_only_matching_paths() {
+    let db = Database::new_in_memory().unwrap();
+    let (id_old, _) = db
+        .upsert_skill("in-old-ssot", None, "C:\\home\\.agents\\skills\\local\\in-old-ssot", "h1", "c1", 0)
+        .unwrap();
+    let (id_other, _) = db
+        .upsert_skill("elsewhere", None, "C:\\dev\\elsewhere", "h2", "c2", 0)
+        .unwrap();
+    // Forward-slash variant must also be matched (mixed separators tolerated)
+    let (id_fwd, _) = db
+        .upsert_skill("fwd-slash", None, "C:/home/.agents/skills/local/fwd-slash", "h3", "c3", 0)
+        .unwrap();
+
+    let n = db
+        .migrate_ssot_prefix(
+            "C:\\home\\.agents\\skills\\local",
+            "C:\\home\\.agents\\skill-manager\\ssot",
+        )
+        .unwrap();
+    assert_eq!(n, 2);
+
+    assert_eq!(
+        db.get_skill_by_id(id_old).unwrap().source_path,
+        "C:\\home\\.agents\\skill-manager\\ssot\\in-old-ssot"
+    );
+    assert_eq!(
+        db.get_skill_by_id(id_fwd).unwrap().source_path,
+        "C:\\home\\.agents\\skill-manager\\ssot/fwd-slash"
+    );
+    assert_eq!(db.get_skill_by_id(id_other).unwrap().source_path, "C:\\dev\\elsewhere");
+}
+
+#[test]
 fn sync_remove_installed_skill_dir_and_missing() {
     let dir = tempdir().unwrap();
     let skill_dir = dir.path().join("my-skill");
@@ -788,4 +825,113 @@ fn lock_serializes_concurrent_threads_on_same_skill() {
     for h in handles {
         h.join().unwrap();
     }
+}
+
+// ==================== sync invariant regressions ====================
+// Focused guards for the two documented sync invariants:
+//   1. ssot_path domain isolation — same-name skills in different domains
+//      (global vs each project) resolve to distinct, non-nested directories,
+//      so one domain can never collide with or overwrite another.
+//   2. lock-serialized sync — the skill lock is keyed by (project, name), so
+//      the same domain serializes while different domains stay independent.
+
+/// Re-root an absolute SSOT path under a tempdir while preserving the exact
+/// relative layout `ssot_path` produced, so filesystem assertions never touch
+/// real user data yet still exercise the production path logic.
+fn reroot_ssot(base: &Path, abs: &Path, sandbox: &Path) -> std::path::PathBuf {
+    let rel = abs.strip_prefix(base).expect("ssot path must live under ssot_base");
+    sandbox.join(rel)
+}
+
+#[test]
+fn sync_invariant_ssot_path_domains_never_collide() {
+    // Same skill name across three domains must map to three distinct paths,
+    // and no domain's path may be an ancestor of another (sibling isolation).
+    let g = sync::ssot_path("shared", 0).unwrap();
+    let p42 = sync::ssot_path("shared", 42).unwrap();
+    let p7 = sync::ssot_path("shared", 7).unwrap();
+
+    assert_ne!(g, p42, "global and project 42 must differ");
+    assert_ne!(g, p7, "global and project 7 must differ");
+    assert_ne!(p42, p7, "distinct projects must differ");
+
+    // Isolation: no path may sit inside another, or a write to one domain
+    // could clobber a same-name skill in the other.
+    for (a, b) in [(&g, &p42), (&g, &p7), (&p42, &p7)] {
+        assert!(!a.starts_with(b), "{:?} must not nest under {:?}", a, b);
+        assert!(!b.starts_with(a), "{:?} must not nest under {:?}", b, a);
+    }
+
+    let base = sync::ssot_base().unwrap();
+    assert_eq!(g.parent(), Some(base.as_path()), "global lives directly under the base");
+    assert_eq!(
+        p42.parent(),
+        Some(base.join("_p42").as_path()),
+        "project skills live under a _p<id> domain folder"
+    );
+}
+
+#[test]
+fn sync_invariant_same_name_different_domains_do_not_overwrite() {
+    // The real "must never overwrite" guarantee: materialize the same skill
+    // name in two domains (global + project 99) using the production path
+    // layout, then confirm writing one leaves the other untouched.
+    let sandbox = tempdir().unwrap();
+    let base = sync::ssot_base().unwrap();
+
+    let global_dst = reroot_ssot(&base, &sync::ssot_path("shared", 0).unwrap(), sandbox.path());
+    let project_dst = reroot_ssot(&base, &sync::ssot_path("shared", 99).unwrap(), sandbox.path());
+    assert_ne!(global_dst, project_dst, "domains must not resolve to the same directory");
+
+    // Seed the global domain from its own source.
+    let global_src = sandbox.path().join("src-global");
+    write_file(&global_src.join("SKILL.md"), "---
+name: shared
+---
+GLOBAL body");
+    sync::replace_directory(&global_src, &global_dst).unwrap();
+
+    // Now sync the same-named skill in the project domain.
+    let project_src = sandbox.path().join("src-project");
+    write_file(&project_src.join("SKILL.md"), "---
+name: shared
+---
+PROJECT body");
+    sync::replace_directory(&project_src, &project_dst).unwrap();
+
+    // Neither write may have disturbed the other domain's content.
+    assert_eq!(
+        fs::read_to_string(global_dst.join("SKILL.md")).unwrap(),
+        "---
+name: shared
+---
+GLOBAL body",
+        "project sync must not overwrite the global domain"
+    );
+    assert_eq!(
+        fs::read_to_string(project_dst.join("SKILL.md")).unwrap(),
+        "---
+name: shared
+---
+PROJECT body",
+    );
+}
+
+#[test]
+fn sync_invariant_lock_is_domain_scoped_for_same_name() {
+    // Lock-serialized sync: holding the lock for one domain must block only
+    // that exact (project, name) domain, never a same-name skill elsewhere.
+    let locks = LockManager::new();
+    let _held = locks.acquire_blocking(0, "shared");
+
+    // Same domain (global + same name) is busy.
+    assert!(
+        locks.try_acquire_blocking(0, "shared").is_none(),
+        "the held global 'shared' domain must be busy"
+    );
+    // Same name in a different project domain is independent and free.
+    assert!(
+        locks.try_acquire_blocking(99, "shared").is_some(),
+        "project domain must sync concurrently with the global same-name skill"
+    );
 }
