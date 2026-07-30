@@ -78,19 +78,78 @@ fn pick_asset(assets: &[serde_json::Value]) -> Option<(String, String, u64)> {
 fn http_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .user_agent("skill-manager")
+        .connect_timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| e.to_string())
+}
+
+/// Fallback when api.github.com is unreachable (offline, or a proxy/firewall
+/// that blocks the API host but not github.com): probe the release page
+/// redirect, which yields the latest tag but no asset metadata.
+async fn check_via_release_page(current: &str) -> Result<AppUpdateInfo, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("skill-manager")
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client
+        .get(format!("{}/latest", RELEASES_PAGE))
+        .timeout(std::time::Duration::from_secs(20))
+        .send()
+        .await
+        // Sentinel the frontend maps to a localized "check your network" hint
+        .map_err(|_| "NETWORK_ERROR".to_string())?;
+
+    // GitHub 302-redirects /releases/latest to /releases/tag/<tag> once a
+    // release exists; anything else means there is nothing published yet.
+    let location = resp
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let tag = location.split("/releases/tag/").nth(1).unwrap_or("");
+    if tag.is_empty() {
+        if resp.status().is_success() || resp.status().is_redirection() {
+            return Ok(AppUpdateInfo {
+                latest_version: current.to_string(),
+                release_url: RELEASES_PAGE.to_string(),
+                update_available: false,
+                no_releases: true,
+                asset_name: None,
+                asset_url: None,
+                asset_size: None,
+            });
+        }
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    let latest = tag.trim_start_matches('v').to_string();
+    Ok(AppUpdateInfo {
+        update_available: compare_versions(&latest, current) > 0,
+        latest_version: latest,
+        release_url: location.to_string(),
+        no_releases: false,
+        // No asset info without the API; the frontend falls back to
+        // opening the release page for the actual download.
+        asset_name: None,
+        asset_url: None,
+        asset_size: None,
+    })
 }
 
 #[tauri::command]
 pub async fn check_app_update(app: tauri::AppHandle) -> Result<AppUpdateInfo, String> {
     let current = app.package_info().version.to_string();
-    let resp = http_client()?
+    let resp = match http_client()?
         .get(RELEASES_API)
         .header("Accept", "application/vnd.github+json")
+        .timeout(std::time::Duration::from_secs(20))
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+    {
+        Ok(r) => r,
+        Err(_) => return check_via_release_page(&current).await,
+    };
     if resp.status().as_u16() == 404 {
         // Repo has no published releases yet
         return Ok(AppUpdateInfo {
