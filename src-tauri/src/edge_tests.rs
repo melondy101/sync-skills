@@ -30,7 +30,7 @@ fn id_hash_empty_string() {
     // Boundary: empty input must not panic and must stay in JS safe-integer range
     let h = hash::compute_id_hash("");
     assert!(h >= 0);
-    assert!(h <= (1i64 << 53) - 1);
+    assert!(h < (1i64 << 53));
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn id_hash_unicode_and_long_input() {
     let h1 = hash::compute_id_hash("技能管理器🚀");
     let h2 = hash::compute_id_hash(&"x".repeat(1_000_000));
     for h in [h1, h2] {
-        assert!(h >= 0 && h <= (1i64 << 53) - 1);
+        assert!((0..(1i64 << 53)).contains(&h));
     }
     // Deterministic
     assert_eq!(h1, hash::compute_id_hash("技能管理器🚀"));

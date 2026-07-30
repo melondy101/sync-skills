@@ -210,10 +210,9 @@ pub fn normalize_path(path: &Path) -> String {
     #[cfg(target_os = "windows")]
     {
         // Strip \\?\ or \\\\?\\ prefix
-        let stripped = if s.starts_with(r"\\?\") {
-            s[4..].to_string()
-        } else {
-            s
+        let stripped = match s.strip_prefix(r"\\?\") {
+            Some(rest) => rest.to_string(),
+            None => s,
         };
         // Convert all forward slashes to backslashes
         stripped.replace('/', "\\")

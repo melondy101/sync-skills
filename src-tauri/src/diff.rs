@@ -413,8 +413,7 @@ fn build_hunks_from_lcs(old: &[&str], new: &[&str], lcs: &[(usize, usize)]) -> V
         let mut new_count = 0usize;
         let mut first = true;
 
-        for i in rs..re.min(edits.len()) {
-            let e = &edits[i];
+        for e in &edits[rs..re.min(edits.len())] {
             if first && e.op == ' ' {
                 // First context line sets the start
                 if let Some(oi) = e.old_idx { old_start = oi + 1; }
