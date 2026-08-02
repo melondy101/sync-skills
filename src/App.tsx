@@ -26,6 +26,7 @@ import { UpdatesModal, type UpdateDiffEntry } from "./components/UpdatesModal";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { LintModal } from "./components/LintModal";
 import { SkillEditorModal } from "./components/SkillEditorModal";
+import { SkillListRow } from "./components/SkillListRow";
 
 type Tab = "global" | "projects";
 type Panel = "main" | "settings" | "logs";
@@ -62,6 +63,7 @@ function App() {
   const [filterTool, setFilterTool] = useState<number>(-1); // -1 = all tools
   const [sortBy, setSortBy] = useState<"name" | "updated_at" | "created_at">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   // Pre-loaded diff for the single-skill check flow (passed to UpdatesModal)
@@ -322,11 +324,13 @@ function App() {
   }
 
   const filteredSkills = (() => {
-    const byTool = filterTool >= 0
-      ? skills.filter((s) =>
-          s.installed_tools.some((inst) => inst.tool_id === filterTool && inst.status === "active"),
-        )
-      : skills;
+    const byTool = filterTool === -2
+      ? skills.filter((s) => !s.installed_tools.some((inst) => inst.status === "active"))
+      : filterTool >= 0
+        ? skills.filter((s) =>
+            s.installed_tools.some((inst) => inst.tool_id === filterTool && inst.status === "active"),
+          )
+        : skills;
     const filtered = searchQuery
       ? byTool.filter(
           (s) =>
@@ -461,6 +465,7 @@ function App() {
             onChange={(e) => setFilterTool(parseInt(e.target.value, 10))}
           >
             <option value={-1}>{t("allTools")}</option>
+            <option value={-2}>{t("unsyncedOnly")}</option>
             {tools.map((tool) => (
               <option key={tool.id} value={tool.id}>{tool.name}</option>
             ))}
@@ -480,6 +485,13 @@ function App() {
             title={sortDir === "asc" ? t("ascending") : t("descending")}
           >
             {sortDir === "asc" ? "A\u2192Z" : "Z\u2192A"}
+          </button>
+          <button
+            className="btn btn-small view-toggle-btn"
+            onClick={() => setViewMode((v) => (v === "card" ? "list" : "card"))}
+            title={viewMode === "card" ? t("viewList") : t("viewCard")}
+          >
+            {viewMode === "card" ? "☰" : "▦"}
           </button>
         </div>
       </section>
@@ -518,6 +530,39 @@ function App() {
                 <p>{t("configureAndScan")}</p>
               </>
             )}
+          </div>
+        ) : viewMode === "list" ? (
+          <div className="skill-list">
+            <table className="skill-table">
+              <thead>
+                <tr>
+                  <th className="col-name">{t("skills")}</th>
+                  {tools.map((tool) => (
+                    <th key={tool.id} className="col-tool">{tool.name}</th>
+                  ))}
+                  <th className="col-actions"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSkills.map((skill) => (
+                  <SkillListRow
+                    key={skill.id}
+                    skill={skill}
+                    tools={tools}
+                    t={t}
+                    hasUpdate={hasUpdate(skill)}
+                    syncing={syncing.has(skill.id)}
+                    checkingSingle={checkingSingle === skill.id}
+                    getInstallStatus={getInstallStatus}
+                    onToggle={handleToggle}
+                    onSync={() => handleSyncSkill(skill.id)}
+                    onCheckUpdate={() => handleCheckSingleSkill(skill.id)}
+                    onHealthCheck={() => setLintTarget(skill)}
+                    onEdit={() => setEditingSkill(skill)}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="skill-grid">

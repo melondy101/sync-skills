@@ -174,6 +174,7 @@ export function SettingsPanel({
         >
           <option value="exit">{t("closeActionExit")}</option>
           <option value="minimize">{t("closeActionMinimize")}</option>
+          <option value="tray">{t("closeActionTray")}</option>
         </select>
         <p className="settings-hint">
           {t("closeActionHint")}

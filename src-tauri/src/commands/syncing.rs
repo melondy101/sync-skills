@@ -18,6 +18,24 @@ pub fn toggle_skill(
 ) -> Result<(), String> {
     db.toggle_installation(skill_id, tool_id, project_id, active)?;
 
+    // When disabling, immediately remove the installed skill from the tool directory
+    if !active {
+        if let Ok(skill) = db.get_skill_by_id(skill_id) {
+            // Resolve the tool's installation path for this project scope
+            if let Ok(paths) = db.get_disabled_installation_paths(skill_id, project_id) {
+                for (tid, target_path) in &paths {
+                    if *tid != tool_id {
+                        continue;
+                    }
+                    if let Ok(expanded) = crate::scanner::expand_path(target_path) {
+                        let target_dir = expanded.join(&skill.name);
+                        let _ = sync::remove_installed_skill(&target_dir);
+                    }
+                }
+            }
+        }
+    }
+
     // Log the toggle action
     let action = if active { "toggle_on" } else { "toggle_off" };
     let _ = db.insert_action_log(action, Some(skill_id), Some(tool_id), project_id, "success", None);

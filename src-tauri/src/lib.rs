@@ -19,6 +19,9 @@ mod sync;
 use db::Database;
 use lock::LockManager;
 use std::sync::Arc;
+use tauri::Manager;
+use tauri::menu::{MenuBuilder, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 pub(crate) type DbState = Arc<Database>;
 pub(crate) type LockState = Arc<LockManager>;
@@ -54,12 +57,66 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(db_state)
         .manage(lock_state)
-        // Honor the "close_action" setting: minimize instead of exiting
+        .setup(|app| {
+            // Build tray menu
+            let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
+            let tray_menu = MenuBuilder::new(app)
+                .item(&show_item)
+                .separator()
+                .item(&quit_item)
+                .build()?;
+
+            // Create tray icon
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().cloned().unwrap())
+                .tooltip("Skill Manager")
+                .menu(&tray_menu)
+                .on_menu_event(|app, event| {
+                    if event.id() == "show" {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    } else if event.id() == "quit" {
+                        app.exit(0);
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // Single click on tray icon shows the window
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            Ok(())
+        })
+        // Honor the "close_action" setting: minimize, hide to tray, or exit
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if settings::Settings::load().close_action == "minimize" {
-                    api.prevent_close();
-                    let _ = window.minimize();
+                let close_action = settings::Settings::load().close_action;
+                match close_action.as_str() {
+                    "minimize" => {
+                        api.prevent_close();
+                        let _ = window.minimize();
+                    }
+                    "tray" => {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                    _ => {} // "exit" — default, let it close
                 }
             }
         })

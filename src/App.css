@@ -2108,3 +2108,101 @@ body::before {
   outline: none;
   border-color: var(--accent);
 }
+
+/* ==================== List View ==================== */
+
+.view-toggle-btn {
+  font-size: 15px;
+  min-width: 32px;
+}
+
+.skill-list {
+  overflow-x: auto;
+}
+
+.skill-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.skill-table thead th {
+  text-align: left;
+  padding: 8px 10px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+
+.skill-table .col-name {
+  min-width: 200px;
+}
+
+.skill-table .col-tool {
+  text-align: center;
+  min-width: 70px;
+}
+
+.skill-table .col-actions {
+  text-align: right;
+  min-width: 60px;
+}
+
+.skill-list-main td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.skill-list-main.skill-has-update .list-skill-name {
+  color: var(--accent);
+}
+
+.list-skill-name {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.list-skill-desc {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+.sync-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.skill-list-actions td {
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.list-action-row {
+  display: flex;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.skill-table tbody tr.skill-list-main:hover {
+  background: var(--surface-hover);
+}

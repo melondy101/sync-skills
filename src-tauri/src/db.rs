@@ -745,15 +745,30 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let status = if active { "active" } else { "disabled" };
 
-        conn.execute(
-            "INSERT INTO skill_installations (skill_id, tool_id, project_id, status)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(skill_id, tool_id, project_id) DO UPDATE SET
-                status = ?4,
-                updated_at = datetime('now')",
-            params![skill_id, tool_id, project_id, status],
-        )
-        .map_err(|e| format!("Failed to toggle installation: {}", e))?;
+        if active {
+            conn.execute(
+                "INSERT INTO skill_installations (skill_id, tool_id, project_id, status)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(skill_id, tool_id, project_id) DO UPDATE SET
+                    status = ?4,
+                    updated_at = datetime('now')",
+                params![skill_id, tool_id, project_id, status],
+            )
+            .map_err(|e| format!("Failed to toggle installation: {}", e))?;
+        } else {
+            // When disabling, clear synced_at so the skill appears as never-synced
+            conn.execute(
+                "INSERT INTO skill_installations (skill_id, tool_id, project_id, status)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(skill_id, tool_id, project_id) DO UPDATE SET
+                    status = ?4,
+                    synced_at = NULL,
+                    installation_synced_at = NULL,
+                    updated_at = datetime('now')",
+                params![skill_id, tool_id, project_id, status],
+            )
+            .map_err(|e| format!("Failed to toggle installation: {}", e))?;
+        }
 
         Ok(())
     }
