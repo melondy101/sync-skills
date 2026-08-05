@@ -10,8 +10,10 @@ mod edge_tests;
 mod hash;
 mod lint;
 mod lock;
+mod market;
 mod models;
 mod ops;
+mod providers;
 mod scanner;
 mod settings;
 mod sync;
@@ -165,7 +167,21 @@ pub fn run() {
             commands::updater::check_app_update,
             commands::updater::download_app_update,
             commands::updater::install_app_update,
+            // Skill market
+            commands::market::list_markets,
+            commands::market::add_market,
+            commands::market::update_market,
+            commands::market::delete_market,
+            commands::market::sync_market_index,
+            commands::market::sync_all_market_indices,
+            commands::market::list_market_templates,
+            commands::market::list_remote_skills,
+            commands::market::download_remote_skill,
+            commands::market::sync_remote_skill_to_tools,
+            commands::market::check_remote_updates,
+            commands::market::get_remote_skill_diff,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

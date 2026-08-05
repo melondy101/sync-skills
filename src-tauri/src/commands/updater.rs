@@ -19,7 +19,7 @@ pub struct AppUpdateInfo {
     pub release_url: String,
     pub update_available: bool,
     pub no_releases: bool,
-    /// Installer asset matching the current platform, if any.
+    /// Installer asset matching the current platform's installer format, if any.
     pub asset_name: Option<String>,
     pub asset_url: Option<String>,
     pub asset_size: Option<u64>,
@@ -75,24 +75,52 @@ fn pick_asset(assets: &[serde_json::Value]) -> Option<(String, String, u64)> {
     None
 }
 
+fn proxy_from_settings() -> Option<reqwest::Proxy> {
+    let settings = crate::settings::Settings::load();
+    if !settings.use_proxy {
+        return None;
+    }
+    let url = settings.proxy_url.filter(|url| !url.trim().is_empty())?;
+    reqwest::Proxy::all(url).ok()
+}
+
+fn tls_proxy_hint() -> Option<&'static str> {
+    let settings = crate::settings::Settings::load();
+    if !settings.use_proxy {
+        return None;
+    }
+    let url = settings.proxy_url?;
+    if url.trim().is_empty() {
+        return None;
+    }
+    if url.starts_with("https://") || url.starts_with("socks5://") {
+        return Some("the proxy itself may also need its certificate trusted");
+    }
+    None
+}
+
 fn http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
+    let mut builder = reqwest::Client::builder()
         .user_agent("skill-manager")
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| e.to_string())
+        .connect_timeout(std::time::Duration::from_secs(10));
+    if let Some(proxy) = proxy_from_settings() {
+        builder = builder.proxy(proxy);
+    }
+    builder.build().map_err(|e| e.to_string())
 }
 
 /// Fallback when api.github.com is unreachable (offline, or a proxy/firewall
 /// that blocks the API host but not github.com): probe the release page
 /// redirect, which yields the latest tag but no asset metadata.
 async fn check_via_release_page(current: &str) -> Result<AppUpdateInfo, String> {
-    let client = reqwest::Client::builder()
+    let mut builder = reqwest::Client::builder()
         .user_agent("skill-manager")
         .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| e.to_string())?;
+        .connect_timeout(std::time::Duration::from_secs(10));
+    if let Some(proxy) = proxy_from_settings() {
+        builder = builder.proxy(proxy);
+    }
+    let client = builder.build().map_err(|e| e.to_string())?;
     let resp = client
         .get(format!("{}/latest", RELEASES_PAGE))
         .timeout(std::time::Duration::from_secs(20))
@@ -163,7 +191,8 @@ pub async fn check_app_update(app: tauri::AppHandle) -> Result<AppUpdateInfo, St
         });
     }
     if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
+        let tls_hint = tls_proxy_hint().unwrap_or("check your network/proxy or set a manual proxy URL");
+        return Err(format!("HTTP {}; {}", resp.status(), tls_hint));
     }
     let rel: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
     let latest = rel["tag_name"]
@@ -210,7 +239,14 @@ pub async fn download_app_update(
         .get(&url)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            let tls_hint = tls_proxy_hint().unwrap_or("");
+            if tls_hint.is_empty() {
+                e.to_string()
+            } else {
+                format!("{} ({})", e, tls_hint)
+            }
+        })?;
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status()));
     }

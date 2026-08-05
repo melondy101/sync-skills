@@ -7,9 +7,11 @@
 pub mod app_settings;
 pub mod conflicts;
 pub mod logs;
+pub mod market;
 pub mod projects;
 pub mod scan;
 pub mod skills;
 pub mod syncing;
 pub mod tools;
 pub mod updater;
+

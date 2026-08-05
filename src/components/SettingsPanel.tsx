@@ -173,14 +173,48 @@ export function SettingsPanel({
           onChange={(e) => onChange({ ...settings, close_action: e.target.value })}
         >
           <option value="exit">{t("closeActionExit")}</option>
-          <option value="minimize">{t("closeActionMinimize")}</option>
           <option value="tray">{t("closeActionTray")}</option>
+          <option value="minimize">{t("closeActionMinimize")}</option>
         </select>
         <p className="settings-hint">
           {t("closeActionHint")}
         </p>
       </div>
 
+      <div className="settings-group">
+        <label className="settings-label">{t("proxySection")}</label>
+        <label className="settings-label">
+          <input
+            type="checkbox"
+            checked={settings.use_system_proxy}
+            onChange={(e) => onChange({ ...settings, use_system_proxy: e.target.checked })}
+          />
+          {" "}{t("systemProxy")}
+        </label>
+        <label className="settings-label">
+          <input
+            type="checkbox"
+            checked={settings.use_proxy}
+            disabled={settings.use_system_proxy}
+            onChange={(e) => onChange({ ...settings, use_proxy: e.target.checked })}
+          />
+          {" "}{t("useProxy")}
+        </label>
+        <div className="settings-row">
+          <div className="settings-field">
+            <span className="settings-field-label">{t("proxyUrl")}</span>
+            <input
+              className="settings-input"
+              type="text"
+              value={settings.proxy_url ?? ""}
+              onChange={(e) => onChange({ ...settings, proxy_url: e.target.value || null })}
+              placeholder={t("proxyUrlPlaceholder")}
+              disabled={settings.use_system_proxy || !settings.use_proxy}
+            />
+          </div>
+        </div>
+        <p className="settings-hint">{t("proxyHint")}</p>
+      </div>
       <div className="settings-group">
         <label className="settings-label">{t("appUpdateSection")}</label>
         <div className="app-update-row">
@@ -241,7 +275,10 @@ export function SettingsPanel({
           <p className="settings-hint">{t("installingUpdate")}</p>
         )}
         {updateCheck.status === "error" && (
-          <p className="settings-hint update-error">{t("updateCheckFailed")}: {updateCheck.error}</p>
+          <div>
+            <p className="settings-hint update-error">{t("updateCheckFailed")}: {updateCheck.error}</p>
+            <p className="settings-hint">{t("updateProxyHint")}</p>
+          </div>
         )}
       </div>
 

@@ -62,7 +62,10 @@ const mockSettings: Settings = {
   prefer_symlink: false,
   theme: "light",
   language: "en",
-  close_action: "exit",
+  close_action: "tray",
+  use_system_proxy: true,
+  use_proxy: false,
+  proxy_url: null,
 };
 
 beforeEach(() => {
@@ -74,12 +77,13 @@ beforeEach(() => {
   vi.mocked(api.listSkills).mockResolvedValue(mockSkills);
   vi.mocked(api.listProjects).mockResolvedValue([mockProject]);
   vi.mocked(api.getSettings).mockResolvedValue(mockSettings);
-  vi.mocked(api.listConflicts).mockResolvedValue([]);
-  vi.mocked(api.updateSettings).mockResolvedValue(undefined);
-  vi.mocked(api.checkUpdates).mockResolvedValue([]);
-  // ToolsSection loads these on mount (both fail-silent nice-to-haves).
-  vi.mocked(api.discoverTools).mockResolvedValue([]);
-  vi.mocked(api.listToolTemplates).mockResolvedValue([]);
+ vi.mocked(api.listConflicts).mockResolvedValue([]);
+ vi.mocked(api.updateSettings).mockResolvedValue(undefined);
+ vi.mocked(api.checkUpdates).mockResolvedValue([]);
+  vi.mocked(api.listRemoteInstallations).mockResolvedValue([]);
+ // ToolsSection loads these on mount (both fail-silent nice-to-haves).
+ vi.mocked(api.discoverTools).mockResolvedValue([]);
+ vi.mocked(api.listToolTemplates).mockResolvedValue([]);
 });
 
 async function renderApp() {
@@ -99,6 +103,7 @@ describe("App orchestration", () => {
     // Global tab is the default scope (project id 0).
     expect(api.listSkills).toHaveBeenCalledWith(0);
     expect(api.listConflicts).toHaveBeenCalledWith(0);
+    expect(api.listRemoteInstallations).toHaveBeenCalledWith(0, -1);
     expect(screen.getByText("beta-skill")).toBeInTheDocument();
   });
 

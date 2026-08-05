@@ -16,13 +16,30 @@ pub struct Settings {
     pub theme: String,
     /// Language: "zh" (default) or "en"
     pub language: String,
-    /// Window close behavior: "exit" (default) or "minimize"
+    /// Window close behavior: "exit" (default), "minimize", or "tray"
     #[serde(default = "default_close_action")]
     pub close_action: String,
+    /// Whether to automatically honor the system proxy when checking/downloading updates
+    #[serde(default = "default_true")]
+    pub use_system_proxy: bool,
+    /// Whether to use a custom proxy for update checks
+    #[serde(default = "default_false")]
+    pub use_proxy: bool,
+    /// Custom proxy URL for update checks, e.g. http://127.0.0.1:10090
+    #[serde(default)]
+    pub proxy_url: Option<String>,
 }
 
 fn default_close_action() -> String {
     "exit".to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_false() -> bool {
+    false
 }
 
 impl Default for Settings {
@@ -33,6 +50,9 @@ impl Default for Settings {
             theme: "light".to_string(),
             language: "zh".to_string(),
             close_action: default_close_action(),
+            use_system_proxy: default_true(),
+            use_proxy: default_false(),
+            proxy_url: None,
         }
     }
 }

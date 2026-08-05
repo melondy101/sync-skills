@@ -10,7 +10,7 @@ import "./App.css";
 import * as api from "./api";
 import type {
   Tool, Project, SkillView, ScanResult, SkillUpdate,
-  Settings, InstallationInfo, ConflictView,
+  Settings, InstallationInfo, ConflictView, RemoteInstallation,
 } from "./types";
 import { makeT, type Lang } from "./i18n";
 import { useToasts } from "./hooks/useToasts";
@@ -26,9 +26,11 @@ import { UpdatesModal, type UpdateDiffEntry } from "./components/UpdatesModal";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { LintModal } from "./components/LintModal";
 import { SkillEditorModal } from "./components/SkillEditorModal";
+import SkillMarketPanel from "./components/SkillMarketPanel";
+
 import { SkillListRow } from "./components/SkillListRow";
 
-type Tab = "global" | "projects";
+type Tab = "global" | "projects" | "market";
 type Panel = "main" | "settings" | "logs";
 
 function App() {
@@ -36,19 +38,21 @@ function App() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [skills, setSkills] = useState<SkillView[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [settings, setSettings] = useState<Settings>({ sync_mode: "semi-auto", prefer_symlink: false, theme: "light", language: "zh", close_action: "exit" });
+  const [settings, setSettings] = useState<Settings>({ sync_mode: "semi-auto", prefer_symlink: false, theme: "light", language: "zh", close_action: "tray", use_system_proxy: true, use_proxy: false, proxy_url: null });
 
   const t = makeT(settings.language as Lang);
   useTheme(settings.theme);
   const { toasts, addToast } = useToasts();
 
-  // Auto-save theme and language changes
+  // Auto-save theme and language changes without an explicit save button.
   useEffect(() => {
     const timer = setTimeout(() => {
-      api.updateSettings(settings).catch(() => {});
+      api
+        .updateSettings(settings)
+        .catch(() => {});
     }, 300);
     return () => clearTimeout(timer);
-  }, [settings.theme, settings.language]);
+  }, [settings]);
 
   // ==================== UI state ====================
   const [activeTab, setActiveTab] = useState<Tab>("global");
@@ -60,7 +64,7 @@ function App() {
   const [checkingSingle, setCheckingSingle] = useState<number | null>(null);
   const [updates, setUpdates] = useState<SkillUpdate[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterTool, setFilterTool] = useState<number>(-1); // -1 = all tools
+  const [filterMarket, setFilterMarket] = useState<number>(-1); // -1 = all markets / local only
   const [sortBy, setSortBy] = useState<"name" | "updated_at" | "created_at">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
@@ -69,6 +73,7 @@ function App() {
   // Pre-loaded diff for the single-skill check flow (passed to UpdatesModal)
   const [updatesInitialDiff, setUpdatesInitialDiff] = useState<UpdateDiffEntry | null>(null);
   const [conflicts, setConflicts] = useState<ConflictView[]>([]);
+  const [remoteInstallations, setRemoteInstallations] = useState<RemoteInstallation[]>([]);
 
   // New features: onboarding wizard, health check, built-in editor
   const [showWizard, setShowWizard] = useState(() => localStorage.getItem("onboardingDone") !== "1");
@@ -121,6 +126,13 @@ function App() {
       addToast("error", `${t("failedResolve")}: ${e}`);
     }
   }
+  async function loadRemoteInstallations() {
+    try {
+      setRemoteInstallations(await api.listRemoteInstallations(selectedProject, filterMarket));
+    } catch (e) {
+      addToast("error", `${t("failedLoadSkills")}: ${e}`);
+    }
+  }
 
   // Load data on mount
   useEffect(() => {
@@ -129,6 +141,7 @@ function App() {
     loadProjects();
     loadSettings();
     loadConflicts();
+    loadRemoteInstallations();
   }, []);
 
   // Sync selectedProject when tab changes
@@ -153,6 +166,10 @@ function App() {
     loadSkills();
     loadConflicts();
   }, [selectedProject]);
+
+  useEffect(() => {
+    loadRemoteInstallations();
+  }, [selectedProject, filterMarket]);
 
   // ==================== Actions ====================
 
@@ -324,20 +341,21 @@ function App() {
   }
 
   const filteredSkills = (() => {
-    const byTool = filterTool === -2
-      ? skills.filter((s) => !s.installed_tools.some((inst) => inst.status === "active"))
-      : filterTool >= 0
+    const byMarket =
+      filterMarket >= 0
         ? skills.filter((s) =>
-            s.installed_tools.some((inst) => inst.tool_id === filterTool && inst.status === "active"),
+            remoteInstallations.some(
+              (inst) => inst.projectId === selectedProject && inst.marketId === filterMarket && inst.skillName === s.name,
+            ),
           )
         : skills;
     const filtered = searchQuery
-      ? byTool.filter(
+      ? byMarket.filter(
           (s) =>
             s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (s.description && s.description.toLowerCase().includes(searchQuery.toLowerCase())),
         )
-      : [...byTool];
+      : [...byMarket];
     filtered.sort((a, b) => {
       let cmp = 0;
       if (sortBy === "name") {
@@ -401,6 +419,12 @@ function App() {
           >
             {t("projects")}
           </button>
+          <button
+            className={`tab ${activeTab === "market" ? "tab-active" : ""}`}
+            onClick={() => setActiveTab("market")}
+          >
+            {t("market")}
+          </button>
         </div>
         <div className="nav-actions">
           <button className="btn btn-small btn-ghost" onClick={() => setActivePanel("logs")}>
@@ -461,15 +485,18 @@ function App() {
           </div>
           <select
             className="sort-select"
-            value={filterTool}
-            onChange={(e) => setFilterTool(parseInt(e.target.value, 10))}
+            value={filterMarket}
+            onChange={(e) => setFilterMarket(parseInt(e.target.value, 10))}
           >
-            <option value={-1}>{t("allTools")}</option>
-            <option value={-2}>{t("unsyncedOnly")}</option>
-            {tools.map((tool) => (
-              <option key={tool.id} value={tool.id}>{tool.name}</option>
-            ))}
+            <option value={-1}>{t("allMarkets")}</option>
+            {Array.from(new Set(remoteInstallations.map((item) => item.marketId))).sort((a, b) => a - b).map((marketId) => {
+              const title = remoteInstallations.find((item) => item.marketId === marketId)?.marketTitle ?? String(marketId);
+              return (
+                <option key={marketId} value={marketId}>{title}</option>
+              );
+            })}
           </select>
+          <span className="sort-select" style={{ color: "var(--text-muted)" }}>{t("filterByMarket")}</span>
           <select
             className="sort-select"
             value={sortBy}
@@ -522,7 +549,7 @@ function App() {
           </div>
         ) : filteredSkills.length === 0 ? (
           <div className="empty-state">
-            {searchQuery || filterTool >= 0 ? (
+            {searchQuery || filterMarket >= 0 ? (
               <p>{t("noMatch")} "{searchQuery}"</p>
             ) : (
               <>
@@ -553,6 +580,8 @@ function App() {
                     hasUpdate={hasUpdate(skill)}
                     syncing={syncing.has(skill.id)}
                     checkingSingle={checkingSingle === skill.id}
+                    remoteInstallations={remoteInstallations}
+                    selectedProjectId={selectedProject}
                     getInstallStatus={getInstallStatus}
                     onToggle={handleToggle}
                     onSync={() => handleSyncSkill(skill.id)}
@@ -701,6 +730,16 @@ function App() {
             if (lintTarget) setLintRunId((n) => n + 1);
           }}
           onClose={() => setEditingSkill(null)}
+        />
+      )}
+      {/* Skill market */}
+      {activeTab === "market" && (
+        <SkillMarketPanel
+          t={t}
+          addToast={addToast}
+          projects={projects}
+          onRemoteInstallationsChanged={setRemoteInstallations}
+          defaultProjectId={selectedProject}
         />
       )}
     </main>

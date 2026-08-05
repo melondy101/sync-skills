@@ -110,6 +110,9 @@ export interface Settings {
   theme: string;
   language: string;
   close_action: string;
+  use_system_proxy: boolean;
+  use_proxy: boolean;
+  proxy_url: string | null;
 }
 
 export interface DiffLine {
@@ -137,6 +140,17 @@ export interface SkillDiff {
   ssot_path: string;
   files: FileDiff[];
   has_changes: boolean;
+}
+
+export interface RemoteInstallation {
+  id: number;
+  remoteSkillId: number;
+  skillName: string;
+  marketId: number;
+  marketTitle: string;
+  projectId: number;
+  scope: string;
+  installedAt: string | null;
 }
 
 // M5: Conflict types
@@ -179,4 +193,66 @@ export interface SkillLint {
   skill_id: number;
   skill_name: string;
   issues: LintIssue[];
+}
+
+// ==================== Skill Market (Remote Repositories) ====================
+
+export interface MarketTemplate {
+  id: string;
+  label: string;
+  description: string;
+  provider: string;
+  owner: string;
+  name: string;
+  branch: string;
+  kind: string;
+  root_skill: boolean;
+}
+
+
+export interface Market {
+  id: number;
+  provider: string;
+  owner: string;
+  name: string;
+  branch: string;
+  enabled: boolean;
+  last_indexed_at: string | null;
+  last_checked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RemoteSkill {
+  id: number;
+  market_id: number;
+  skill_name: string;
+  description: string | null;
+  remote_url: string;
+  ssot_path: string;
+  remote_content_hash: string;
+  remote_core_hash: string;
+  is_installed: boolean;
+  installed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RemoteSkillUpdate {
+  id: number;
+  market_id: number;
+  skill_name: string;
+  remote_url: string;
+  ssot_path: string;
+  old_hash: string;
+  new_hash: string;
+  has_changes: boolean;
+}
+
+export interface MarketSyncResult {
+  market_id: number;
+  skills_found: number;
+  skills_new: number;
+  skills_updated: number;
+  errors: string[];
 }

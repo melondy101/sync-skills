@@ -1,6 +1,6 @@
 [package]
 name = "skill-manager"
-version = "0.1.6"
+version = "0.1.7"
 description = "AI Skill sync manager across coding tools"
 authors = ["you"]
 edition = "2021"
@@ -28,8 +28,11 @@ log = "0.4"
 env_logger = "0.11"
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 # system-proxy: honor OS proxy settings (many users reach GitHub only via proxy)
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "system-proxy"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "system-proxy", "blocking"] }
+chrono = "0.4.45"
+zip = "8.6.0"
+windows-sys = { version = "0.61.2", features = ["Win32_Web_InternetExplorer"] }
+rustls = "0.23"
 
 [dev-dependencies]
 tempfile = "3"
-

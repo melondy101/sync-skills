@@ -9,6 +9,8 @@ import type {
   Tool, ToolTemplate, Project, SkillView, ScanResult, SyncResult,
   SkillUpdate, SkillDiff, SyncLog, Settings, ConflictView,
   SkillFile, SkillLint, AppUpdateInfo,
+  Market, MarketTemplate, RemoteSkill, RemoteSkillUpdate, MarketSyncResult,
+  RemoteInstallation,
 } from "./types";
 
 // ==================== Tools ====================
@@ -122,3 +124,48 @@ export const listConflicts = (projectId: number) =>
 
 export const resolveConflict = (conflictId: number, keepToolName: string, projectId: number) =>
   invoke<SyncResult>("resolve_conflict", { conflictId, keepToolName, projectId });
+
+// ==================== Skill Market ====================
+
+export const listMarkets = () => invoke<Market[]>("list_markets");
+
+export const listMarketTemplates = () => invoke<MarketTemplate[]>("list_market_templates");
+
+export const addMarket = (provider: string, owner: string, name: string, branch: string) =>
+  invoke<Market>("add_market", { provider, owner, name, branch });
+
+export const updateMarket = (id: number, provider: string, owner: string, name: string, branch: string, enabled: boolean) =>
+  invoke<Market>("update_market", { id, provider, owner, name, branch, enabled });
+
+export const deleteMarket = (id: number) =>
+  invoke("delete_market", { id });
+
+export const syncMarketIndex = (marketId: number) =>
+  invoke<MarketSyncResult>("sync_market_index", { marketId });
+
+export const syncAllMarketIndices = () =>
+  invoke<MarketSyncResult[]>("sync_all_market_indices");
+
+export const listRemoteSkills = (marketId?: number | null) =>
+  invoke<RemoteSkill[]>("list_remote_skills", { marketId: marketId ?? null });
+
+export const downloadRemoteSkill = (remoteSkillId: number) =>
+  invoke<SyncResult>("download_remote_skill", { remoteSkillId });
+
+export const syncRemoteSkillToTools = (remoteSkillId: number) =>
+  invoke<SyncResult>("sync_remote_skill_to_tools", { remoteSkillId });
+
+export const listRemoteInstallations = (projectId: number, marketId: number | null) =>
+  invoke<RemoteInstallation[]>("list_remote_installations", { projectId, marketId });
+
+export const toggleRemoteInstallation = (remoteSkillId: number, projectId: number, scope: string, active: boolean) =>
+  invoke<RemoteInstallation>("toggle_remote_installation", { remoteSkillId, projectId, scope, active });
+
+export const syncRemoteInstallations = (projectId: number, marketId: number | null) =>
+  invoke<SyncResult>("sync_remote_installations", { projectId, marketId });
+
+export const checkRemoteUpdates = (marketId?: number | null) =>
+  invoke<RemoteSkillUpdate[]>("check_remote_updates", { marketId: marketId ?? null });
+
+export const getRemoteSkillDiff = (remoteSkillId: number) =>
+  invoke<SkillDiff>("get_remote_skill_diff", { remoteSkillId });
