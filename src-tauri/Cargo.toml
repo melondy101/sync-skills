@@ -1,41 +1,6 @@
 [package]
 name = "skill-manager"
-version = "0.1.8"
+version = "0.1.9"
 description = "AI Skill sync manager across coding tools"
 authors = ["you"]
 edition = "2021"
-license = "AGPL-3.0-only"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-name = "skill_manager_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
-[dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
-tauri-plugin-opener = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-rusqlite = { version = "0.31", features = ["bundled"] }
-sha2 = "0.10"
-dirs = "5"
-serde_yaml = "0.9"
-log = "0.4"
-env_logger = "0.11"
-tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
-# system-proxy: honor OS proxy settings (many users reach GitHub only via proxy)
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "system-proxy", "blocking"] }
-chrono = "0.4.45"
-zip = "8.6.0"
-windows-sys = { version = "0.61.2", features = ["Win32_Web_InternetExplorer"] }
-rustls = "0.23"
-tempfile = "3"
-
-[dev-dependencies]
-# tempfile was accidentally kept in dev-dependencies only, which is not
-# available to the main lib during `cargo check` on non-test targets.
-# It is intentionally moved here because market indexing uses it at runtime.
