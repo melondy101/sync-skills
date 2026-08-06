@@ -75,15 +75,17 @@ export default function SkillMarketPanel({
   const [installLoading, setInstallLoading] = useState(false);
 
   const [remoteSkills, setRemoteSkills] = useState<RemoteSkill[]>([]);
-  const [updates, setUpdates] = useState<RemoteSkillUpdate[]>([]);
+  const [updates, setUpdates] = useState<RemoteSkillUpdate[] | null>(null);
   const [selectedDiff, setSelectedDiff] = useState<{ update: RemoteSkillUpdate; diff: SkillDiff } | null>(null);
   const [skillLoading, setSkillLoading] = useState(false);
   const [remoteCheckLoading, setRemoteCheckLoading] = useState(false);
   const [diffLoading, setDiffLoading] = useState(false);
   const [selectedMarketId, setSelectedMarketId] = useState<number | "all">("all");
+  const [selectedMarketFilter, setSelectedMarketFilter] = useState<string>("all");
   const [selectedToolPath, setSelectedToolPath] = useState<string>("");
   const [remoteScanResult, setRemoteScanResult] = useState<RemoteScanResult[] | null>(null);
   const [remoteScanLoading, setRemoteScanLoading] = useState(false);
+  const [remoteUpdateMode, setRemoteUpdateMode] = useState("installed");
 
   const selectedProjectPath = projectPaths[installProjectId] ?? "";
 
@@ -161,6 +163,8 @@ export default function SkillMarketPanel({
     if (activeTab === "skills") {
       const marketId = selectedMarketId === "all" ? undefined : Number(selectedMarketId);
       loadRemoteSkills(marketId);
+      const nextFilter = selectedMarketId === "all" ? "all" : String(selectedMarketId);
+      setSelectedMarketFilter((prev) => (prev === nextFilter ? prev : nextFilter));
     }
   }, [activeTab, selectedMarketId]);
 
@@ -273,13 +277,22 @@ export default function SkillMarketPanel({
     }
   }
 
+  async function loadTabRemoteData(marketId?: number) {
+    if (activeTab === "skills") {
+      loadRemoteSkills(marketId);
+    }
+    if (activeTab === "installs") {
+      loadInstallations();
+    }
+  }
+
   async function loadInstallations() {
     setInstallLoading(true);
     try {
       setInstallations(
         await api.listRemoteInstallations(
           installProjectId,
-          selectedMarketId === "all" ? null : Number(selectedMarketId),
+          selectedMarketFilter === "all" ? null : Number(selectedMarketFilter),
         ),
       );
     } catch (e) {
@@ -352,7 +365,11 @@ export default function SkillMarketPanel({
   async function syncAllInstalledRemoteSkills() {
     setInstallLoading(true);
     try {
-      const result = await api.syncRemoteInstallationsToTools(installProjectId, selectedMarketId === "all" ? null : Number(selectedMarketId), selectedToolPath);
+      const result = await api.syncRemoteInstallationsToTools(
+        installProjectId,
+        selectedMarketFilter === "all" ? null : Number(selectedMarketFilter),
+        selectedToolPath,
+      );
       if (result.errors.length > 0) {
         addToast("error", result.errors.join(", "));
       } else {
@@ -394,13 +411,14 @@ export default function SkillMarketPanel({
   async function syncRemoteSkillToTools(skill: RemoteSkill) {
     setSkillLoading(true);
     try {
+      await api.setRemoteSkillInstalled(skill.id, true);
       const result = await api.syncRemoteSkillToTools(skill.id, installProjectId, selectedToolPath);
       if (result.errors.length > 0) {
         addToast("error", `${skill.skill_name}: ${result.errors.join(", ")}`);
       } else {
         addToast("success", `${t("syncToTools")}: ${result.synced_to}`);
       }
-      await loadRemoteSkills(skill.market_id);
+      await Promise.all([loadRemoteSkills(skill.market_id), loadInstallations()]);
     } catch (e) {
       addToast("error", `${t("syncToTools")} failed: ${e}`);
     } finally {
@@ -411,7 +429,9 @@ export default function SkillMarketPanel({
   async function checkRemoteUpdates(marketId?: number) {
     setRemoteCheckLoading(true);
     try {
-      const result = await api.checkRemoteUpdates(marketId ?? null);
+      const result = await remoteUpdateMode === "installed"
+        ? await api.checkRemoteSsoUpdates(marketId ?? null, selectedMarketFilter === "all" ? null : Number(selectedMarketFilter))
+        : await api.checkRemoteUpdates(marketId ?? null, selectedMarketFilter === "all" ? null : Number(selectedMarketFilter));
       setUpdates(result);
       if (result.length > 0) {
         addToast("info", t("remoteUpdateFound").replace("{0}", String(result.length)));
@@ -448,18 +468,20 @@ export default function SkillMarketPanel({
     () =>
       remoteSkills.filter((skill) => {
         if (selectedMarketId === "all") return true;
+        if (selectedMarketFilter !== "all" && String(skill.market_id) !== selectedMarketFilter) return false;
         return skill.market_id === Number(selectedMarketId);
       }),
-    [remoteSkills, selectedMarketId],
+    [remoteSkills, selectedMarketId, selectedMarketFilter],
   );
 
   const filteredUpdates = useMemo(
     () =>
-      updates.filter((update) => {
+      (updates ?? []).filter((update) => {
+        if (selectedMarketFilter !== "all" && String(update.market_id) !== selectedMarketFilter) return false;
         if (selectedMarketId === "all") return true;
         return update.market_id === Number(selectedMarketId);
       }),
-    [selectedMarketId, updates],
+    [selectedMarketId, selectedMarketFilter, updates],
   );
 
   const groupedUpdates = useMemo(() => {
@@ -590,6 +612,28 @@ export default function SkillMarketPanel({
                     })}
                   </tbody>
                 </table>
+                <div className="section" style={{ marginTop: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span id="markets-filter-label" style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("filterByMarket")}</span>
+                    <select
+                      aria-labelledby="markets-filter-label"
+                      className="sort-select"
+                      value={selectedMarketFilter}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setSelectedMarketFilter(next);
+                        const marketId = next === "all" ? undefined : Number(next);
+                        loadTabRemoteData(marketId);
+                      }}
+                    >
+                      <option value="all">{t("allMarkets")}</option>
+                      {markets.map((market) => (
+                        <option key={market.id} value={market.id}>{market.owner}/{market.name}</option>
+                      ))}
+                    </select>
+                    <button className="btn btn-secondary" onClick={loadMarkets} disabled={marketLoading}>{t("refresh")}</button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -719,6 +763,28 @@ export default function SkillMarketPanel({
                     })}
                   </tbody>
                 </table>
+                <div className="section" style={{ marginTop: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span id="installs-filter-label" style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("filterByMarket")}</span>
+                    <select
+                      aria-labelledby="installs-filter-label"
+                      className="sort-select"
+                      value={selectedMarketFilter}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setSelectedMarketFilter(next);
+                        const marketId = next === "all" ? undefined : Number(next);
+                        loadTabRemoteData(marketId);
+                      }}
+                    >
+                      <option value="all">{t("allMarkets")}</option>
+                      {markets.map((market) => (
+                        <option key={market.id} value={market.id}>{market.owner}/{market.name}</option>
+                      ))}
+                    </select>
+                    <button className="btn btn-secondary" onClick={loadMarkets} disabled={marketLoading}>{t("refresh")}</button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -759,6 +825,14 @@ export default function SkillMarketPanel({
             <button className="btn btn-secondary" onClick={() => loadRemoteSkills(selectedMarketId === "all" ? undefined : Number(selectedMarketId))} disabled={skillLoading}>
               {t("refresh")}
             </button>
+            <select
+              className="sort-select"
+              value={remoteUpdateMode}
+              onChange={(e) => setRemoteUpdateMode(e.target.value)}
+            >
+              <option value="installed">{t("installed")}</option>
+              <option value="all">{t("allMarkets")}</option>
+            </select>
             <button className="btn btn-secondary" onClick={() => checkRemoteUpdates(selectedMarketId === "all" ? undefined : Number(selectedMarketId))} disabled={remoteCheckLoading}>
               {t("checkRemoteUpdates")}
             </button>
@@ -798,7 +872,7 @@ export default function SkillMarketPanel({
                             </button>
                           )}
                           <button className="btn btn-small btn-secondary" onClick={() => syncRemoteSkillToTools(skill)} disabled={skillLoading || !skill.is_installed}>
-                            {t("syncToTools")}
+                            {skill.is_installed ? t("syncToTools") : t("downloadToSsot")}
                           </button>
                         </td>
                       </tr>
@@ -813,7 +887,7 @@ export default function SkillMarketPanel({
             <h3 className="section-title">
               {t("checkRemoteUpdates")} {updateCount > 0 && <span className="badge badge-update">{updateCount}</span>}
             </h3>
-            {updates.length === 0 ? (
+            {(!updates || updates.length === 0) ? (
               <div className="empty-state">{t("remoteNoUpdate")}</div>
             ) : (
               <div className="skill-list">
@@ -831,23 +905,33 @@ export default function SkillMarketPanel({
                   <tbody>
                     {Array.from(groupedUpdates.entries()).map(([marketId, group]) => (
                       <>
-                        {group.map((update) => (
-                          <tr key={update.id}>
-                            <td>{marketTitles[marketId] ?? marketId}</td>
-                            <td>{update.skill_name}</td>
-                            <td>{update.remote_url}</td>
-                            <td>{update.old_hash.slice(0, 12)}</td>
-                            <td>{update.new_hash.slice(0, 12)}</td>
-                            <td>
-                              <button className="btn btn-small btn-secondary" onClick={() => viewRemoteDiff(update)} disabled={diffLoading}>
-                                {t("checkUpdates")}
-                              </button>
-                              <button className="btn btn-small btn-secondary" onClick={() => downloadRemoteSkill(remoteSkills.find((s) => s.id === update.id) || filteredRemoteSkills[0])} disabled={skillLoading}>
-                                {t("downloadToSsot")}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                        {group.map((update) => {
+                          const remote = remoteSkills.find((s) => s.id === update.id) || filteredRemoteSkills[0];
+                          return (
+                            <tr key={update.id}>
+                              <td>{marketTitles[marketId] ?? marketId}</td>
+                              <td>{update.skill_name}</td>
+                              <td>{update.remote_url}</td>
+                              <td>{update.old_hash.slice(0, 12)}</td>
+                              <td>{update.new_hash.slice(0, 12)}</td>
+                              <td>
+                                <button className="btn btn-small btn-secondary" onClick={() => viewRemoteDiff(update)} disabled={diffLoading}>
+                                  {t("checkUpdates")}
+                                </button>
+                                {remote && !remote.is_installed && (
+                                  <button className="btn btn-small btn-secondary" onClick={() => downloadRemoteSkill(remote)} disabled={skillLoading}>
+                                    {t("downloadToSsot")}
+                                  </button>
+                                )}
+                                {remote && remote.is_installed && (
+                                  <button className="btn btn-small btn-secondary" onClick={() => syncRemoteSkillToTools(remote)} disabled={skillLoading}>
+                                    {t("syncToTools")}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </>
                     ))}
                   </tbody>

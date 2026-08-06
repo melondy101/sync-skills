@@ -8,6 +8,7 @@ use crate::models::{Market, MarketSyncResult, MarketTemplate, RemoteInstallation
 use crate::settings::Settings;
 use crate::sync::{copy_directory, replace_directory, ssot_path, symlink_or_copy};
 use rusqlite::params;
+use tempfile::tempdir;
 use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -150,8 +151,12 @@ async fn scan_github_market(db: &Database, market: &Market) -> Result<MarketSync
                         has_skill_md = true;
                         if let Some(download_url) = file.get("download_url").and_then(|v| v.as_str()) {
                             if let Ok(bytes) = fetch_github_bytes(download_url).await {
-                                remote_content_hash = crate::hash::compute_content_hash(&PathBuf::from(skill_name)).unwrap_or_default();
-                                remote_core_hash = remote_content_hash.clone();
+                                let dir = tempdir().map_err(|e| e.to_string())?;
+                                let skill_dir = dir.path().join(skill_name);
+                                fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
+                                fs::write(skill_dir.join("SKILL.md"), bytes).map_err(|e| e.to_string())?;
+                                remote_content_hash = crate::hash::compute_content_hash(&skill_dir).unwrap_or_default();
+                                remote_core_hash = crate::hash::compute_core_hash(&skill_dir.join("SKILL.md")).unwrap_or_default();
                             }
                         }
                     }
@@ -324,7 +329,20 @@ pub async fn download_remote_skill_to_ssot(db: State<'_, DbState>, remote_skill_
 
     match fetch_github_bytes(&skill.remote_url).await {
         Ok(bytes) => {
-            write_skill_directory(&ssot, bytes)?;
+            let skill_md = if bytes.starts_with(b"{") && bytes.windows(4).any(|w| w == b"null") {
+                serde_json::from_slice::<serde_json::Value>(&bytes)
+                    .ok()
+                    .and_then(|value| value.get("content").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                    .filter(|s| !s.is_empty())
+                } else {
+                    None
+                };
+
+            if let Some(content) = skill_md {
+                fs::write(ssot.join("SKILL.md"), content).map_err(|e| e.to_string())?;
+            } else {
+                write_skill_directory(&ssot, bytes)?;
+            }
             db.set_remote_skill_installed(remote_skill_id, true)?;
             Ok(SyncResult {
                 skill_id: 0,
@@ -455,11 +473,73 @@ pub fn sync_remote_installations(_project_id: i64, _market_id: Option<i64>) -> R
 }
 
 #[tauri::command]
-pub async fn check_remote_updates(db: State<'_, DbState>, market_id: Option<i64>) -> Result<Vec<RemoteSkillUpdate>, String> {
+pub async fn check_remote_updates(db: State<'_, DbState>, market_id: Option<i64>, market_filter: Option<i64>) -> Result<Vec<RemoteSkillUpdate>, String> {
     let skills = db.list_remote_skills(market_id)?;
     let mut updates = Vec::new();
 
     for skill in skills {
+        if let Some(filter_market_id) = market_filter {
+            if skill.market_id != filter_market_id {
+                continue;
+            }
+        }
+
+        let ssot_dir = PathBuf::from(&skill.ssot_path);
+        let local_hash = if skill.is_installed {
+            if ssot_dir.exists() {
+                crate::hash::compute_content_hash(&ssot_dir).ok()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if skill.is_installed {
+            if local_hash.as_deref() != Some(&skill.remote_content_hash) {
+                updates.push(RemoteSkillUpdate {
+                    id: skill.id,
+                    market_id: skill.market_id,
+                    skill_name: skill.skill_name,
+                    remote_url: skill.remote_url,
+                    ssot_path: skill.ssot_path,
+                    old_hash: local_hash.unwrap_or_default(),
+                    new_hash: skill.remote_content_hash.clone(),
+                    has_changes: true,
+                });
+            }
+        } else if ssot_dir.exists() {
+            let local_hash = crate::hash::compute_content_hash(&ssot_dir).ok();
+            if local_hash.as_deref() != Some(&skill.remote_content_hash) {
+                updates.push(RemoteSkillUpdate {
+                    id: skill.id,
+                    market_id: skill.market_id,
+                    skill_name: skill.skill_name,
+                    remote_url: skill.remote_url,
+                    ssot_path: skill.ssot_path,
+                    old_hash: local_hash.unwrap_or_default(),
+                    new_hash: skill.remote_content_hash.clone(),
+                    has_changes: true,
+                });
+            }
+        }
+    }
+
+    Ok(updates)
+}
+
+#[tauri::command]
+pub async fn check_remote_ssot_updates(db: State<'_, DbState>, market_id: Option<i64>, market_filter: Option<i64>) -> Result<Vec<RemoteSkillUpdate>, String> {
+    let skills = db.list_remote_skills(market_id)?;
+    let mut updates = Vec::new();
+
+    for skill in skills {
+        if let Some(filter_market_id) = market_filter {
+            if skill.market_id != filter_market_id {
+                continue;
+            }
+        }
+
         if !skill.is_installed {
             continue;
         }
@@ -489,34 +569,18 @@ pub async fn check_remote_updates(db: State<'_, DbState>, market_id: Option<i64>
 }
 
 #[tauri::command]
-pub fn get_remote_skill_diff(remote_skill_id: i64) -> Result<serde_json::Value, String> {
-    Ok(json!({
-        "source_path": format!("remote://{}/SKILL.md", remote_skill_id),
-        "ssot_path": format!(
-            "{}\\.agents\\skill-manager\\ssot\\skill\\SKILL.md",
-            std::env::var("USERPROFILE").unwrap_or_default()
-        ),
-        "files": [],
-        "has_changes": false
-    }))
-}
-
-fn write_skill_directory(ssot_dir: &Path, bytes: Vec<u8>) -> Result<(), String> {
-    fs::create_dir_all(ssot_dir).map_err(|e| format!("Failed to create SSOT directory: {}", e))?;
-    fs::write(ssot_dir.join("SKILL.md"), bytes).map_err(|e| format!("Failed to write SKILL.md: {}", e))?;
-    Ok(())
-}
-
-async fn fetch_github_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
-    let client = github_http_client()?;
-    let response = client
-        .get(url)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!("GitHub HTTP {}", response.status()));
+pub async fn set_all_remote_skills_installed(db: State<'_, DbState>, project_id: i64, market_id: Option<i64>, active: bool) -> Result<crate::models::RemoteSkillInstalledResult, String> {
+    let skills = if let Some(mid) = market_id {
+        db.list_remote_skills(Some(mid))?
+    } else {
+        db.list_remote_skills(None)?
+    };
+    let mut updated = 0i64;
+    for skill in skills {
+        if skill.is_installed != active {
+            db.set_remote_skill_installed(skill.id, active)?;
+            updated += 1;
+        }
     }
-    response.json().await.map_err(|e| e.to_string())
+    Ok(crate::models::RemoteSkillInstalledResult { updated })
 }
