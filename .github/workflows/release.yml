@@ -76,11 +76,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             args: ""
           - os: windows-latest
             args: ""
-
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -88,7 +87,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Linux build dependencies
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
