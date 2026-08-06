@@ -1,6 +1,6 @@
 [package]
 name = "skill-manager"
-version = "0.1.10"
+version = "0.1.11"
 description = "AI Skill sync manager across coding tools"
 authors = ["you"]
 edition = "2021"
