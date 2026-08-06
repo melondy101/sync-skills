@@ -181,6 +181,8 @@ pub fn run() {
             commands::market::sync_remote_skill_to_tools,
             commands::market::sync_remote_installations_to_tools,
             commands::market::check_remote_updates,
+            commands::market::check_remote_ssot_updates,
+            commands::market::set_all_remote_skills_installed,
             commands::market::get_remote_skill_diff,
             commands::market::list_remote_installations,
             commands::market::toggle_remote_installation,
