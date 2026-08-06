@@ -8,8 +8,7 @@ use crate::models::{Market, MarketSyncResult, MarketTemplate, RemoteInstallation
 use crate::settings::Settings;
 use crate::sync::{copy_directory, replace_directory, ssot_path, symlink_or_copy};
 use rusqlite::params;
-use tempfile::tempdir;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::State;
@@ -111,6 +110,17 @@ async fn fetch_github_bytes(url: &str) -> Result<Vec<u8>, String> {
     response.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string())
 }
 
+async fn fetch_github_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
+    let bytes = fetch_github_bytes(url).await?;
+    serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+}
+
+fn write_skill_directory(ssot_dir: &Path, bytes: Vec<u8>) -> Result<(), String> {
+    fs::create_dir_all(ssot_dir).map_err(|e| format!("Failed to create SSOT directory: {}", e))?;
+    fs::write(ssot_dir.join("SKILL.md"), bytes).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 async fn scan_github_market(db: &Database, market: &Market) -> Result<MarketSyncResult, String> {
     let owner = market.owner.clone();
     let repo = market.name.clone();
@@ -150,14 +160,13 @@ async fn scan_github_market(db: &Database, market: &Market) -> Result<MarketSync
                     {
                         has_skill_md = true;
                         if let Some(download_url) = file.get("download_url").and_then(|v| v.as_str()) {
-                            if let Ok(bytes) = fetch_github_bytes(download_url).await {
-                                let dir = tempdir().map_err(|e| e.to_string())?;
-                                let skill_dir = dir.path().join(skill_name);
-                                fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
-                                fs::write(skill_dir.join("SKILL.md"), bytes).map_err(|e| e.to_string())?;
-                                remote_content_hash = crate::hash::compute_content_hash(&skill_dir).unwrap_or_default();
-                                remote_core_hash = crate::hash::compute_core_hash(&skill_dir.join("SKILL.md")).unwrap_or_default();
-                            }
+                        if let Ok(bytes) = fetch_github_bytes(download_url).await {
+                            let skill_dir = std::env::temp_dir().join(skill_name);
+                            fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
+                            fs::write(skill_dir.join("SKILL.md"), bytes).map_err(|e| e.to_string())?;
+                            remote_content_hash = crate::hash::compute_content_hash(&skill_dir).unwrap_or_default();
+                            remote_core_hash = crate::hash::compute_core_hash(&skill_dir.join("SKILL.md")).unwrap_or_default();
+                        }
                         }
                     }
                 }

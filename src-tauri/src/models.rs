@@ -215,6 +215,11 @@ pub struct MarketSyncResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteSkillInstalledResult {
+    pub updated: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteInstallation {
     pub id: i64,
     pub remoteSkillId: i64,
