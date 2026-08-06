@@ -173,8 +173,23 @@ export const toggleRemoteInstallation = (remoteSkillId: number, projectId: numbe
 export const syncRemoteInstallations = (projectId: number, marketId: number | null) =>
   invoke<SyncResult>("sync_remote_installations", { projectId, marketId });
 
-export const checkRemoteUpdates = (marketId?: number | null) =>
-  invoke<RemoteSkillUpdate[]>("check_remote_updates", { marketId: marketId ?? null });
+export const checkRemoteUpdates = (marketId?: number | null, marketFilter?: number | null) =>
+  invoke<RemoteSkillUpdate[]>("check_remote_updates", {
+    marketId: marketId ?? null,
+    marketFilter: marketFilter ?? null,
+  });
+
+export const checkRemoteSsoUpdates = (marketId?: number | null, marketFilter?: number | null) =>
+  invoke<RemoteSkillUpdate[]>("check_remote_ssot_updates", {
+    marketId: marketId ?? null,
+    marketFilter: marketFilter ?? null,
+  });
+
+export const setRemoteSkillInstalled = (remoteSkillId: number, active: boolean) =>
+  invoke("toggle_remote_installation", { remoteSkillId, projectId: 0, scope: "global", active });
+
+export const setAllRemoteSkillsInstalled = (projectId: number, marketId: number | null, active: boolean) =>
+  invoke<SyncResult>("set_all_remote_skills_installed", { projectId, marketId, active });
 
 export const getRemoteSkillDiff = (remoteSkillId: number) =>
   invoke<SkillDiff>("get_remote_skill_diff", { remoteSkillId });

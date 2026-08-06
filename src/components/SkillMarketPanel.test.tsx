@@ -40,6 +40,8 @@ function makeT(key: string) {
     remoteNoUpdate: "No remote updates",
     downloadToSsot: "Download to SSOT",
     syncToTools: "Sync to tools",
+    markAllInstalled: "Mark all installed",
+    unmarkAllInstalled: "Unmark all installed",
   };
   return map[key] ?? key;
 }
@@ -60,13 +62,13 @@ describe("SkillMarketPanel", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Markets" }));
-    await waitFor(() => expect(screen.getByText("Filter by market")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Filter by market", { selector: "select" })).toBeInTheDocument());
 
     const instalsButton = screen.getByRole("button", { name: "Installs" });
     instalsButton.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     instalsButton.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
     instalsButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    await waitFor(() => expect(screen.getByText("Filter by market")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Filter by market", { selector: "select" })).toBeInTheDocument());
   });
 
   it("uses the selected market filter when loading installations", async () => {
@@ -86,12 +88,13 @@ describe("SkillMarketPanel", () => {
     await user.click(screen.getByRole("button", { name: "Installs" }));
     await waitFor(() => expect(screen.getByText("Filter by market")).toBeInTheDocument());
 
-    const [marketsFilter, installsFilter] = screen.getAllByRole("combobox");
+    const [, , , installsFilter] = screen.getAllByRole("combobox");
     await user.selectOptions(installsFilter, "1");
     expect(api.listRemoteInstallations).toHaveBeenCalledWith(0, 1);
 
+    const marketsFilter = screen.getByLabelText("Filter by market", { selector: "select" });
     await user.selectOptions(marketsFilter, "2");
-    expect(api.listRemoteSkills).toHaveBeenCalledWith(2);
+    expect(api.listRemoteInstallations).toHaveBeenCalledWith(0, 2);
   });
 
   it("switches remote update checks between installed skills and all remote skills", async () => {
@@ -119,5 +122,52 @@ describe("SkillMarketPanel", () => {
       expect(api.checkRemoteUpdates).toHaveBeenCalled();
       expect(api.checkRemoteSsoUpdates).not.toHaveBeenCalled();
     });
+  });
+
+  it("batch marks all remote skills installed for the selected market", async () => {
+    vi.mocked(api.setAllRemoteSkillsInstalled).mockResolvedValue({ skill_id: 0, skill_name: "", synced_to: 2, errors: [] });
+    render(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Installs" }));
+    await waitFor(() => expect(screen.getByText("Filter by market")).toBeInTheDocument());
+
+    const marketFilter = screen.getByLabelText("Filter by market", { selector: "select" });
+    await user.selectOptions(marketFilter, "1");
+    await user.click(screen.getByRole("button", { name: "Mark all installed" }));
+
+    await waitFor(() => expect(api.setAllRemoteSkillsInstalled).toHaveBeenCalledWith(0, 1, true));
+  });
+
+  it("batch unmarks all remote skills installed for all markets", async () => {
+    vi.mocked(api.setAllRemoteSkillsInstalled).mockResolvedValue({ skill_id: 0, skill_name: "", synced_to: 0, errors: [] });
+    render(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Installs" }));
+    await waitFor(() => expect(screen.getByText("Filter by market")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Unmark all installed" }));
+    await waitFor(() => expect(api.setAllRemoteSkillsInstalled).toHaveBeenCalledWith(0, null, false));
   });
 });

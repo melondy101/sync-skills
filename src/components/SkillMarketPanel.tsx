@@ -277,22 +277,36 @@ export default function SkillMarketPanel({
     }
   }
 
+  async function markAllRemoteSkillsInstalled(active: boolean) {
+    const marketId = selectedMarketFilter === "all" ? null : Number(selectedMarketFilter);
+    const result = await api.setAllRemoteSkillsInstalled(installProjectId, marketId, active);
+    if (result.errors.length > 0) {
+      addToast("error", result.errors.join(", "));
+    } else {
+      addToast("success", `${t(active ? "markAllInstalled" : "unmarkAllInstalled")}: ${result.synced_to}`);
+    }
+    await Promise.all([loadRemoteSkills(marketId == null ? undefined : Number(marketId)), loadInstallations()]);
+    onRemoteInstallationsChanged(
+      await api.listRemoteInstallations(installProjectId, selectedMarketFilter === "all" ? null : Number(selectedMarketFilter)),
+    );
+  }
+
   async function loadTabRemoteData(marketId?: number) {
     if (activeTab === "skills") {
       loadRemoteSkills(marketId);
     }
     if (activeTab === "installs") {
-      loadInstallations();
+      void loadInstallations(marketId);
     }
   }
 
-  async function loadInstallations() {
+  async function loadInstallations(marketId?: number | null) {
     setInstallLoading(true);
     try {
       setInstallations(
         await api.listRemoteInstallations(
           installProjectId,
-          selectedMarketFilter === "all" ? null : Number(selectedMarketFilter),
+          marketId === null || marketId === undefined ? (selectedMarketFilter === "all" ? null : Number(selectedMarketFilter)) : marketId,
         ),
       );
     } catch (e) {
@@ -562,6 +576,51 @@ export default function SkillMarketPanel({
             </div>
           </div>
 
+          <div className="section" style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("filterByMarket")}</span>
+              <select
+                className="sort-select"
+                value={selectedMarketFilter}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setSelectedMarketFilter(next);
+                  const marketId = next === "all" ? undefined : Number(next);
+                  loadTabRemoteData(marketId);
+                }}
+              >
+                <option value="all">{t("allMarkets")}</option>
+                {markets.map((market) => (
+                  <option key={market.id} value={market.id}>{market.owner}/{market.name}</option>
+                ))}
+              </select>
+              <button className="btn btn-secondary" onClick={loadMarkets} disabled={marketLoading}>{t("refresh")}</button>
+            </div>
+          </div>
+
+          <div className="section" style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("filterByMarket")}</span>
+              <select
+                aria-label={t("filterByMarket")}
+                className="sort-select"
+                value={selectedMarketFilter}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setSelectedMarketFilter(next);
+                  const marketId = next === "all" ? undefined : Number(next);
+                  loadTabRemoteData(marketId);
+                }}
+              >
+                <option value="all">{t("allMarkets")}</option>
+                {markets.map((market) => (
+                  <option key={market.id} value={market.id}>{market.owner}/{market.name}</option>
+                ))}
+              </select>
+              <button className="btn btn-secondary" onClick={loadMarkets} disabled={marketLoading}>{t("refresh")}</button>
+            </div>
+          </div>
+
           <div className="section">
             {markets.length === 0 ? (
               <div className="empty-state">{t("noLogs")}</div>
@@ -612,28 +671,6 @@ export default function SkillMarketPanel({
                     })}
                   </tbody>
                 </table>
-                <div className="section" style={{ marginTop: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span id="markets-filter-label" style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("filterByMarket")}</span>
-                    <select
-                      aria-labelledby="markets-filter-label"
-                      className="sort-select"
-                      value={selectedMarketFilter}
-                      onChange={(e) => {
-                        const next = e.target.value;
-                        setSelectedMarketFilter(next);
-                        const marketId = next === "all" ? undefined : Number(next);
-                        loadTabRemoteData(marketId);
-                      }}
-                    >
-                      <option value="all">{t("allMarkets")}</option>
-                      {markets.map((market) => (
-                        <option key={market.id} value={market.id}>{market.owner}/{market.name}</option>
-                      ))}
-                    </select>
-                    <button className="btn btn-secondary" onClick={loadMarkets} disabled={marketLoading}>{t("refresh")}</button>
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -676,22 +713,26 @@ export default function SkillMarketPanel({
                 ))
               )}
             </select>
-            <button className="btn btn-secondary" onClick={loadInstallations} disabled={installLoading}>
+            <button className="btn btn-secondary" onClick={() => loadInstallations()} disabled={installLoading}>
               {t("refresh")}
             </button>
             <button className="btn btn-primary" onClick={syncAllInstalledRemoteSkills} disabled={installLoading}>
               {t("syncAllActive")}
             </button>
+            <button className="btn btn-secondary" onClick={() => markAllRemoteSkillsInstalled(true)} disabled={installLoading || marketLoading}>
+              {t("markAllInstalled")}
+            </button>
+            <button className="btn btn-secondary" onClick={() => markAllRemoteSkillsInstalled(false)} disabled={installLoading || marketLoading}>
+              {t("unmarkAllInstalled")}
+            </button>
             <select
               className="sort-select"
-              value={selectedMarketId}
+              value={selectedMarketFilter}
               onChange={(e) => {
-                const value = e.target.value;
-                const next = value === "all" ? "all" : Number(value);
-                setSelectedMarketId(next);
-                if (next === "all") {
-                  loadInstallations();
-                }
+                const next = e.target.value;
+                setSelectedMarketFilter(next);
+                const marketId = next === "all" ? undefined : Number(next);
+                loadTabRemoteData(marketId);
               }}
             >
               <option value="all">{t("allMarkets")}</option>
@@ -699,7 +740,6 @@ export default function SkillMarketPanel({
                 <option key={market.id} value={market.id}>{market.owner}/{market.name}</option>
               ))}
             </select>
-            <span className="sort-select" style={{ color: "var(--text-muted)" }}>{t("filterByMarket")}</span>
           </div>
 
           <div className="section">
@@ -713,8 +753,26 @@ export default function SkillMarketPanel({
                 )}
               </div>
             )}
-            <h3 className="section-title">
+            <h3 className="section-title" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               {installScope === "global" ? t("global") : t("projects")} {activeInstallations.length > 0 && <span className="badge">{activeInstallations.length}</span>}
+              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("filterByMarket")}</span>
+              <select
+                aria-label={t("filterByMarket")}
+                className="sort-select"
+                value={selectedMarketFilter}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setSelectedMarketFilter(next);
+                  const marketId = next === "all" ? undefined : Number(next);
+                  loadTabRemoteData(marketId);
+                }}
+              >
+                <option value="all">{t("allMarkets")}</option>
+                {markets.map((market) => (
+                  <option key={market.id} value={market.id}>{market.owner}/{market.name}</option>
+                ))}
+              </select>
+              <button className="btn btn-secondary" onClick={loadMarkets} disabled={marketLoading}>{t("refresh")}</button>
             </h3>
             {activeInstallations.length === 0 ? (
               <div className="empty-state">{t("noSkillsYet")}</div>
@@ -765,9 +823,9 @@ export default function SkillMarketPanel({
                 </table>
                 <div className="section" style={{ marginTop: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span id="installs-filter-label" style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("filterByMarket")}</span>
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{t("filterByMarket")}</span>
                     <select
-                      aria-labelledby="installs-filter-label"
+                      aria-label={t("filterByMarket")}
                       className="sort-select"
                       value={selectedMarketFilter}
                       onChange={(e) => {
