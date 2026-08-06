@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 /// Database wrapper with mutex for thread safety
 pub struct Database {
-    conn: Mutex<Connection>,
+    pub(crate) conn: Mutex<Connection>,
 }
 
 impl Database {
@@ -403,6 +403,59 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_dismissed_tool ON dismissed_updates(tool_id);",
         )
         .map_err(|e| format!("Failed to create dismissed_updates table: {}", e))?;
+
+        // Create remote market metadata tables.
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS markets (
+                id              INTEGER PRIMARY KEY,
+                provider        TEXT    NOT NULL DEFAULT 'github',
+                owner           TEXT    NOT NULL,
+                name            TEXT    NOT NULL,
+                branch          TEXT    NOT NULL DEFAULT 'main',
+                enabled         INTEGER NOT NULL DEFAULT 1,
+                remote_url      TEXT    NOT NULL,
+                last_indexed_at TEXT,
+                last_checked_at TEXT,
+                created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(provider, owner, name, branch)
+            );
+
+            CREATE TABLE IF NOT EXISTS remote_skills (
+                id                  INTEGER PRIMARY KEY,
+                market_id           INTEGER NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+                skill_name          TEXT    NOT NULL,
+                description         TEXT,
+                remote_url          TEXT    NOT NULL,
+                ssot_path           TEXT    NOT NULL,
+                remote_content_hash TEXT    NOT NULL DEFAULT '',
+                remote_core_hash    TEXT    NOT NULL DEFAULT '',
+                is_installed        INTEGER NOT NULL DEFAULT 0,
+                installed_at        TEXT,
+                created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+                updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(market_id, skill_name)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_remote_skills_market ON remote_skills(market_id);
+            CREATE INDEX IF NOT EXISTS idx_remote_skills_name ON remote_skills(skill_name);
+            ",
+        )
+        .map_err(|e| format!("Failed to create market tables: {}", e))?;
+
+        let has_remote_url: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('markets') WHERE name = 'remote_url'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_remote_url {
+            conn.execute_batch(
+                "ALTER TABLE markets ADD COLUMN remote_url TEXT NOT NULL DEFAULT '';",
+            )
+            .map_err(|e| format!("Failed to migrate markets remote_url: {}", e))?;
+        }
 
         Ok(())
     }
@@ -1098,6 +1151,213 @@ impl Database {
         .map_err(|e| format!("Failed to get project name: {}", e))
     }
 
+    // ==================== Markets ====================
+
+    pub fn list_markets(&self) -> Result<Vec<crate::models::Market>, String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut stmt = conn
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, created_at, updated_at, remote_url FROM markets ORDER BY created_at")
+            .map_err(|e| format!("Prepare error: {}", e))?;
+        let markets = stmt
+            .query_map([], |row| {
+                Ok(crate::models::Market {
+                    id: row.get(0)?,
+                    provider: row.get(1)?,
+                    owner: row.get(2)?,
+                    name: row.get(3)?,
+                    branch: row.get(4)?,
+                    enabled: row.get(5)?,
+                    last_indexed_at: row.get(6)?,
+                    last_checked_at: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
+                })
+            })
+            .map_err(|e| format!("Query error: {}", e))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(markets)
+    }
+
+    pub fn get_market(&self, market_id: i64) -> Result<Option<crate::models::Market>, String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut stmt = conn
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, created_at, updated_at, remote_url FROM markets WHERE id = ?1")
+            .map_err(|e| format!("Prepare error: {}", e))?;
+        let result = stmt
+            .query_row(params![market_id], |row| {
+                Ok(crate::models::Market {
+                    id: row.get(0)?,
+                    provider: row.get(1)?,
+                    owner: row.get(2)?,
+                    name: row.get(3)?,
+                    branch: row.get(4)?,
+                    enabled: row.get(5)?,
+                    last_indexed_at: row.get(6)?,
+                    last_checked_at: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
+                })
+            });
+        match result {
+            Ok(market) => Ok(Some(market)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(format!("Query error: {}", e)),
+        }
+    }
+
+    pub fn insert_market(&self, provider: &str, owner: &str, name: &str, branch: &str, remote_url: &str) -> Result<crate::models::Market, String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let id = crate::hash::compute_id_hash(&format!("{}:{}:{}:{}", provider, owner, name, branch));
+        conn.execute(
+            "INSERT INTO markets (id, provider, owner, name, branch, remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, provider, owner, name, branch, remote_url],
+        )
+        .map_err(|e| format!("Failed to insert market: {}", e))?;
+        self.get_market(id).map(|m| m.unwrap())
+    }
+
+    pub fn upsert_market(&self, provider: &str, owner: &str, name: &str, branch: &str, remote_url: &str) -> Result<crate::models::Market, String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let id = crate::hash::compute_id_hash(&format!("{}:{}:{}:{}", provider, owner, name, branch));
+        conn.execute(
+            "INSERT INTO markets (id, provider, owner, name, branch, remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(provider, owner, name, branch) DO UPDATE SET remote_url=excluded.remote_url, updated_at=datetime('now')",
+            params![id, provider, owner, name, branch, remote_url],
+        )
+        .map_err(|e| format!("Failed to upsert market: {}", e))?;
+        self.get_market(id).map(|m| m.unwrap())
+    }
+
+    pub fn update_market(&self, market_id: i64, enabled: bool, last_indexed_at: Option<&str>, last_checked_at: Option<&str>) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        conn.execute(
+            "UPDATE markets SET enabled = ?1, last_indexed_at = ?2, last_checked_at = ?3, updated_at = datetime('now') WHERE id = ?4",
+            params![enabled as i64, last_indexed_at, last_checked_at, market_id],
+        )
+        .map_err(|e| format!("Failed to update market: {}", e))?;
+        Ok(())
+    }
+
+    pub fn delete_market(&self, market_id: i64) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        conn.execute("DELETE FROM markets WHERE id = ?1", params![market_id])
+            .map_err(|e| format!("Failed to delete market: {}", e))?;
+        Ok(())
+    }
+
+    pub fn upsert_remote_skill(&self, market_id: i64, skill_name: &str, description: Option<&str>, remote_url: &str, ssot_path: &str, content_hash: &str, core_hash: &str, installed: bool, installed_at: Option<&str>) -> Result<i64, String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let id = crate::hash::compute_id_hash(&format!("{}:{}", market_id, skill_name));
+        conn.execute(
+            "INSERT INTO remote_skills (id, market_id, skill_name, description, remote_url, ssot_path, remote_content_hash, remote_core_hash, is_installed, installed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+             ON CONFLICT(market_id, skill_name) DO UPDATE SET
+                description=excluded.description,
+                remote_url=excluded.remote_url,
+                ssot_path=excluded.ssot_path,
+                remote_content_hash=excluded.remote_content_hash,
+                remote_core_hash=excluded.remote_core_hash,
+                is_installed=excluded.is_installed,
+                installed_at=excluded.installed_at,
+                updated_at=datetime('now')",
+            params![id, market_id, skill_name, description, remote_url, ssot_path, content_hash, core_hash, installed as i64, installed_at],
+        )
+        .map_err(|e| format!("Failed to upsert remote skill: {}", e))?;
+        Ok(id)
+    }
+
+    pub fn list_remote_skills(&self, market_id: Option<i64>) -> Result<Vec<crate::models::RemoteSkill>, String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut skills = Vec::new();
+        if let Some(mid) = market_id {
+            let mut stmt = conn.prepare("SELECT id, market_id, skill_name, description, remote_url, ssot_path, remote_content_hash, remote_core_hash, is_installed, installed_at, created_at, updated_at FROM remote_skills WHERE market_id = ?1 ORDER BY skill_name").map_err(|e| format!("Prepare error: {}", e))?;
+            let rows = stmt.query_map(params![mid], |row| remote_skill_row(row)).map_err(|e| format!("Query error: {}", e))?;
+            skills.extend(rows.filter_map(|r| r.ok()));
+        } else {
+            let mut stmt = conn.prepare("SELECT id, market_id, skill_name, description, remote_url, ssot_path, remote_content_hash, remote_core_hash, is_installed, installed_at, created_at, updated_at FROM remote_skills ORDER BY market_id, skill_name").map_err(|e| format!("Prepare error: {}", e))?;
+            let rows = stmt.query_map([], |row| remote_skill_row(row)).map_err(|e| format!("Query error: {}", e))?;
+            skills.extend(rows.filter_map(|r| r.ok()));
+        }
+        Ok(skills)
+    }
+
+    pub fn list_remote_installations(&self, project_id: i64, market_id: Option<i64>) -> Result<Vec<crate::models::RemoteInstallation>, String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut rows = Vec::new();
+        if let Some(mid) = market_id {
+            let mut stmt = conn.prepare("SELECT rs.id, rs.skill_name, rs.remote_url, rs.ssot_path, rs.installed_at, rs.market_id, m.owner, m.name FROM remote_skills rs JOIN markets m ON m.id = rs.market_id WHERE rs.is_installed = 1 AND rs.market_id = ?1 ORDER BY rs.skill_name").map_err(|e| format!("Prepare error: {}", e))?;
+            rows = stmt.query_map(params![mid], |row| {
+                Ok(crate::models::RemoteInstallation {
+                    id: row.get(0)?,
+                    remoteSkillId: row.get(0)?,
+                    skillName: row.get(1)?,
+                    remoteUrl: row.get(2)?,
+                    ssotPath: row.get(3)?,
+                    installedAt: row.get(4)?,
+                    marketId: row.get(5)?,
+                    marketTitle: format!("{}/{}", row.get::<_, String>(6)?, row.get::<_, String>(7)?),
+                    projectId: project_id,
+                    scope: "global".to_string(),
+                })
+            }).map_err(|e| format!("Query error: {}", e))?.filter_map(|r| r.ok()).collect();
+        } else {
+            let mut stmt = conn.prepare("SELECT rs.id, rs.skill_name, rs.remote_url, rs.ssot_path, rs.installed_at, rs.market_id, m.owner, m.name FROM remote_skills rs JOIN markets m ON m.id = rs.market_id WHERE rs.is_installed = 1 ORDER BY rs.market_id, rs.skill_name").map_err(|e| format!("Prepare error: {}", e))?;
+            rows = stmt.query_map([], |row| {
+                Ok(crate::models::RemoteInstallation {
+                    id: row.get(0)?,
+                    remoteSkillId: row.get(0)?,
+                    skillName: row.get(1)?,
+                    remoteUrl: row.get(2)?,
+                    ssotPath: row.get(3)?,
+                    installedAt: row.get(4)?,
+                    marketId: row.get(5)?,
+                    marketTitle: format!("{}/{}", row.get::<_, String>(6)?, row.get::<_, String>(7)?),
+                    projectId: project_id,
+                    scope: "global".to_string(),
+                })
+            }).map_err(|e| format!("Query error: {}", e))?.filter_map(|r| r.ok()).collect();
+        }
+        Ok(rows)
+    }
+
+    pub fn set_remote_skill_installed(&self, remote_skill_id: i64, installed: bool) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        conn.execute(
+            "UPDATE remote_skills SET is_installed = ?1, installed_at = ?2, updated_at = datetime('now') WHERE id = ?3",
+            params![installed as i64, if installed { Some("datetime(now)") } else { None }, remote_skill_id],
+        )
+        .map_err(|e| format!("Failed to update remote install state: {}", e))?;
+        Ok(())
+    }
+
+    pub fn list_market_templates(&self) -> Result<Vec<crate::models::MarketTemplate>, String> {
+        Ok(vec![
+            crate::models::MarketTemplate {
+                id: "anthropic-skills".to_string(),
+                label: "Anthropic Skills".to_string(),
+                description: "Built-in Anthropic market".to_string(),
+                provider: "github".to_string(),
+                owner: "anthropics".to_string(),
+                name: "skills".to_string(),
+                branch: "main".to_string(),
+                kind: "standard".to_string(),
+                root_skill: true,
+            },
+            crate::models::MarketTemplate {
+                id: "superpowers-skills".to_string(),
+                label: "Superpowers Skills".to_string(),
+                description: "Built-in Superpowers market".to_string(),
+                provider: "github".to_string(),
+                owner: "superpowers".to_string(),
+                name: "skills".to_string(),
+                branch: "main".to_string(),
+                kind: "standard".to_string(),
+                root_skill: true,
+            },
+        ])
+    }
+
     /// Query sync logs with optional filters
     pub fn get_sync_logs(&self, skill_id: Option<i64>, limit: Option<i64>) -> Result<Vec<SyncLog>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
@@ -1447,4 +1707,21 @@ impl Database {
         .map_err(|e| format!("Failed to clear dismissed updates: {}", e))?;
         Ok(())
     }
+}
+
+pub(crate) fn remote_skill_row(row: &rusqlite::Row) -> Result<crate::models::RemoteSkill, rusqlite::Error> {
+    Ok(crate::models::RemoteSkill {
+        id: row.get(0)?,
+        market_id: row.get(1)?,
+        skill_name: row.get(2)?,
+        description: row.get(3)?,
+        remote_url: row.get(4)?,
+        ssot_path: row.get(5)?,
+        remote_content_hash: row.get(6)?,
+        remote_core_hash: row.get(7)?,
+        is_installed: row.get(8)?,
+        installed_at: row.get(9)?,
+        created_at: row.get(10)?,
+        updated_at: row.get(11)?,
+    })
 }

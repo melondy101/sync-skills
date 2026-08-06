@@ -152,11 +152,20 @@ export const listRemoteSkills = (marketId?: number | null) =>
 export const downloadRemoteSkill = (remoteSkillId: number) =>
   invoke<SyncResult>("download_remote_skill", { remoteSkillId });
 
-export const syncRemoteSkillToTools = (remoteSkillId: number) =>
-  invoke<SyncResult>("sync_remote_skill_to_tools", { remoteSkillId });
-
 export const listRemoteInstallations = (projectId: number, marketId: number | null) =>
   invoke<RemoteInstallation[]>("list_remote_installations", { projectId, marketId });
+
+export const scanAllRemoteRepositories = () =>
+  invoke<MarketSyncResult[]>("scan_all_remote_repositories");
+
+export const downloadRemoteSkillToSsot = (remoteSkillId: number) =>
+  invoke<SyncResult>("download_remote_skill_to_ssot", { remoteSkillId });
+
+export const syncRemoteSkillToTools = (remoteSkillId: number, projectId: number, toolPath: string) =>
+  invoke<SyncResult>("sync_remote_skill_to_tools", { remoteSkillId, projectId, toolPath });
+
+export const syncRemoteInstallationsToTools = (projectId: number, marketId: number | null, toolPath: string) =>
+  invoke<SyncResult>("sync_remote_installations_to_tools", { projectId, marketId, toolPath });
 
 export const toggleRemoteInstallation = (remoteSkillId: number, projectId: number, scope: string, active: boolean) =>
   invoke<RemoteInstallation>("toggle_remote_installation", { remoteSkillId, projectId, scope, active });

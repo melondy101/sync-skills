@@ -173,7 +173,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     sourceLabel: "源",
 
     // Skill Market
-    market: "Skill 市场",
+    market: "市场",
     marketTab: "市场",
     remoteInstallsTab: "安装管理",
     skillsTab: "Skills",
@@ -502,7 +502,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     sourceLabel: "Source",
 
     // Skill Market
-    market: "Skill Market",
+    market: "Market",
     marketTab: "Markets",
     remoteInstallsTab: "Installs",
     skillsTab: "Skills",
@@ -669,3 +669,4 @@ export const translations: Record<Lang, Record<string, string>> = {
 export function makeT(lang: Lang): TranslateFn {
   return (key: string) => translations[lang]?.[key] || translations.en[key] || key;
 }
+

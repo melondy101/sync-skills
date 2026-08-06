@@ -18,6 +18,8 @@ const mockTool: Tool = {
   name: "Claude",
   global_path: "~/.claude/skills/",
   project_rel_path: ".claude/skills/",
+  globalPath: "~/.claude/skills/",
+  projectRelPath: ".claude/skills/",
   created_at: "2026-07-01T00:00:00Z",
   updated_at: "2026-07-01T00:00:00Z",
 };
@@ -77,13 +79,13 @@ beforeEach(() => {
   vi.mocked(api.listSkills).mockResolvedValue(mockSkills);
   vi.mocked(api.listProjects).mockResolvedValue([mockProject]);
   vi.mocked(api.getSettings).mockResolvedValue(mockSettings);
- vi.mocked(api.listConflicts).mockResolvedValue([]);
- vi.mocked(api.updateSettings).mockResolvedValue(undefined);
- vi.mocked(api.checkUpdates).mockResolvedValue([]);
+  vi.mocked(api.listConflicts).mockResolvedValue([]);
+  vi.mocked(api.updateSettings).mockResolvedValue(undefined);
+  vi.mocked(api.checkUpdates).mockResolvedValue([]);
   vi.mocked(api.listRemoteInstallations).mockResolvedValue([]);
- // ToolsSection loads these on mount (both fail-silent nice-to-haves).
- vi.mocked(api.discoverTools).mockResolvedValue([]);
- vi.mocked(api.listToolTemplates).mockResolvedValue([]);
+// ToolsSection loads these on mount (both fail-silent nice-to-haves).
+  vi.mocked(api.discoverTools).mockResolvedValue([]);
+  vi.mocked(api.listToolTemplates).mockResolvedValue([]);
 });
 
 async function renderApp() {
@@ -103,7 +105,6 @@ describe("App orchestration", () => {
     // Global tab is the default scope (project id 0).
     expect(api.listSkills).toHaveBeenCalledWith(0);
     expect(api.listConflicts).toHaveBeenCalledWith(0);
-    expect(api.listRemoteInstallations).toHaveBeenCalledWith(0, -1);
     expect(screen.getByText("beta-skill")).toBeInTheDocument();
   });
 

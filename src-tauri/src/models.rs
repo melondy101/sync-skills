@@ -147,3 +147,83 @@ pub struct ConflictView {
     pub detected_at: String,
     pub versions: Vec<ConflictVersion>,
 }
+
+// ==================== Skill Market ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketTemplate {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub provider: String,
+    pub owner: String,
+    pub name: String,
+    pub branch: String,
+    pub kind: String,
+    pub root_skill: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Market {
+    pub id: i64,
+    pub provider: String,
+    pub owner: String,
+    pub name: String,
+    pub branch: String,
+    pub enabled: bool,
+    pub last_indexed_at: Option<String>,
+    pub last_checked_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteSkill {
+    pub id: i64,
+    pub market_id: i64,
+    pub skill_name: String,
+    pub description: Option<String>,
+    pub remote_url: String,
+    pub ssot_path: String,
+    pub remote_content_hash: String,
+    pub remote_core_hash: String,
+    pub is_installed: bool,
+    pub installed_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteSkillUpdate {
+    pub id: i64,
+    pub market_id: i64,
+    pub skill_name: String,
+    pub remote_url: String,
+    pub ssot_path: String,
+    pub old_hash: String,
+    pub new_hash: String,
+    pub has_changes: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketSyncResult {
+    pub market_id: i64,
+    pub skills_found: usize,
+    pub skills_new: usize,
+    pub skills_updated: usize,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteInstallation {
+    pub id: i64,
+    pub remoteSkillId: i64,
+    pub skillName: String,
+    pub remoteUrl: String,
+    pub ssotPath: String,
+    pub installedAt: Option<String>,
+    pub marketId: i64,
+    pub marketTitle: String,
+    pub projectId: i64,
+    pub scope: String,
+}

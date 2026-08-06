@@ -174,12 +174,17 @@ pub fn run() {
             commands::market::delete_market,
             commands::market::sync_market_index,
             commands::market::sync_all_market_indices,
+            commands::market::scan_all_remote_repositories,
             commands::market::list_market_templates,
             commands::market::list_remote_skills,
-            commands::market::download_remote_skill,
+            commands::market::download_remote_skill_to_ssot,
             commands::market::sync_remote_skill_to_tools,
+            commands::market::sync_remote_installations_to_tools,
             commands::market::check_remote_updates,
             commands::market::get_remote_skill_diff,
+            commands::market::list_remote_installations,
+            commands::market::toggle_remote_installation,
+            commands::market::sync_remote_installations,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

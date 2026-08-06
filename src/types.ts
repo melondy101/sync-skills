@@ -1,11 +1,15 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { invoke } from "@tauri-apps/api/core";
+
 export interface Tool {
   id: number;
   name: string;
   global_path: string;
   project_rel_path: string;
+  globalPath: string;
+  projectRelPath: string;
   created_at: string;
   updated_at: string;
 }
@@ -153,6 +157,12 @@ export interface RemoteInstallation {
   installedAt: string | null;
 }
 
+export interface ToolPathOption {
+  toolId: number;
+  name: string;
+  path: string;
+}
+
 // M5: Conflict types
 export interface ConflictVersion {
   tool_id: number;
@@ -256,3 +266,6 @@ export interface MarketSyncResult {
   skills_updated: number;
   errors: string[];
 }
+
+export const syncRemoteInstallations = (projectId: number, marketId: number | null) =>
+  invoke<SyncResult>("sync_remote_installations", { projectId, marketId });

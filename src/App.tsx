@@ -5,7 +5,7 @@
 // projects, settings, updates, conflicts) and top-level UI state, and wires the
 // feature components together. All rendering details live in src/components/.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import "./App.css";
 import * as api from "./api";
 import type {
@@ -38,7 +38,7 @@ function App() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [skills, setSkills] = useState<SkillView[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [settings, setSettings] = useState<Settings>({ sync_mode: "semi-auto", prefer_symlink: false, theme: "light", language: "zh", close_action: "tray", use_system_proxy: true, use_proxy: false, proxy_url: null });
+  const [settings, setSettings] = useState<Settings>({ sync_mode: "semi-auto", prefer_symlink: false, theme: "light", language: "zh", close_action: "tray", use_system_proxy: true, use_proxy: false, proxy_url: null }); // TODO: wire real defaults in settings loader
 
   const t = makeT(settings.language as Lang);
   useTheme(settings.theme);
@@ -74,6 +74,15 @@ function App() {
   const [updatesInitialDiff, setUpdatesInitialDiff] = useState<UpdateDiffEntry | null>(null);
   const [conflicts, setConflicts] = useState<ConflictView[]>([]);
   const [remoteInstallations, setRemoteInstallations] = useState<RemoteInstallation[]>([]);
+  const [remoteInstallationsLoading, setRemoteInstallationsLoading] = useState(false);
+
+  const projectPaths = useMemo(() => {
+    const map: Record<number, string> = { 0: "" };
+    for (const project of projects) {
+      map[project.id] = project.path;
+    }
+    return map;
+  }, [projects]);
 
   // New features: onboarding wizard, health check, built-in editor
   const [showWizard, setShowWizard] = useState(() => localStorage.getItem("onboardingDone") !== "1");
@@ -127,10 +136,14 @@ function App() {
     }
   }
   async function loadRemoteInstallations() {
+    setRemoteInstallationsLoading(true);
     try {
-      setRemoteInstallations(await api.listRemoteInstallations(selectedProject, filterMarket));
+      const marketId = filterMarket >= 0 ? filterMarket : null;
+      setRemoteInstallations(await api.listRemoteInstallations(selectedProject, marketId));
     } catch (e) {
       addToast("error", `${t("failedLoadSkills")}: ${e}`);
+    } finally {
+      setRemoteInstallationsLoading(false);
     }
   }
 
@@ -170,6 +183,8 @@ function App() {
   useEffect(() => {
     loadRemoteInstallations();
   }, [selectedProject, filterMarket]);
+
+  const installProjectId = useMemo(() => (activeTab === "market" ? selectedProject : 0), [activeTab, selectedProject]);
 
   // ==================== Actions ====================
 
@@ -278,7 +293,7 @@ function App() {
       if (result.errors.length > 0) {
         addToast("error", `${result.skill_name}: ${result.errors.join(", ")}`);
       } else {
-        addToast("success", `${t("syncedToTools")} ${result.skill_name} → ${result.synced_to} ${t("tools")}`);
+        addToast("success", `${t("syncedToTools")} ${result.skill_name} -> ${result.synced_to} ${t("tools")}`);
       }
     } catch (e) {
       addToast("error", `${t("syncFailed")}: ${e}`);
@@ -303,7 +318,7 @@ function App() {
 
       addToast(
         totalErrors > 0 ? "error" : "success",
-        `${t("syncComplete")}: ${totalSynced} ${t("syncedCount")}, ${totalErrors} ${t("errors")}`,
+        `${t("syncComplete")}: ${totalSynced} ${t("syncedCount")}, ${totalErrors} ${t("errors")}`
       );
     } catch (e) {
       addToast("error", `${t("syncAllFailed")}: ${e}`);
@@ -344,7 +359,7 @@ function App() {
     const byMarket =
       filterMarket >= 0
         ? skills.filter((s) =>
-            remoteInstallations.some(
+            (remoteInstallations ?? []).some(
               (inst) => inst.projectId === selectedProject && inst.marketId === filterMarket && inst.skillName === s.name,
             ),
           )
@@ -449,14 +464,16 @@ function App() {
       )}
 
       {/* Tool configuration */}
-      <ToolsSection
-        t={t}
-        tools={tools}
-        addToast={addToast}
-        onToolsChanged={async () => {
-          await Promise.all([loadTools(), loadSkills()]);
-        }}
-      />
+      {activeTab !== "market" && (
+        <ToolsSection
+          t={t}
+          tools={tools}
+          addToast={addToast}
+          onToolsChanged={async () => {
+            await Promise.all([loadTools(), loadSkills()]);
+          }}
+        />
+      )}
 
       {/* Action bar */}
       <section className="section">
@@ -487,10 +504,11 @@ function App() {
             className="sort-select"
             value={filterMarket}
             onChange={(e) => setFilterMarket(parseInt(e.target.value, 10))}
+            disabled={remoteInstallationsLoading}
           >
             <option value={-1}>{t("allMarkets")}</option>
-            {Array.from(new Set(remoteInstallations.map((item) => item.marketId))).sort((a, b) => a - b).map((marketId) => {
-              const title = remoteInstallations.find((item) => item.marketId === marketId)?.marketTitle ?? String(marketId);
+            {Array.from(new Set((remoteInstallations ?? []).map((item) => item.marketId))).sort((a, b) => a - b).map((marketId) => {
+              const title = (remoteInstallations ?? []).find((item) => item.marketId === marketId)?.marketTitle ?? String(marketId);
               return (
                 <option key={marketId} value={marketId}>{title}</option>
               );
@@ -580,8 +598,6 @@ function App() {
                     hasUpdate={hasUpdate(skill)}
                     syncing={syncing.has(skill.id)}
                     checkingSingle={checkingSingle === skill.id}
-                    remoteInstallations={remoteInstallations}
-                    selectedProjectId={selectedProject}
                     getInstallStatus={getInstallStatus}
                     onToggle={handleToggle}
                     onSync={() => handleSyncSkill(skill.id)}
@@ -738,8 +754,10 @@ function App() {
           t={t}
           addToast={addToast}
           projects={projects}
+          projectPaths={projectPaths}
+          tools={tools}
           onRemoteInstallationsChanged={setRemoteInstallations}
-          defaultProjectId={selectedProject}
+          defaultProjectId={installProjectId}
         />
       )}
     </main>
@@ -747,3 +765,6 @@ function App() {
 }
 
 export default App;
+
+
+
