@@ -8,6 +8,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (only needed for manual dispatch)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -132,7 +137,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: "Skill Manager ${{ github.ref_name }}"
           releaseBody: "See the assets below to download and install Skill Manager for your platform."
           releaseDraft: true
