@@ -14,12 +14,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-winreg = "0.55"
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
-winreg = "0.55"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
@@ -41,3 +39,7 @@ tempfile = "3"
 # tempfile was accidentally kept in dev-dependencies only, which is not
 # available to the main lib during `cargo check` on non-test targets.
 # It is intentionally moved here because market indexing uses it at runtime.
+
+# winreg is Windows-only; gate it so non-Windows (CI Linux/macOS) builds skip it.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"

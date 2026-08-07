@@ -78,6 +78,7 @@ fn pick_asset(assets: &[serde_json::Value]) -> Option<(String, String, u64)> {
 
 fn proxy_from_settings() -> Option<reqwest::Proxy> {
     let settings = crate::settings::Settings::load();
+    #[cfg(windows)]
     if settings.use_system_proxy {
         return http_system_proxy();
     }
@@ -91,6 +92,7 @@ fn proxy_from_settings() -> Option<reqwest::Proxy> {
     reqwest::Proxy::all(url).ok()
 }
 
+#[cfg(windows)]
 pub(crate) fn http_system_proxy() -> Option<reqwest::Proxy> {
     static CACHED: std::sync::OnceLock<Option<reqwest::Proxy>> = std::sync::OnceLock::new();
     CACHED.get_or_init(|| {
