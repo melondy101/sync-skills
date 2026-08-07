@@ -7,12 +7,8 @@ import * as api from "../api";
 vi.mock("../api");
 
 const markets = [
-  { id: 1, provider: "github", owner: "alice", name: "alpha-market", branch: "main", enabled: true, last_indexed_at: null, last_checked_at: null, created_at: "", updated_at: "" },
-  { id: 2, provider: "github", owner: "bob", name: "beta-market", branch: "main", enabled: true, last_indexed_at: null, last_checked_at: null, created_at: "", updated_at: "" },
-];
-
-const templates = [
-  { id: "anthropic-skills", owner: "anthropics", name: "skills", branch: "main", kind: "builtin", description: "", label: "Builtin", provider: "anthropics", root_skill: false },
+  { id: 1, provider: "github", owner: "alice", name: "alpha-market", branch: "main", enabled: true, last_indexed_at: null, last_checked_at: null, last_commit_sha: null, created_at: "", updated_at: "" },
+  { id: 2, provider: "github", owner: "bob", name: "beta-market", branch: "main", enabled: true, last_indexed_at: null, last_checked_at: null, last_commit_sha: null, created_at: "", updated_at: "" },
 ];
 
 const toast = vi.fn();
@@ -20,34 +16,50 @@ const toast = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.listMarkets).mockResolvedValue(markets);
-  vi.mocked(api.listMarketTemplates).mockResolvedValue(templates);
   vi.mocked(api.listRemoteSkills).mockResolvedValue([]);
   vi.mocked(api.listRemoteInstallations).mockResolvedValue([]);
   vi.mocked(api.scanAllRemoteRepositories).mockResolvedValue([]);
+  vi.mocked(api.checkMarketCommits).mockResolvedValue([]);
+  vi.mocked(api.checkRemoteUpdates).mockResolvedValue([]);
+  vi.mocked(api.checkRemoteSsoUpdates).mockResolvedValue([]);
+  vi.mocked(api.setAllRemoteSkillsInstalled).mockResolvedValue({ updated: 2 });
+  vi.mocked(api.addMarketByUrl).mockResolvedValue({ id: 3, provider: "github", owner: "carol", name: "gamma", branch: "main", enabled: true, last_indexed_at: null, last_checked_at: null, last_commit_sha: null, created_at: "", updated_at: "" });
+  vi.mocked(api.syncMarketIndex).mockResolvedValue({ market_id: 1, skills_found: 0, skills_new: 0, skills_updated: 0, errors: [] });
 });
 
 function makeT(key: string) {
   const map: Record<string, string> = {
-    marketTab: "Markets",
-    remoteInstallsTab: "Installs",
-    skillsTab: "Skills",
+    market: "Market",
+    marketTab: "Skills",
+    addMarket: "Add Market",
+    cancel: "Cancel",
     allMarkets: "All markets",
     filterByMarket: "Filter by market",
     installed: "Installed",
     all: "All",
-    scanAllRemote: "Scan all remote",
-    checkRemoteUpdates: "Check remote updates",
+    scanAllRemote: "Scan All",
+    checkRemoteUpdates: "Check Updates",
     remoteNoUpdate: "No remote updates",
     downloadToSsot: "Download to SSOT",
     syncToTools: "Sync to tools",
     markAllInstalled: "Mark all installed",
     unmarkAllInstalled: "Unmark all installed",
+    searchPlaceholder: "Search",
+    skills: "Skills",
+    addMarketUrlPlaceholder: "https://github.com/owner/repo",
+    addMarketUrlRequired: "Please enter a market URL",
+    addMarketUrlHint: "Only the repo link is needed",
+    defaultBranchAuto: "Auto main/master",
+    noNewCommits: "No new commits",
+    newCommitsFound: "{0} new commit(s)",
+    checking: "Checking...",
+    scanning: "Scanning...",
   };
   return map[key] ?? key;
 }
 
 describe("SkillMarketPanel", () => {
-  it("renders a market filter dropdown in the Markets and Installs tabs", async () => {
+  it("shows the market list and an add-market button that reveals a URL field", async () => {
     render(
       <SkillMarketPanel
         projects={[]}
@@ -61,17 +73,16 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Markets" }));
-    await waitFor(() => expect(screen.getByLabelText("Filter by market", { selector: "select" })).toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: "Market", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Market" })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("https://github.com/owner/repo")).not.toBeInTheDocument();
 
-    const instalsButton = screen.getByRole("button", { name: "Installs" });
-    instalsButton.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
-    instalsButton.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
-    instalsButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    await waitFor(() => expect(screen.getByLabelText("Filter by market", { selector: "select" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Add Market" }));
+    expect(screen.getByPlaceholderText("https://github.com/owner/repo")).toBeInTheDocument();
+    expect(screen.getByLabelText("Auto main/master")).toBeInTheDocument();
   });
 
-  it("uses the selected market filter when loading installations", async () => {
+  it("adds a market by URL via the backend", async () => {
     render(
       <SkillMarketPanel
         projects={[]}
@@ -85,19 +96,15 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Installs" }));
-    await waitFor(() => expect(screen.getByText("Filter by market")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Add Market" }));
+    await user.type(screen.getByPlaceholderText("https://github.com/owner/repo"), "github.com/carol/gamma");
+    await user.selectOptions(screen.getByLabelText("Auto main/master"), "master");
+    await user.click(screen.getByRole("button", { name: "Add Market" }));
 
-    const [, , , installsFilter] = screen.getAllByRole("combobox");
-    await user.selectOptions(installsFilter, "1");
-    expect(api.listRemoteInstallations).toHaveBeenCalledWith(0, 1);
-
-    const marketsFilter = screen.getByLabelText("Filter by market", { selector: "select" });
-    await user.selectOptions(marketsFilter, "2");
-    expect(api.listRemoteInstallations).toHaveBeenCalledWith(0, 2);
+    await waitFor(() => expect(api.addMarketByUrl).toHaveBeenCalledWith("github.com/carol/gamma", "master"));
   });
 
-  it("switches remote update checks between installed skills and all remote skills", async () => {
+  it("check updates does a lightweight commit check first", async () => {
     render(
       <SkillMarketPanel
         projects={[]}
@@ -111,26 +118,21 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Skills" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Check remote updates" })).toBeEnabled());
-
-    const [, , modeSelect] = screen.getAllByRole("combobox");
-    await user.selectOptions(modeSelect, "all");
-    await user.click(screen.getByRole("button", { name: "Check remote updates" }));
+    await user.click(screen.getByRole("button", { name: "Check Updates" }));
 
     await waitFor(() => {
-      expect(api.checkRemoteUpdates).toHaveBeenCalled();
-      expect(api.checkRemoteSsoUpdates).not.toHaveBeenCalled();
+      expect(api.checkMarketCommits).toHaveBeenCalled();
+      expect(api.checkRemoteSsoUpdates).toHaveBeenCalled();
+      expect(api.checkRemoteUpdates).not.toHaveBeenCalled();
     });
   });
 
-  it("batch marks all remote skills installed for the selected market", async () => {
-    vi.mocked(api.setAllRemoteSkillsInstalled).mockResolvedValue({ skill_id: 0, skill_name: "", synced_to: 2, errors: [] });
+  it("filters skills by the selected market", async () => {
     render(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
-        tools={[]}
+        tools={[{ id: 1, name: "tool", global_path: "/tmp", project_rel_path: "", globalPath: "/tmp", projectRelPath: "", created_at: "", updated_at: "" }]}
         onRemoteInstallationsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
@@ -139,18 +141,14 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Installs" }));
-    await waitFor(() => expect(screen.getByText("Filter by market")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Skills").children).toHaveLength(3));
 
-    const marketFilter = screen.getByLabelText("Filter by market", { selector: "select" });
-    await user.selectOptions(marketFilter, "1");
-    await user.click(screen.getByRole("button", { name: "Mark all installed" }));
+    await user.selectOptions(screen.getByLabelText("Skills"), "1");
 
-    await waitFor(() => expect(api.setAllRemoteSkillsInstalled).toHaveBeenCalledWith(0, 1, true));
+    await waitFor(() => expect(api.listRemoteSkills).toHaveBeenCalledWith(1));
   });
 
-  it("batch unmarks all remote skills installed for all markets", async () => {
-    vi.mocked(api.setAllRemoteSkillsInstalled).mockResolvedValue({ skill_id: 0, skill_name: "", synced_to: 0, errors: [] });
+  it("batch marks / unmarks all remote skills installed", async () => {
     render(
       <SkillMarketPanel
         projects={[]}
@@ -164,8 +162,8 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Installs" }));
-    await waitFor(() => expect(screen.getByText("Filter by market")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Mark all installed" }));
+    await waitFor(() => expect(api.setAllRemoteSkillsInstalled).toHaveBeenCalledWith(0, null, true));
 
     await user.click(screen.getByRole("button", { name: "Unmark all installed" }));
     await waitFor(() => expect(api.setAllRemoteSkillsInstalled).toHaveBeenCalledWith(0, null, false));

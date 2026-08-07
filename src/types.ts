@@ -229,6 +229,7 @@ export interface Market {
   enabled: boolean;
   last_indexed_at: string | null;
   last_checked_at: string | null;
+  last_commit_sha: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -265,6 +266,17 @@ export interface MarketSyncResult {
   skills_new: number;
   skills_updated: number;
   errors: string[];
+}
+
+export interface RemoteSkillInstalledResult {
+  updated: number;
+}
+
+export interface MarketCommitUpdate {
+  market_id: number;
+  market_title: string;
+  last_commit_sha: string | null;
+  new_commit_sha: string;
 }
 
 export const syncRemoteInstallations = (projectId: number, marketId: number | null) =>

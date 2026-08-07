@@ -417,6 +417,7 @@ impl Database {
                 remote_url      TEXT    NOT NULL,
                 last_indexed_at TEXT,
                 last_checked_at TEXT,
+                last_commit_sha TEXT,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(provider, owner, name, branch)
@@ -455,6 +456,19 @@ impl Database {
                 "ALTER TABLE markets ADD COLUMN remote_url TEXT NOT NULL DEFAULT '';",
             )
             .map_err(|e| format!("Failed to migrate markets remote_url: {}", e))?;
+        }
+
+        let has_commit_sha: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('markets') WHERE name = 'last_commit_sha'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_commit_sha {
+            conn.execute_batch(
+                "ALTER TABLE markets ADD COLUMN last_commit_sha TEXT;",
+            )
+            .map_err(|e| format!("Failed to migrate markets last_commit_sha: {}", e))?;
         }
 
         Ok(())
@@ -1156,7 +1170,7 @@ impl Database {
     pub fn list_markets(&self) -> Result<Vec<crate::models::Market>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let mut stmt = conn
-            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, created_at, updated_at, remote_url FROM markets ORDER BY created_at")
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, remote_url FROM markets ORDER BY created_at")
             .map_err(|e| format!("Prepare error: {}", e))?;
         let markets = stmt
             .query_map([], |row| {
@@ -1169,8 +1183,9 @@ impl Database {
                     enabled: row.get(5)?,
                     last_indexed_at: row.get(6)?,
                     last_checked_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    last_commit_sha: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             })
             .map_err(|e| format!("Query error: {}", e))?
@@ -1182,7 +1197,7 @@ impl Database {
     pub fn get_market(&self, market_id: i64) -> Result<Option<crate::models::Market>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let mut stmt = conn
-            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, created_at, updated_at, remote_url FROM markets WHERE id = ?1")
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, remote_url FROM markets WHERE id = ?1")
             .map_err(|e| format!("Prepare error: {}", e))?;
         let result = stmt
             .query_row(params![market_id], |row| {
@@ -1195,8 +1210,9 @@ impl Database {
                     enabled: row.get(5)?,
                     last_indexed_at: row.get(6)?,
                     last_checked_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    last_commit_sha: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             });
         match result {
@@ -1229,11 +1245,11 @@ impl Database {
         self.get_market(id).map(|m| m.unwrap())
     }
 
-    pub fn update_market(&self, market_id: i64, enabled: bool, last_indexed_at: Option<&str>, last_checked_at: Option<&str>) -> Result<(), String> {
+    pub fn update_market(&self, market_id: i64, enabled: bool, last_indexed_at: Option<&str>, last_checked_at: Option<&str>, last_commit_sha: Option<&str>) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         conn.execute(
-            "UPDATE markets SET enabled = ?1, last_indexed_at = ?2, last_checked_at = ?3, updated_at = datetime('now') WHERE id = ?4",
-            params![enabled as i64, last_indexed_at, last_checked_at, market_id],
+            "UPDATE markets SET enabled = ?1, last_indexed_at = ?2, last_checked_at = ?3, last_commit_sha = ?4, updated_at = datetime('now') WHERE id = ?5",
+            params![enabled as i64, last_indexed_at, last_checked_at, last_commit_sha, market_id],
         )
         .map_err(|e| format!("Failed to update market: {}", e))?;
         Ok(())

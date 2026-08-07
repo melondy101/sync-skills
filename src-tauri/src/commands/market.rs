@@ -4,11 +4,10 @@
 use crate::db::Database;
 use crate::DbState;
 
-use crate::models::{Market, MarketSyncResult, MarketTemplate, RemoteInstallation, RemoteSkill, RemoteSkillUpdate, SyncResult};
+use crate::models::{Market, MarketCommitUpdate, MarketSyncResult, MarketTemplate, RemoteInstallation, RemoteSkill, RemoteSkillUpdate, SyncResult};
 use crate::settings::Settings;
 use crate::sync::{copy_directory, replace_directory, ssot_path, symlink_or_copy};
 use rusqlite::params;
-use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::State;
@@ -86,14 +85,30 @@ fn github_http_client() -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
         .user_agent("skill-manager")
         .connect_timeout(std::time::Duration::from_secs(15));
-    if settings.use_proxy {
-        if let Some(url) = settings.proxy_url.filter(|u| !u.trim().is_empty()) {
-            if let Some(proxy) = reqwest::Proxy::all(url).ok() {
-                builder = builder.proxy(proxy);
-            }
-        }
+
+    if let Some(proxy) = http_proxy_from_settings(&settings) {
+        builder = builder.proxy(proxy);
     }
     builder.build().map_err(|e| e.to_string())
+}
+
+fn http_proxy_from_settings(settings: &Settings) -> Option<reqwest::Proxy> {
+    if settings.use_system_proxy {
+        return crate::commands::updater::http_system_proxy();
+    }
+    if !settings.use_proxy {
+        return None;
+    }
+    let url = settings.proxy_url.as_ref()?.trim();
+    if url.is_empty() {
+        return None;
+    }
+    let normalized = if url.contains("://") {
+        url.to_string()
+    } else {
+        format!("http://{}", url)
+    };
+    reqwest::Proxy::all(normalized).ok()
 }
 
 async fn fetch_github_bytes(url: &str) -> Result<Vec<u8>, String> {
@@ -285,9 +300,65 @@ pub fn add_market(db: State<'_, DbState>, provider: String, owner: String, name:
 #[tauri::command]
 pub fn update_market(db: State<'_, DbState>, id: i64, provider: String, owner: String, name: String, branch: String, enabled: bool) -> Result<Market, String> {
     let remote_url = format!("https://github.com/{}/{}/tree/{}", owner, name, branch);
-    db.update_market(id, enabled, None, None)?;
+    db.update_market(id, enabled, None, None, None)?;
     db.upsert_market(&provider, &owner, &name, &branch, &remote_url)?;
     db.get_market(id).map(|m| m.unwrap())
+}
+
+/// Parse a GitHub market reference from a free-form URL or `owner/repo` string.
+/// Returns (owner, name, optional_branch).
+fn parse_github_market_input(raw: &str) -> Result<(String, String, Option<String>), String> {
+    let trimmed = raw.trim();
+    let without_scheme = trimmed
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_start_matches("github.com/")
+        .trim_end_matches('/');
+    // Drop any path/branch suffix after owner/repo (e.g. /tree/main, /blob/..., .git)
+    let path_part = without_scheme.split('/').collect::<Vec<&str>>();
+    let (owner, name) = match &path_part[..] {
+        [owner, name, ..] => (owner.to_string(), name.trim_end_matches(".git").to_string()),
+        [single] => {
+            // `owner/repo` without slashes already handled; this is a bare token
+            if let Some((o, n)) = single.split_once('/') {
+                (o.to_string(), n.trim_end_matches(".git").to_string())
+            } else {
+                return Err(format!("无法解析市场地址: {}", raw));
+            }
+        }
+        _ => return Err(format!("无法解析市场地址: {}", raw)),
+    };
+    if owner.is_empty() || name.is_empty() {
+        return Err(format!("无法解析市场地址: {}", raw));
+    }
+    Ok((owner, name, None))
+}
+
+/// Resolve the default branch for a GitHub repo: try `main`, fall back to `master`.
+async fn resolve_github_branch(owner: &str, repo: &str) -> String {
+    let main_url = format!("https://api.github.com/repos/{}/{}/branches/main", owner, repo);
+    if fetch_github_bytes(&main_url).await.is_ok() {
+        return "main".to_string();
+    }
+    let master_url = format!("https://api.github.com/repos/{}/{}/branches/master", owner, repo);
+    if fetch_github_bytes(&master_url).await.is_ok() {
+        return "master".to_string();
+    }
+    // Could not confirm either branch via the API — default to main.
+    "main".to_string()
+}
+
+#[tauri::command]
+pub async fn add_market_by_url(db: State<'_, DbState>, url: String, branch: Option<String>) -> Result<Market, String> {
+    let (owner, name, branch_hint) = parse_github_market_input(&url)?;
+    let resolved_branch = match (branch, branch_hint) {
+        (Some(b), _) => b,
+        (None, Some(b)) => b,
+        (None, None) => resolve_github_branch(&owner, &name).await,
+    };
+    let remote_url = format!("https://github.com/{}/{}/tree/{}", owner, name, resolved_branch);
+    let market = db.upsert_market("github", &owner, &name, &resolved_branch, &remote_url)?;
+    Ok(market)
 }
 
 #[tauri::command]
@@ -295,11 +366,29 @@ pub fn delete_market(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     db.delete_market(id)
 }
 
+/// Fetch the latest commit SHA for a branch (used for cheap update checks).
+async fn latest_commit_sha(owner: &str, repo: &str, branch: &str) -> Option<String> {
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/commits?sha={}&per_page=1",
+        owner, repo, branch
+    );
+    let bytes = fetch_github_bytes(&url).await.ok()?;
+    let commits: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    commits.get(0)?.get("sha")?.as_str().map(|s| s.to_string())
+}
+
 #[tauri::command]
 pub async fn sync_market_index(db: State<'_, DbState>, market_id: i64) -> Result<MarketSyncResult, String> {
     let market = db.get_market(market_id)?.ok_or_else(|| format!("market {market_id} not found"))?;
     let result = scan_github_market(&db, &market).await?;
-    db.update_market(market_id, market.enabled, Some(&chrono::Utc::now().to_rfc3339()), None)?;
+    let commit_sha = latest_commit_sha(&market.owner, &market.name, &market.branch).await;
+    db.update_market(
+        market_id,
+        market.enabled,
+        Some(&chrono::Utc::now().to_rfc3339()),
+        None,
+        commit_sha.as_deref(),
+    )?;
     Ok(result)
 }
 
@@ -323,6 +412,40 @@ pub async fn sync_all_market_indices(db: State<'_, DbState>) -> Result<Vec<Marke
         }
     }
     Ok(results)
+}
+
+/// Lightweight update check: compare the remote repo's latest commit with the
+/// stored `last_commit_sha`. Only markets with a new commit are returned, so a
+/// full (and slower) index re-sync can be skipped when nothing changed.
+#[tauri::command]
+pub async fn check_market_commits(db: State<'_, DbState>) -> Result<Vec<MarketCommitUpdate>, String> {
+    let markets = db
+        .list_markets()?
+        .into_iter()
+        .filter(|market| market.enabled)
+        .collect::<Vec<_>>();
+
+    let mut updates = Vec::new();
+    for market in markets {
+        let new_sha = match latest_commit_sha(&market.owner, &market.name, &market.branch).await {
+            Some(sha) => sha,
+            None => continue, // remote unreachable — skip silently
+        };
+        let changed = match &market.last_commit_sha {
+            Some(stored) => stored != &new_sha,
+            None => true, // never indexed yet → treat as changed
+        };
+        if changed {
+            updates.push(MarketCommitUpdate {
+                market_id: market.id,
+                market_title: format!("{}/{}", market.owner, market.name),
+                last_commit_sha: market.last_commit_sha.clone(),
+                new_commit_sha: new_sha,
+            });
+        }
+    }
+
+    Ok(updates)
 }
 
 #[tauri::command]

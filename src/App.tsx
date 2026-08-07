@@ -64,7 +64,7 @@ function App() {
   const [checkingSingle, setCheckingSingle] = useState<number | null>(null);
   const [updates, setUpdates] = useState<SkillUpdate[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterMarket, setFilterMarket] = useState<number>(-1); // -1 = all markets / local only
+  const [filterMarket] = useState<number>(-1); // -1 = all markets / local only
   const [sortBy, setSortBy] = useState<"name" | "updated_at" | "created_at">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
@@ -74,7 +74,7 @@ function App() {
   const [updatesInitialDiff, setUpdatesInitialDiff] = useState<UpdateDiffEntry | null>(null);
   const [conflicts, setConflicts] = useState<ConflictView[]>([]);
   const [remoteInstallations, setRemoteInstallations] = useState<RemoteInstallation[]>([]);
-  const [remoteInstallationsLoading, setRemoteInstallationsLoading] = useState(false);
+  const [, setRemoteInstallationsLoading] = useState(false);
 
   const projectPaths = useMemo(() => {
     const map: Record<number, string> = { 0: "" };
@@ -476,6 +476,7 @@ function App() {
       )}
 
       {/* Action bar */}
+      {activeTab !== "market" && (
       <section className="section">
         <div className="action-bar">
           <button className="btn btn-primary" onClick={handleScan} disabled={scanning}>
@@ -502,21 +503,6 @@ function App() {
           </div>
           <select
             className="sort-select"
-            value={filterMarket}
-            onChange={(e) => setFilterMarket(parseInt(e.target.value, 10))}
-            disabled={remoteInstallationsLoading}
-          >
-            <option value={-1}>{t("allMarkets")}</option>
-            {Array.from(new Set((remoteInstallations ?? []).map((item) => item.marketId))).sort((a, b) => a - b).map((marketId) => {
-              const title = (remoteInstallations ?? []).find((item) => item.marketId === marketId)?.marketTitle ?? String(marketId);
-              return (
-                <option key={marketId} value={marketId}>{title}</option>
-              );
-            })}
-          </select>
-          <span className="sort-select" style={{ color: "var(--text-muted)" }}>{t("filterByMarket")}</span>
-          <select
-            className="sort-select"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           >
@@ -540,8 +526,10 @@ function App() {
           </button>
         </div>
       </section>
+      )}
 
       {/* Conflict banner + diff modal (M5) */}
+      {activeTab !== "market" && (
       <ConflictSection
         t={t}
         conflicts={conflicts}
@@ -551,8 +539,10 @@ function App() {
           await Promise.all([loadConflicts(), loadSkills()]);
         }}
       />
+      )}
 
       {/* Skill grid */}
+      {activeTab !== "market" && (
       <section className="section">
         <h2 className="section-title">
           {t("skills")} {filteredSkills.length > 0 && <span className="badge">{filteredSkills.length}</span>}
@@ -690,6 +680,7 @@ function App() {
           </div>
         )}
       </section>
+      )}
 
       {/* Scan Result Modal */}
       {scanResult && (
@@ -748,6 +739,7 @@ function App() {
           onClose={() => setEditingSkill(null)}
         />
       )}
+
       {/* Skill market */}
       {activeTab === "market" && (
         <SkillMarketPanel
@@ -765,6 +757,7 @@ function App() {
 }
 
 export default App;
+
 
 
 

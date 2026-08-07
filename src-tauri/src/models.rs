@@ -173,6 +173,7 @@ pub struct Market {
     pub enabled: bool,
     pub last_indexed_at: Option<String>,
     pub last_checked_at: Option<String>,
+    pub last_commit_sha: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -217,6 +218,15 @@ pub struct MarketSyncResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteSkillInstalledResult {
     pub updated: i64,
+}
+
+/// A market whose remote repo has a new commit since the last index.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketCommitUpdate {
+    pub market_id: i64,
+    pub market_title: String,
+    pub last_commit_sha: Option<String>,
+    pub new_commit_sha: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

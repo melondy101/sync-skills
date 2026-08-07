@@ -170,6 +170,8 @@ pub fn run() {
             // Skill market
             commands::market::list_markets,
             commands::market::add_market,
+            commands::market::add_market_by_url,
+            commands::market::check_market_commits,
             commands::market::update_market,
             commands::market::delete_market,
             commands::market::sync_market_index,

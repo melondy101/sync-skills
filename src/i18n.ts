@@ -176,11 +176,14 @@ export const translations: Record<Lang, Record<string, string>> = {
     market: "市场",
     marketTab: "市场",
     remoteInstallsTab: "安装管理",
+    skillMarketTab: "技能市场",
+    defaultBranchAuto: "自动识别 main/master",
     skillsTab: "Skills",
     remoteUrl: "远程地址",
     ssotPath: "SSOT 路径",
     remoteInstalled: "已安装",
     remoteNotInstalled: "未安装",
+    installed: "已安装",
     scanAllRemote: "全部扫描",
     checkRemoteUpdates: "检查更新",
     remoteUpdateFound: "发现 {0} 个远程更新",
@@ -202,7 +205,17 @@ export const translations: Record<Lang, Record<string, string>> = {
     lastSynced: "最后同步",
     kindStandard: "standard",
     kindNonstandard: "nonstandard",
+    addMarketUrlRequired: "请填写市场链接",
+    addMarketUrlPlaceholder: "https://github.com/owner/repo 或 owner/repo",
+    addMarketUrlHint: "只需填写仓库链接，分支（main/master）由系统自动探测",
+    noNewCommits: "远端无新提交",
+    newCommitsFound: "发现 {0} 个市场有新提交",
     builtinMarketNotice: "内置市场不可删除，仅可停用/同步。",
+    provider: "来源",
+    enabled: "启用",
+    disabled: "已停用",
+    enable: "启用",
+    disable: "停用",
 
     // Toast messages
     failedLoadTools: "加载工具失败",
@@ -512,6 +525,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     ssotPath: "SSOT path",
     remoteInstalled: "Installed",
     remoteNotInstalled: "Not installed",
+    installed: "Installed",
     scanAllRemote: "Scan All",
     checkRemoteUpdates: "Check Updates",
     remoteUpdateFound: "{0} remote update(s) found",
@@ -533,7 +547,17 @@ export const translations: Record<Lang, Record<string, string>> = {
     lastSynced: "Last synced",
     kindStandard: "standard",
     kindNonstandard: "nonstandard",
+    addMarketUrlRequired: "Please enter a market URL",
+    addMarketUrlPlaceholder: "https://github.com/owner/repo or owner/repo",
+    addMarketUrlHint: "Only the repo link is needed; the branch (main/master) is auto-detected",
+    noNewCommits: "No new commits on remote",
+    newCommitsFound: "{0} market(s) have new commits",
     builtinMarketNotice: "Built-in markets cannot be deleted; disable or sync them.",
+    provider: "Provider",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    enable: "Enable",
+    disable: "Disable",
 
     // Toast messages
     failedLoadTools: "Failed to load tools",
@@ -673,4 +697,3 @@ export const translations: Record<Lang, Record<string, string>> = {
 export function makeT(lang: Lang): TranslateFn {
   return (key: string) => translations[lang]?.[key] || translations.en[key] || key;
 }
-
