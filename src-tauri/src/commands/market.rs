@@ -93,6 +93,7 @@ fn github_http_client() -> Result<reqwest::Client, String> {
 }
 
 fn http_proxy_from_settings(settings: &Settings) -> Option<reqwest::Proxy> {
+    #[cfg(windows)]
     if settings.use_system_proxy {
         return crate::commands::updater::http_system_proxy();
     }
