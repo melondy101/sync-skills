@@ -197,6 +197,11 @@ export default function SkillMarketPanel({
     try {
       const results = await api.scanAllRemoteRepositories();
       const total = results.reduce((sum, item) => sum + item.skills_found, 0);
+      const allErrors = results.reduce<string[]>((acc, item) => acc.concat(item.errors ?? []), []);
+      if (allErrors.length > 0) {
+        const shown = allErrors.slice(0, 3).join("; ");
+        addToast("error", `${t("scanErrors")}: ${shown}${allErrors.length > 3 ? " …" : ""}`);
+      }
       addToast("success", `${t("scanComplete")}: ${total}`);
       await loadRemoteSkills(selectedMarketFilter === "all" ? undefined : Number(selectedMarketFilter));
     } catch (e) {
@@ -420,7 +425,7 @@ export default function SkillMarketPanel({
                 <tbody>
                   {markets.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="empty-state">{t("noLogs")}</td>
+                      <td colSpan={7} className="empty-state">{t("marketEmpty")}</td>
                     </tr>
                   ) : (
                     markets.map((m) => {

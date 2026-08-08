@@ -52,6 +52,11 @@ pub fn run() {
         }
     }
 
+    // Seed built-in markets so the market tab is populated on first run.
+    if let Err(e) = crate::commands::market::seed_default_markets(db_state.as_ref()) {
+        log::error!("Failed to seed default markets: {}", e);
+    }
+
     // Per-skill lock manager: serializes sync/check operations on the same skill
     let lock_state: LockState = Arc::new(LockManager::new());
 

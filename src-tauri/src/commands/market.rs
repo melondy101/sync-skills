@@ -70,6 +70,27 @@ fn default_templates() -> Vec<MarketTemplate> { vec![
     },
 ] }
 
+/// Seed the built-in markets into the `markets` table on first run, so the
+/// market tab is populated and "scan all" / "check updates" have something to
+/// query. Idempotent: `upsert_market` resolves on the unique constraint
+/// (provider, owner, name, branch), so repeated runs never create duplicates.
+pub fn seed_default_markets(db: &Database) -> Result<(), String> {
+    for template in default_templates() {
+        let remote_url = format!(
+            "https://github.com/{}/{}/tree/{}",
+            template.owner, template.name, template.branch
+        );
+        db.upsert_market(
+            &template.provider,
+            &template.owner,
+            &template.name,
+            &template.branch,
+            &remote_url,
+        )?;
+    }
+    Ok(())
+}
+
 fn github_api_url(owner: &str, repo: &str, branch: &str, path: &str) -> String {
     format!(
         "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
