@@ -1222,27 +1222,75 @@ impl Database {
         }
     }
 
-    pub fn insert_market(&self, provider: &str, owner: &str, name: &str, branch: &str, remote_url: &str) -> Result<crate::models::Market, String> {
+    /// Look up a market by its natural key instead of by id.
+    ///
+    /// Legacy databases may contain market rows whose ids were computed with
+    /// an older hashing scheme, so after an ON CONFLICT upsert the stored id
+    /// can differ from the freshly computed one. Resolving by the unique
+    /// natural key works for both new and legacy rows.
+    pub fn get_market_by_key(&self, provider: &str, owner: &str, name: &str, branch: &str) -> Result<Option<crate::models::Market>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut stmt = conn
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at FROM markets WHERE provider = ?1 AND owner = ?2 AND name = ?3 AND branch = ?4")
+            .map_err(|e| format!("Prepare error: {}", e))?;
+        let result = stmt
+            .query_row(params![provider, owner, name, branch], |row| {
+                Ok(crate::models::Market {
+                    id: row.get(0)?,
+                    provider: row.get(1)?,
+                    owner: row.get(2)?,
+                    name: row.get(3)?,
+                    branch: row.get(4)?,
+                    enabled: row.get(5)?,
+                    last_indexed_at: row.get(6)?,
+                    last_checked_at: row.get(7)?,
+                    last_commit_sha: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
+            });
+        match result {
+            Ok(market) => Ok(Some(market)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(format!("Query error: {}", e)),
+        }
+    }
+
+    pub fn insert_market(&self, provider: &str, owner: &str, name: &str, branch: &str, remote_url: &str) -> Result<crate::models::Market, String> {
         let id = crate::hash::compute_id_hash(&format!("{}:{}:{}:{}", provider, owner, name, branch));
-        conn.execute(
-            "INSERT INTO markets (id, provider, owner, name, branch, remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, provider, owner, name, branch, remote_url],
-        )
-        .map_err(|e| format!("Failed to insert market: {}", e))?;
-        self.get_market(id).map(|m| m.unwrap())
+        {
+            let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+            conn.execute(
+                "INSERT INTO markets (id, provider, owner, name, branch, remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![id, provider, owner, name, branch, remote_url],
+            )
+            .map_err(|e| format!("Failed to insert market: {}", e))?;
+        }
+        // Lock must be released before the follow-up query, which acquires it
+        // again (std::sync::Mutex is not reentrant; nesting deadlocks).
+        // Resolve by natural key so legacy rows with older ids still match.
+        self.get_market_by_key(provider, owner, name, branch)?
+            .ok_or_else(|| "Market not found after insert".to_string())
     }
 
     pub fn upsert_market(&self, provider: &str, owner: &str, name: &str, branch: &str, remote_url: &str) -> Result<crate::models::Market, String> {
-        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let id = crate::hash::compute_id_hash(&format!("{}:{}:{}:{}", provider, owner, name, branch));
-        conn.execute(
-            "INSERT INTO markets (id, provider, owner, name, branch, remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT(provider, owner, name, branch) DO UPDATE SET remote_url=excluded.remote_url, updated_at=datetime('now')",
-            params![id, provider, owner, name, branch, remote_url],
-        )
-        .map_err(|e| format!("Failed to upsert market: {}", e))?;
-        self.get_market(id).map(|m| m.unwrap())
+        {
+            let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+            conn.execute(
+                "INSERT INTO markets (id, provider, owner, name, branch, remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(provider, owner, name, branch) DO UPDATE SET remote_url=excluded.remote_url, updated_at=datetime('now')",
+                params![id, provider, owner, name, branch, remote_url],
+            )
+            .map_err(|e| format!("Failed to upsert market: {}", e))?;
+        }
+        // Lock must be released before the follow-up query, which acquires it
+        // again (std::sync::Mutex is not reentrant; nesting deadlocks).
+        // Resolve by natural key: an ON CONFLICT update keeps the stored row's
+        // original id, which in legacy databases may differ from the freshly
+        // computed one.
+        self.get_market_by_key(provider, owner, name, branch)?
+            .ok_or_else(|| "Market not found after upsert".to_string())
     }
 
     pub fn update_market(&self, market_id: i64, enabled: bool, last_indexed_at: Option<&str>, last_checked_at: Option<&str>, last_commit_sha: Option<&str>) -> Result<(), String> {
