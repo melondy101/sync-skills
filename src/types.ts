@@ -1,8 +1,6 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { invoke } from "@tauri-apps/api/core";
-
 export interface Tool {
   id: number;
   name: string;
@@ -279,5 +277,3 @@ export interface MarketCommitUpdate {
   new_commit_sha: string;
 }
 
-export const syncRemoteInstallations = (projectId: number, marketId: number | null) =>
-  invoke<SyncResult>("sync_remote_installations", { projectId, marketId });
