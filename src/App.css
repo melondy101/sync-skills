@@ -13,8 +13,8 @@
   --card-hover: #f7f6f3;
 
   /* Warm amber accent + teal secondary */
-  --accent: #c47f1e;
-  --accent-dim: #a56a14;
+  --accent: #a56a14;
+  --accent-dim: #8f5a0f;
   --accent-glow: rgba(196, 127, 30, 0.1);
   --accent-glow-strong: rgba(196, 127, 30, 0.22);
   --teal: #1a9e8f;
@@ -31,7 +31,7 @@
   /* Text hierarchy */
   --text: #1a1a2e;
   --text-secondary: #555566;
-  --text-muted: #9999aa;
+  --text-muted: #6f6f80;
   --text-on-accent: #ffffff;
 
   /* Borders and inputs */
@@ -83,7 +83,7 @@
 
   --text: #e2e2ea;
   --text-secondary: #8e8ea0;
-  --text-muted: #55556a;
+  --text-muted: #7a7a8e;
   --text-on-accent: #08080c;
 
   --border: #1f1f2e;
@@ -124,7 +124,7 @@
 
     --text: #e2e2ea;
     --text-secondary: #8e8ea0;
-    --text-muted: #55556a;
+    --text-muted: #7a7a8e;
     --text-on-accent: #08080c;
 
     --border: #1f1f2e;
@@ -141,6 +141,11 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 body {
   font-family: var(--font-sans);
@@ -224,7 +229,7 @@ body::before {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .tab:hover {
@@ -268,7 +273,7 @@ body::before {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .project-btn:hover {
@@ -298,7 +303,7 @@ body::before {
   padding: 2px 6px;
   border-radius: 4px;
   line-height: 1;
-  transition: all 0.15s;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .project-edit:hover {
@@ -373,7 +378,7 @@ body::before {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -674,7 +679,7 @@ body::before {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 18px;
-  transition: all 0.25s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   position: relative;
   overflow: hidden;
 }
