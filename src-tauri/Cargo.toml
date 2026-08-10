@@ -28,7 +28,9 @@ log = "0.4"
 env_logger = "0.11"
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 # system-proxy: honor OS proxy settings (many users reach GitHub only via proxy)
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "system-proxy", "blocking"] }
+# rustls-tls-native-roots: trust the OS cert store, so locally-trusted CAs from
+# GitHub accelerators/MITM proxies (e.g. Watt Toolkit) don't break with UnknownIssuer
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "system-proxy", "blocking"] }
 chrono = "0.4.45"
 zip = "8.6.0"
 windows-sys = { version = "0.61.2", features = ["Win32_Web_InternetExplorer"] }
