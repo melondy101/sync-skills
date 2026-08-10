@@ -187,6 +187,7 @@ async fn scan_github_market(db: &Database, market: &Market) -> Result<MarketSync
         let mut remote_content_hash = String::new();
         let mut remote_core_hash = String::new();
         let mut has_skill_md = false;
+        let mut description: Option<String> = None;
 
         let files = fetch_github_json::<Vec<serde_json::Value>>(&api_url).await;
         match files {
@@ -203,6 +204,10 @@ async fn scan_github_market(db: &Database, market: &Market) -> Result<MarketSync
                             fs::write(skill_dir.join("SKILL.md"), bytes).map_err(|e| e.to_string())?;
                             remote_content_hash = crate::hash::compute_content_hash(&skill_dir).unwrap_or_default();
                             remote_core_hash = crate::hash::compute_core_hash(&skill_dir.join("SKILL.md")).unwrap_or_default();
+                            let skill_md_content = fs::read_to_string(skill_dir.join("SKILL.md")).unwrap_or_default();
+                            description = crate::scanner::parse_front_matter(&skill_md_content, &skill_dir)
+                                .ok()
+                                .and_then(|(_, desc)| desc);
                         }
                         }
                     }
@@ -219,14 +224,14 @@ async fn scan_github_market(db: &Database, market: &Market) -> Result<MarketSync
             continue;
         }
 
-        updates.push((skill_name.to_string(), remote_url, ssot_path_str, remote_content_hash, remote_core_hash));
+        updates.push((skill_name.to_string(), remote_url, ssot_path_str, remote_content_hash, remote_core_hash, description.clone()));
         skills_found += 1;
     }
 
     let conn = db.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
     conn.execute_batch("BEGIN").ok();
 
-    for (skill_name, remote_url, ssot_path_str, remote_content_hash, remote_core_hash) in updates {
+    for (skill_name, remote_url, ssot_path_str, remote_content_hash, remote_core_hash, description) in updates {
         let existing: Option<(i64, String, String)> = conn
             .query_row(
                 "SELECT id, remote_content_hash, remote_core_hash FROM remote_skills WHERE market_id = ?1 AND skill_name = ?2",
@@ -241,8 +246,8 @@ async fn scan_github_market(db: &Database, market: &Market) -> Result<MarketSync
                     skills_updated += 1;
                 }
                 conn.execute(
-                    "UPDATE remote_skills SET remote_url = ?1, ssot_path = ?2, remote_content_hash = ?3, remote_core_hash = ?4, updated_at = datetime('now') WHERE id = ?5",
-                    params![remote_url, ssot_path_str, remote_content_hash, remote_core_hash, id],
+                    "UPDATE remote_skills SET remote_url = ?1, ssot_path = ?2, remote_content_hash = ?3, remote_core_hash = ?4, description = ?5, updated_at = datetime('now') WHERE id = ?6",
+                    params![remote_url, ssot_path_str, remote_content_hash, remote_core_hash, description, id],
                 ).map_err(|e| format!("Failed to update remote skill: {}", e))?;
             }
             None => {
@@ -250,7 +255,7 @@ async fn scan_github_market(db: &Database, market: &Market) -> Result<MarketSync
                 let id = crate::hash::compute_id_hash(&format!("{}:{}", market.id, skill_name));
                 conn.execute(
                     "INSERT INTO remote_skills (id, market_id, skill_name, description, remote_url, ssot_path, remote_content_hash, remote_core_hash) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    params![id, market.id, skill_name, None::<String>, remote_url, ssot_path_str, remote_content_hash, remote_core_hash],
+                    params![id, market.id, skill_name, description, remote_url, ssot_path_str, remote_content_hash, remote_core_hash],
                 ).map_err(|e| format!("Failed to insert remote skill: {}", e))?;
             }
         }
