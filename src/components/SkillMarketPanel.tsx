@@ -4,6 +4,8 @@
 import { useEffect, useMemo, useState } from "react";
 import * as api from "../api";
 import InstallDialog from './InstallDialog';
+import MarketSourcesModal from './MarketSourcesModal';
+import RemoteUpdatesModal from './RemoteUpdatesModal';
 import type {
   Market,
   Project,
@@ -509,14 +511,40 @@ export default function SkillMarketPanel({
 
       {/* 市场源管理弹窗（任务 7 实现，先占位） */}
       {showSourcesModal && (
-        // TODO(任务7)
-        <div>MarketSourcesModal placeholder</div>
+        <MarketSourcesModal
+          t={t}
+          markets={markets}
+          loading={marketLoading}
+          skillCounts={remoteSkills}
+          onAddToggle={() => setShowAddMarket((v) => !v)}
+          showAdd={showAddMarket}
+          marketUrl={marketUrl}
+          setMarketUrl={setMarketUrl}
+          marketBranch={marketBranch}
+          setMarketBranch={setMarketBranch}
+          onAddByUrl={handleAddMarketByUrl}
+          onToggle={toggleMarket}
+          onDelete={deleteMarket}
+          onSyncIndex={syncMarketIndex}
+          builtinIds={BUILTIN_MARKET_IDS}
+          builtinLabels={BUILTIN_LABELS}
+          onClose={() => setShowSourcesModal(false)}
+        />
       )}
 
       {/* 更新弹窗（任务 7 实现） */}
       {showUpdatesModal && updates && updates.length > 0 && (
-        // TODO(任务7)
-        <div>RemoteUpdatesModal placeholder</div>
+        <RemoteUpdatesModal
+          t={t}
+          updates={updates}
+          marketTitles={marketTitles}
+          loading={installLoading}
+          onUpdateOne={(skillName, marketId) => {
+            const skill = remoteSkills.find((s) => s.market_id === marketId && s.skill_name === skillName);
+            if (skill) updateOne(skill);
+          }}
+          onClose={() => setShowUpdatesModal(false)}
+        />
       )}
     </section>
   );
