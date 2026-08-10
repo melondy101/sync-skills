@@ -1024,29 +1024,6 @@ body::before {
   transition: width 0.2s ease;
 }
 
-/* Collapsible section header (tool paths) */
-.section-title-toggle {
-  cursor: pointer;
-  user-select: none;
-  gap: 6px;
-}
-
-.section-title-toggle:hover {
-  color: var(--text-primary);
-}
-
-.collapse-chevron {
-  font-size: 12px;
-  width: 14px;
-  display: inline-block;
-  color: var(--text-muted);
-}
-
-.collapsed-count {
-  font-weight: 400;
-  color: var(--text-muted);
-  text-transform: none;
-  letter-spacing: normal;
 }
 
 .settings-row {
