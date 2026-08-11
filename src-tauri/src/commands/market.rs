@@ -140,11 +140,23 @@ async fn fetch_github_bytes(url: &str) -> Result<Vec<u8>, String> {
         .header("Accept", "application/vnd.github+json")
         .send()
         .await
-        .map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!("GitHub HTTP {}", response.status()));
+        .map_err(|e| format!("Network error: {}", e))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("HTTP {} ({})", status.as_u16(), describe_github_status(status.as_u16())));
     }
     response.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string())
+}
+
+fn describe_github_status(status: u16) -> &'static str {
+    match status {
+        404 => "not found or private",
+        403 => "rate-limited or private",
+        401 => "unauthorized",
+        429 => "rate-limited",
+        500..=599 => "server error",
+        _ => "request failed",
+    }
 }
 
 async fn fetch_github_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
@@ -361,18 +373,30 @@ fn parse_github_market_input(raw: &str) -> Result<(String, String, Option<String
     Ok((owner, name, None))
 }
 
-/// Resolve the default branch for a GitHub repo: try `main`, fall back to `master`.
-async fn resolve_github_branch(owner: &str, repo: &str) -> String {
+/// Resolve the default branch for a GitHub repo. Verifies the repo is reachable
+/// (404/403/etc. surface as errors instead of silently falling back to "main"),
+/// prefers the repo's declared `default_branch`, and only falls back to the
+/// main/master probe when the repo metadata is unavailable.
+async fn resolve_github_branch(owner: &str, repo: &str) -> Result<String, String> {
+    let repo_url = format!("https://api.github.com/repos/{}/{}", owner, repo);
+    if let Ok(bytes) = fetch_github_bytes(&repo_url).await {
+        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            if let Some(default_branch) = json.get("default_branch").and_then(|v| v.as_str()) {
+                if !default_branch.is_empty() {
+                    return Ok(default_branch.to_string());
+                }
+            }
+        }
+    }
     let main_url = format!("https://api.github.com/repos/{}/{}/branches/main", owner, repo);
     if fetch_github_bytes(&main_url).await.is_ok() {
-        return "main".to_string();
+        return Ok("main".to_string());
     }
     let master_url = format!("https://api.github.com/repos/{}/{}/branches/master", owner, repo);
     if fetch_github_bytes(&master_url).await.is_ok() {
-        return "master".to_string();
+        return Ok("master".to_string());
     }
-    // Could not confirm either branch via the API — default to main.
-    "main".to_string()
+    Err(format!("Cannot determine default branch for {}/{}", owner, repo))
 }
 
 #[tauri::command]
@@ -381,7 +405,7 @@ pub async fn add_market_by_url(db: State<'_, DbState>, url: String, branch: Opti
     let resolved_branch = match (branch, branch_hint) {
         (Some(b), _) => b,
         (None, Some(b)) => b,
-        (None, None) => resolve_github_branch(&owner, &name).await,
+        (None, None) => resolve_github_branch(&owner, &name).await?,
     };
     let remote_url = format!("https://github.com/{}/{}/tree/{}", owner, name, resolved_branch);
     let market = db.upsert_market("github", &owner, &name, &resolved_branch, &remote_url)?;
