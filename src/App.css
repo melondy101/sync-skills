@@ -1023,9 +1023,6 @@ body::before {
   background: var(--accent, #3b82f6);
   transition: width 0.2s ease;
 }
-
-}
-
 .settings-row {
   display: flex;
   gap: 16px;
