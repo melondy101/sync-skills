@@ -2275,23 +2275,49 @@ body::before {
 .btn-press:active:not(:disabled) { transform: scale(0.96); }
 
 /* 溢出菜单（原生 details 实现，零 JS） */
-.menu { position: relative; }
-.menu summary {
+.menu { position: relative; display: inline-flex; }
+.menu > summary {
   list-style: none;
   cursor: pointer;
   padding: 5px 12px;
+  font-family: var(--font-sans);
   font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
 }
-.menu summary::-webkit-details-marker { display: none; }
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary::marker { content: ""; }
+.menu > summary::after {
+  content: "▾";
+  font-size: 9px;
+  opacity: 0.65;
+  transition: transform 0.15s ease;
+}
+.menu > summary:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.menu[open] > summary {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.menu[open] > summary::after { transform: rotate(180deg); }
 .menu-panel {
   position: absolute;
   right: 0;
-  top: calc(100% + 4px);
-  min-width: 200px;
+  top: calc(100% + 6px);
+  min-width: 220px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -2304,16 +2330,19 @@ body::before {
 }
 .menu-item {
   text-align: start;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: 13px;
+  line-height: 1.4;
   cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
-.menu-item:hover { background: var(--surface-hover); color: var(--text); }
+.menu-item:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* 市场源管理弹窗行 */
 .source-row {
