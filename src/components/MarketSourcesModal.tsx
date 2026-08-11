@@ -135,7 +135,7 @@ export default function MarketSourcesModal({
                       </div>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div className="source-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-small btn-secondary" onClick={() => onSyncIndex(market)} disabled={loading || !market.enabled}>
                       {t("syncMarketIndex")}
                     </button>

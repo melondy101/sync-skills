@@ -2347,12 +2347,13 @@ body::before {
 /* 市场源管理弹窗行 */
 .source-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
 .source-row:last-child { border-bottom: none; }
+.source-row .source-actions { padding-top: 2px; }
 .source-info { flex: 1; min-width: 0; }
 .source-name { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
 .source-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
