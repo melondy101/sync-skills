@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SkillMarketPanel from "./SkillMarketPanel";
 import * as api from "../api";
@@ -54,6 +54,13 @@ function makeT(key: string) {
     addMarketUrlPlaceholder: "https://github.com/owner/repo or owner/repo",
     noSkillsIndexed: "No skills indexed yet for this market. Use “Sync Index”.",
     noMatch: "No matching skills found",
+    cancel: "cancel",
+    confirmMarkAllInstalledTitle: "Mark all as installed?",
+    confirmMarkAllInstalledMessage: "Every skill in the current market filter will be flagged as installed.",
+    confirmUnmarkAllInstalledTitle: "Unmark all as installed?",
+    confirmUnmarkAllInstalledMessage: "Every skill in the current market filter will be flagged as not installed.",
+    confirmScopeAll: "Scope: all markets",
+    confirmScopeMarket: "Scope: {0} only",
   };
   return map[key] ?? key;
 }
@@ -242,10 +249,39 @@ describe("SkillMarketPanel", () => {
     const user = userEvent.setup();
     await user.click(screen.getByText("Batch"));
     await user.click(screen.getByRole("button", { name: "Mark all installed" }));
+    // New: confirmation dialog must appear before the destructive action runs.
+    const dialog1 = await screen.findByRole("alertdialog");
+    await user.click(within(dialog1).getByRole("button", { name: "Mark all installed" }));
     await waitFor(() => expect(api.setAllRemoteSkillsInstalled).toHaveBeenCalledWith(0, null, true));
 
     await user.click(screen.getByText("Batch"));
     await user.click(screen.getByRole("button", { name: "Unmark all installed" }));
+    const dialog2 = await screen.findByRole("alertdialog");
+    await user.click(within(dialog2).getByRole("button", { name: "Unmark all installed" }));
     await waitFor(() => expect(api.setAllRemoteSkillsInstalled).toHaveBeenCalledWith(0, null, false));
+  });
+
+  it("cancels the destructive batch action when the user dismisses the confirm dialog", async () => {
+    render(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Batch"));
+    await user.click(screen.getByRole("button", { name: "Mark all installed" }));
+
+    // Dialog opens. Cancel and assert the API was never invoked.
+    await screen.findByRole("alertdialog");
+    await user.click(screen.getByRole("button", { name: "cancel" }));
+
+    expect(api.setAllRemoteSkillsInstalled).not.toHaveBeenCalled();
   });
 });

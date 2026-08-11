@@ -6,6 +6,7 @@ import * as api from "../api";
 import InstallDialog from './InstallDialog';
 import MarketSourcesModal from './MarketSourcesModal';
 import RemoteUpdatesModal from './RemoteUpdatesModal';
+import ConfirmDialog, { type ConfirmVariant } from './ConfirmDialog';
 import type {
   Market,
   Project,
@@ -70,6 +71,16 @@ export default function SkillMarketPanel({
   const [installedOnly, setInstalledOnly] = useState(false);
   const [marketSyncErrors, setMarketSyncErrors] = useState<Record<number, string[]>>({});
 
+  // Pending destructive action that needs user confirmation. Run on confirm.
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    detail?: string;
+    confirmText: string;
+    confirmVariant: ConfirmVariant;
+    run: () => Promise<void>;
+  } | null>(null);
+
   const selectedProjectPath = projectPaths[installProjectId] ?? "";
 
   const resolvedToolPaths = useMemo(() => {
@@ -112,6 +123,8 @@ export default function SkillMarketPanel({
     void deleteMarket;
     void syncMarketIndex;
     void setMarketSyncErrors;
+    void requestMarkAllRemoteSkillsInstalled;
+    void setConfirmDialog;
   }, []);
 
   async function loadMarkets() {
@@ -330,12 +343,34 @@ export default function SkillMarketPanel({
 
   async function markAllRemoteSkillsInstalled(active: boolean) {
     const marketId = selectedMarketFilter === "all" ? null : Number(selectedMarketFilter);
-    const result = await api.setAllRemoteSkillsInstalled(installProjectId, marketId, active);
-    addToast("success", `${t(active ? "markAllInstalled" : "unmarkAllInstalled")}: ${result.updated}`);
-    await loadRemoteSkills(marketId == null ? undefined : Number(marketId));
-    onRemoteInstallationsChanged(
-      await api.listRemoteInstallations(installProjectId, marketId),
-    );
+    setInstallLoading(true);
+    try {
+      const result = await api.setAllRemoteSkillsInstalled(installProjectId, marketId, active);
+      addToast("success", `${t(active ? "markAllInstalled" : "unmarkAllInstalled")}: ${result.updated}`);
+      await loadRemoteSkills(marketId == null ? undefined : Number(marketId));
+      onRemoteInstallationsChanged(
+        await api.listRemoteInstallations(installProjectId, marketId),
+      );
+    } catch (e) {
+      addToast("error", `${t(active ? "markAllInstalled" : "unmarkAllInstalled")} failed: ${e}`);
+    } finally {
+      setInstallLoading(false);
+    }
+  }
+
+  function requestMarkAllRemoteSkillsInstalled(active: boolean) {
+    const filteredMarket = markets.find((m) => String(m.id) === selectedMarketFilter);
+    const scopeLine = selectedMarketFilter === "all" || !filteredMarket
+      ? t("confirmScopeAll")
+      : t("confirmScopeMarket").replace("{0}", marketTitle(filteredMarket));
+    setConfirmDialog({
+      title: t(active ? "confirmMarkAllInstalledTitle" : "confirmUnmarkAllInstalledTitle"),
+      message: t(active ? "confirmMarkAllInstalledMessage" : "confirmUnmarkAllInstalledMessage"),
+      detail: scopeLine,
+      confirmText: t(active ? "markAllInstalled" : "unmarkAllInstalled"),
+      confirmVariant: "danger",
+      run: () => markAllRemoteSkillsInstalled(active),
+    });
   }
 
   const BUILTIN_LABELS: Record<string, string> = {
@@ -446,10 +481,10 @@ export default function SkillMarketPanel({
             <button className="menu-item" onClick={syncAllInstalledRemoteSkills} disabled={installLoading}>
               {t("syncAllActive")}
             </button>
-            <button className="menu-item" onClick={() => markAllRemoteSkillsInstalled(true)} disabled={installLoading}>
+            <button className="menu-item" onClick={() => requestMarkAllRemoteSkillsInstalled(true)} disabled={installLoading}>
               {t("markAllInstalled")}
             </button>
-            <button className="menu-item" onClick={() => markAllRemoteSkillsInstalled(false)} disabled={installLoading}>
+            <button className="menu-item" onClick={() => requestMarkAllRemoteSkillsInstalled(false)} disabled={installLoading}>
               {t("unmarkAllInstalled")}
             </button>
           </div>
@@ -582,6 +617,25 @@ export default function SkillMarketPanel({
             if (skill) updateOne(skill);
           }}
           onClose={() => setShowUpdatesModal(false)}
+        />
+      )}
+
+      {/* 批量操作里的破坏性动作二次确认 */}
+      {confirmDialog && (
+        <ConfirmDialog
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          detail={confirmDialog.detail}
+          confirmText={confirmDialog.confirmText}
+          cancelText={t("cancel")}
+          confirmVariant={confirmDialog.confirmVariant}
+          loading={installLoading}
+          onConfirm={async () => {
+            const run = confirmDialog.run;
+            setConfirmDialog(null);
+            await run();
+          }}
+          onCancel={() => setConfirmDialog(null)}
         />
       )}
     </section>

@@ -437,6 +437,19 @@ body::before {
   background: var(--error-dim);
 }
 
+/* Filled danger button — used for confirm-on-destructive-action prompts.
+   Distinct from .btn-danger (ghost) so the destructive choice is visually
+   weightier than the cancel button without screaming for every delete icon. */
+.btn-danger-filled {
+  background: var(--error);
+  color: #fff;
+  border-color: var(--error);
+}
+.btn-danger-filled:hover:not(:disabled) {
+  background: var(--error);
+  filter: brightness(1.12);
+}
+
 /* ==================== Tool List ==================== */
 
 .tool-list {
