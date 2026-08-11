@@ -28,6 +28,8 @@ beforeEach(() => {
   vi.mocked(api.setAllRemoteSkillsInstalled).mockResolvedValue({ updated: 2 });
   vi.mocked(api.addMarketByUrl).mockResolvedValue({ id: 3, provider: "github", owner: "carol", name: "gamma", branch: "main", enabled: true, last_indexed_at: null, last_checked_at: null, last_commit_sha: null, created_at: "", updated_at: "" });
   vi.mocked(api.syncMarketIndex).mockResolvedValue({ market_id: 1, skills_found: 0, skills_new: 0, skills_updated: 0, errors: [] });
+  vi.mocked(api.deleteMarket).mockResolvedValue(undefined);
+  vi.mocked(api.syncRemoteInstallationsToTools).mockResolvedValue({ skill_id: 0, skill_name: "", synced_to: 0, errors: [] });
 });
 
 function makeT(key: string) {
@@ -55,12 +57,18 @@ function makeT(key: string) {
     noSkillsIndexed: "No skills indexed yet for this market. Use “Sync Index”.",
     noMatch: "No matching skills found",
     cancel: "cancel",
+    deleteMarket: "Delete Market",
     confirmMarkAllInstalledTitle: "Mark all as installed?",
     confirmMarkAllInstalledMessage: "Every skill in the current market filter will be flagged as installed.",
     confirmUnmarkAllInstalledTitle: "Unmark all as installed?",
     confirmUnmarkAllInstalledMessage: "Every skill in the current market filter will be flagged as not installed.",
     confirmScopeAll: "Scope: all markets",
     confirmScopeMarket: "Scope: {0} only",
+    confirmDeleteMarketTitle: "Delete this market?",
+    confirmDeleteMarketMessage: "All skills indexed from this market will be removed.",
+    confirmSyncAllTitle: "Sync all installed skills?",
+    confirmSyncAllMessage: "Every installed skill will be copied or symlinked to {0}.",
+    skillsCount: "{0} skills",
   };
   return map[key] ?? key;
 }
@@ -283,5 +291,68 @@ describe("SkillMarketPanel", () => {
     await user.click(screen.getByRole("button", { name: "cancel" }));
 
     expect(api.setAllRemoteSkillsInstalled).not.toHaveBeenCalled();
+  });
+
+  it("confirms before deleting a market from the Sources modal", async () => {
+    render(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Sources" }));
+
+    // Two non-builtin markets are rendered → two delete buttons. Click the first.
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete Market" });
+    await user.click(deleteButtons[0]);
+
+    // Dialog appears; cancel path keeps the API silent.
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: "cancel" }));
+    expect(api.deleteMarket).not.toHaveBeenCalled();
+
+    // Re-open and confirm → API gets called.
+    const deleteButtons2 = screen.getAllByRole("button", { name: "Delete Market" });
+    await user.click(deleteButtons2[0]);
+    const dialog2 = await screen.findByRole("alertdialog");
+    await user.click(within(dialog2).getByRole("button", { name: "Delete Market" }));
+    await waitFor(() => expect(api.deleteMarket).toHaveBeenCalledWith(1));
+  });
+
+  it("confirms before running Sync All Installed", async () => {
+    render(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[{ id: 1, name: "tool", global_path: "/tmp", project_rel_path: "", globalPath: "/tmp", projectRelPath: "", created_at: "", updated_at: "" }]}
+        onRemoteInstallationsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Batch"));
+    await user.click(screen.getByRole("button", { name: "Sync All Active" }));
+
+    // Cancel first → API silent.
+    const dialog1 = await screen.findByRole("alertdialog");
+    await user.click(within(dialog1).getByRole("button", { name: "cancel" }));
+    expect(api.syncRemoteInstallationsToTools).not.toHaveBeenCalled();
+
+    // Re-open and confirm.
+    await user.click(screen.getByText("Batch"));
+    await user.click(screen.getByRole("button", { name: "Sync All Active" }));
+    const dialog2 = await screen.findByRole("alertdialog");
+    await user.click(within(dialog2).getByRole("button", { name: "Sync All Active" }));
+    await waitFor(() => expect(api.syncRemoteInstallationsToTools).toHaveBeenCalled());
   });
 });

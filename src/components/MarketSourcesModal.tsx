@@ -18,7 +18,7 @@ type Props = {
   setMarketBranch: (value: string) => void;
   onAddByUrl: () => void;
   onToggle: (market: Market) => void;
-  onDelete: (market: Market) => void;
+  onDeleteRequest: (market: Market) => void;
   onSyncIndex: (market: Market) => void;
   builtinIds: Set<string>;
   builtinLabels: Record<string, string>;
@@ -50,7 +50,7 @@ export default function MarketSourcesModal({
   setMarketBranch,
   onAddByUrl,
   onToggle,
-  onDelete,
+  onDeleteRequest,
   onSyncIndex,
   builtinIds,
   builtinLabels,
@@ -143,7 +143,7 @@ export default function MarketSourcesModal({
                       {market.enabled ? t("disable") : t("enable")}
                     </button>
                     {!isBuiltin && (
-                      <button className="btn btn-small btn-danger" onClick={() => onDelete(market)} disabled={loading}>
+                      <button className="btn btn-small btn-danger" onClick={() => onDeleteRequest(market)} disabled={loading}>
                         {t("deleteMarket")}
                       </button>
                     )}

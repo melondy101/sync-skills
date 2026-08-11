@@ -124,6 +124,8 @@ export default function SkillMarketPanel({
     void syncMarketIndex;
     void setMarketSyncErrors;
     void requestMarkAllRemoteSkillsInstalled;
+    void requestDeleteMarket;
+    void requestSyncAllInstalledRemoteSkills;
     void setConfirmDialog;
   }, []);
 
@@ -341,6 +343,33 @@ export default function SkillMarketPanel({
     }
   }
 
+  function requestSyncAllInstalledRemoteSkills() {
+    const tool = tools.find((item) => item.globalPath === selectedToolPath);
+    const target = tool?.name ?? selectedToolPath;
+    setConfirmDialog({
+      title: t("confirmSyncAllTitle"),
+      message: t("confirmSyncAllMessage").replace("{0}", target),
+      confirmText: t("syncAllActive"),
+      confirmVariant: "primary",
+      run: () => syncAllInstalledRemoteSkills(),
+    });
+  }
+
+  function requestDeleteMarket(market: Market) {
+    const skillCount = remoteSkills.filter((s) => s.market_id === market.id).length;
+    const detail = skillCount > 0
+      ? `${market.owner}/${market.name} · ${market.branch} · ${t("skillsCount").replace("{0}", String(skillCount))}`
+      : `${market.owner}/${market.name} · ${market.branch}`;
+    setConfirmDialog({
+      title: t("confirmDeleteMarketTitle"),
+      message: t("confirmDeleteMarketMessage"),
+      detail,
+      confirmText: t("deleteMarket"),
+      confirmVariant: "danger",
+      run: () => deleteMarket(market),
+    });
+  }
+
   async function markAllRemoteSkillsInstalled(active: boolean) {
     const marketId = selectedMarketFilter === "all" ? null : Number(selectedMarketFilter);
     setInstallLoading(true);
@@ -478,7 +507,7 @@ export default function SkillMarketPanel({
             <button className="menu-item" onClick={scanAllRemoteRepositories} disabled={remoteScanLoading}>
               {remoteScanLoading ? t("scanning") : t("reindexAllMarkets")}
             </button>
-            <button className="menu-item" onClick={syncAllInstalledRemoteSkills} disabled={installLoading}>
+            <button className="menu-item" onClick={requestSyncAllInstalledRemoteSkills} disabled={installLoading}>
               {t("syncAllActive")}
             </button>
             <button className="menu-item" onClick={() => requestMarkAllRemoteSkillsInstalled(true)} disabled={installLoading}>
@@ -597,7 +626,7 @@ export default function SkillMarketPanel({
           setMarketBranch={setMarketBranch}
           onAddByUrl={handleAddMarketByUrl}
           onToggle={toggleMarket}
-          onDelete={deleteMarket}
+          onDeleteRequest={requestDeleteMarket}
           onSyncIndex={syncMarketIndex}
           builtinIds={BUILTIN_MARKET_IDS}
           builtinLabels={BUILTIN_LABELS}
