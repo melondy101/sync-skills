@@ -27,6 +27,7 @@ import { OnboardingWizard } from "./components/OnboardingWizard";
 import { LintModal } from "./components/LintModal";
 import { SkillEditorModal } from "./components/SkillEditorModal";
 import SkillMarketPanel from "./components/SkillMarketPanel";
+import { ConfirmProvider } from "./components/ConfirmProvider";
 
 import { SkillListRow } from "./components/SkillListRow";
 
@@ -409,6 +410,7 @@ function App() {
 
   return (
     <main className="container">
+      <ConfirmProvider>
       <ToastContainer toasts={toasts} />
 
       {/* App header */}
@@ -752,6 +754,7 @@ function App() {
           defaultProjectId={installProjectId}
         />
       )}
+      </ConfirmProvider>
     </main>
   );
 }

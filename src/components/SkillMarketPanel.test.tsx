@@ -5,9 +5,27 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SkillMarketPanel from "./SkillMarketPanel";
+import { ConfirmProvider } from "./ConfirmProvider";
 import * as api from "../api";
 
 vi.mock("../api");
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
+}));
+
+const listenCallbacks: Record<string, (event: { payload: unknown }) => void> = {};
+const listenMock = vi.mocked((await import("@tauri-apps/api/event")).listen);
+listenMock.mockImplementation(((event: string, callback: (event: { payload: unknown }) => void) => {
+  listenCallbacks[event] = callback;
+  return Promise.resolve(() => {
+    delete listenCallbacks[event];
+  });
+}) as never);
+
+function renderWithProviders(ui: React.ReactElement) {
+  return render(<ConfirmProvider>{ui}</ConfirmProvider>);
+}
 
 const markets = [
   { id: 1, provider: "github", owner: "alice", name: "alpha-market", branch: "main", enabled: true, last_indexed_at: null, last_checked_at: null, last_commit_sha: null, created_at: "", updated_at: "" },
@@ -75,7 +93,7 @@ function makeT(key: string) {
 
 describe("SkillMarketPanel", () => {
   it("shows the redesigned market toolbar, chips, and empty state", async () => {
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -109,7 +127,7 @@ describe("SkillMarketPanel", () => {
       errors: [],
     });
 
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -143,7 +161,7 @@ describe("SkillMarketPanel", () => {
       errors: [],
     });
 
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -173,7 +191,7 @@ describe("SkillMarketPanel", () => {
       errors: ["missing SKILL.md"],
     });
 
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -198,7 +216,7 @@ describe("SkillMarketPanel", () => {
   });
 
   it("check updates does a lightweight commit check first", async () => {
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -221,7 +239,7 @@ describe("SkillMarketPanel", () => {
   });
 
   it("filters skills by the selected market chip", async () => {
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -242,7 +260,7 @@ describe("SkillMarketPanel", () => {
   });
 
   it("batch marks / unmarks all remote skills installed", async () => {
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -270,7 +288,7 @@ describe("SkillMarketPanel", () => {
   });
 
   it("cancels the destructive batch action when the user dismisses the confirm dialog", async () => {
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -294,7 +312,7 @@ describe("SkillMarketPanel", () => {
   });
 
   it("confirms before deleting a market from the Sources modal", async () => {
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -327,7 +345,7 @@ describe("SkillMarketPanel", () => {
   });
 
   it("confirms before running Sync All Installed", async () => {
-    render(
+    renderWithProviders(
       <SkillMarketPanel
         projects={[]}
         projectPaths={{}}
@@ -354,5 +372,49 @@ describe("SkillMarketPanel", () => {
     const dialog2 = await screen.findByRole("alertdialog");
     await user.click(within(dialog2).getByRole("button", { name: "Sync All Active" }));
     await waitFor(() => expect(api.syncRemoteInstallationsToTools).toHaveBeenCalled());
+  });
+
+  it("shows progress bar updates during sync-all via market:sync-progress events", async () => {
+    let resolveSync: () => void = () => {};
+    vi.mocked(api.syncRemoteInstallationsToTools).mockImplementation(
+      () => new Promise<{ skill_id: number; skill_name: string; synced_to: number; errors: string[] }>((resolve) => {
+        resolveSync = () => resolve({ skill_id: 0, skill_name: "", synced_to: 3, errors: [] });
+      }),
+    );
+
+    renderWithProviders(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[{ id: 1, name: "tool", global_path: "/tmp", project_rel_path: "", globalPath: "/tmp", projectRelPath: "", created_at: "", updated_at: "" }]}
+        onRemoteInstallationsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Batch"));
+    await user.click(screen.getByRole("button", { name: "Sync All Active" }));
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: "Sync All Active" }));
+
+    // Wait for the listener to be registered, then push a progress event.
+    await waitFor(() => expect(listenCallbacks["market:sync-progress"]).toBeDefined());
+    listenCallbacks["market:sync-progress"]?.({ payload: { completed: 1, total: 3, current: "alpha" } });
+    await waitFor(() => {
+      const dialog = screen.getByRole("alertdialog");
+      expect(within(dialog).getByText("1 / 3")).toBeInTheDocument();
+      // The progress label contains 'alpha' but the chip 'alice/alpha-market'
+      // also matches. Scope to the progress-current span.
+      const progressCurrent = dialog.querySelector(".progress-current");
+      expect(progressCurrent).toBeTruthy();
+      expect(progressCurrent?.textContent).toContain("alpha");
+    });
+
+    // Complete the sync → dialog closes.
+    resolveSync();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
   });
 });

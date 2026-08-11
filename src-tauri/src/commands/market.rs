@@ -8,9 +8,17 @@ use crate::models::{Market, MarketCommitUpdate, MarketSyncResult, MarketTemplate
 use crate::settings::Settings;
 use crate::sync::{copy_directory, replace_directory, ssot_path, symlink_or_copy};
 use rusqlite::params;
+use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
+
+#[derive(Clone, Serialize)]
+struct SyncProgress {
+    completed: usize,
+    total: usize,
+    current: Option<String>,
+}
 
 fn default_templates() -> Vec<MarketTemplate> { vec![
     MarketTemplate {
@@ -608,12 +616,23 @@ pub async fn sync_remote_skill_to_tools(db: State<'_, DbState>, lock_state: Stat
 }
 
 #[tauri::command]
-pub async fn sync_remote_installations_to_tools(db: State<'_, DbState>, lock_state: State<'_, crate::LockState>, project_id: i64, market_id: Option<i64>, tool_path: String) -> Result<SyncResult, String> {
+pub async fn sync_remote_installations_to_tools(app: AppHandle, db: State<'_, DbState>, lock_state: State<'_, crate::LockState>, project_id: i64, market_id: Option<i64>, tool_path: String) -> Result<SyncResult, String> {
     let installations = db.list_remote_installations(project_id, market_id)?;
+    let total = installations.len();
+    let _ = app.emit(
+        "market:sync-progress",
+        SyncProgress { completed: 0, total, current: None },
+    );
+
     let mut synced_to = 0usize;
     let mut errors = Vec::new();
 
-    for installation in installations {
+    for (i, installation) in installations.iter().enumerate() {
+        let current = installation.skillName.clone();
+        let _ = app.emit(
+            "market:sync-progress",
+            SyncProgress { completed: i, total, current: Some(current.clone()) },
+        );
         match sync_remote_skill_to_tools(db.clone(), lock_state.clone(), installation.remoteSkillId, project_id, tool_path.clone()).await {
             Ok(result) => {
                 synced_to += result.synced_to;
@@ -621,6 +640,10 @@ pub async fn sync_remote_installations_to_tools(db: State<'_, DbState>, lock_sta
             }
             Err(error) => errors.push(error),
         }
+        let _ = app.emit(
+            "market:sync-progress",
+            SyncProgress { completed: i + 1, total, current: Some(current) },
+        );
     }
 
     Ok(SyncResult {

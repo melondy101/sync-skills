@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import * as api from "../api";
 import InstallDialog from './InstallDialog';
 import MarketSourcesModal from './MarketSourcesModal';
 import RemoteUpdatesModal from './RemoteUpdatesModal';
-import ConfirmDialog, { type ConfirmVariant } from './ConfirmDialog';
+import { useConfirm } from './ConfirmProvider';
 import type {
   Market,
   Project,
@@ -71,15 +72,7 @@ export default function SkillMarketPanel({
   const [installedOnly, setInstalledOnly] = useState(false);
   const [marketSyncErrors, setMarketSyncErrors] = useState<Record<number, string[]>>({});
 
-  // Pending destructive action that needs user confirmation. Run on confirm.
-  const [confirmDialog, setConfirmDialog] = useState<{
-    title: string;
-    message: string;
-    detail?: string;
-    confirmText: string;
-    confirmVariant: ConfirmVariant;
-    run: () => Promise<void>;
-  } | null>(null);
+  const { showConfirm, setProgress } = useConfirm();
 
   const selectedProjectPath = projectPaths[installProjectId] ?? "";
 
@@ -126,7 +119,6 @@ export default function SkillMarketPanel({
     void requestMarkAllRemoteSkillsInstalled;
     void requestDeleteMarket;
     void requestSyncAllInstalledRemoteSkills;
-    void setConfirmDialog;
   }, []);
 
   async function loadMarkets() {
@@ -326,33 +318,33 @@ export default function SkillMarketPanel({
     }
   }
 
-  async function syncAllInstalledRemoteSkills() {
-    setInstallLoading(true);
-    try {
-      const marketId = selectedMarketFilter === "all" ? null : Number(selectedMarketFilter);
-      const result = await api.syncRemoteInstallationsToTools(installProjectId, marketId, selectedToolPath);
-      if (result.errors.length > 0) {
-        addToast("error", result.errors.join(", "));
-      } else {
-        addToast("success", `${t("syncAllActive")}: ${result.synced_to}`);
-      }
-    } catch (e) {
-      addToast("error", `${t("syncAllFailed")}: ${e}`);
-    } finally {
-      setInstallLoading(false);
-    }
-  }
-
   function requestSyncAllInstalledRemoteSkills() {
     const tool = tools.find((item) => item.globalPath === selectedToolPath);
     const target = tool?.name ?? selectedToolPath;
-    setConfirmDialog({
+    showConfirm({
       title: t("confirmSyncAllTitle"),
       message: t("confirmSyncAllMessage").replace("{0}", target),
       confirmText: t("syncAllActive"),
+      cancelText: t("cancel"),
       confirmVariant: "primary",
-      run: () => syncAllInstalledRemoteSkills(),
+      onConfirm: () => runSyncAllInstalled(target),
     });
+  }
+
+  async function runSyncAllInstalled(_target: string) {
+    const marketId = selectedMarketFilter === "all" ? null : Number(selectedMarketFilter);
+    const unlisten = await listen<{ completed: number; total: number; current?: string }>(
+      "market:sync-progress",
+      (event) => setProgress(event.payload),
+    );
+    try {
+      await api.syncRemoteInstallationsToTools(installProjectId, marketId, selectedToolPath);
+    } catch (e) {
+      addToast("error", `${t("syncAllActive")} failed: ${e}`);
+    } finally {
+      setProgress(null);
+      unlisten();
+    }
   }
 
   function requestDeleteMarket(market: Market) {
@@ -360,13 +352,14 @@ export default function SkillMarketPanel({
     const detail = skillCount > 0
       ? `${market.owner}/${market.name} · ${market.branch} · ${t("skillsCount").replace("{0}", String(skillCount))}`
       : `${market.owner}/${market.name} · ${market.branch}`;
-    setConfirmDialog({
+    showConfirm({
       title: t("confirmDeleteMarketTitle"),
       message: t("confirmDeleteMarketMessage"),
       detail,
       confirmText: t("deleteMarket"),
+      cancelText: t("cancel"),
       confirmVariant: "danger",
-      run: () => deleteMarket(market),
+      onConfirm: () => deleteMarket(market),
     });
   }
 
@@ -392,13 +385,14 @@ export default function SkillMarketPanel({
     const scopeLine = selectedMarketFilter === "all" || !filteredMarket
       ? t("confirmScopeAll")
       : t("confirmScopeMarket").replace("{0}", marketTitle(filteredMarket));
-    setConfirmDialog({
+    showConfirm({
       title: t(active ? "confirmMarkAllInstalledTitle" : "confirmUnmarkAllInstalledTitle"),
       message: t(active ? "confirmMarkAllInstalledMessage" : "confirmUnmarkAllInstalledMessage"),
       detail: scopeLine,
       confirmText: t(active ? "markAllInstalled" : "unmarkAllInstalled"),
+      cancelText: t("cancel"),
       confirmVariant: "danger",
-      run: () => markAllRemoteSkillsInstalled(active),
+      onConfirm: () => markAllRemoteSkillsInstalled(active),
     });
   }
 
@@ -646,25 +640,6 @@ export default function SkillMarketPanel({
             if (skill) updateOne(skill);
           }}
           onClose={() => setShowUpdatesModal(false)}
-        />
-      )}
-
-      {/* 批量操作里的破坏性动作二次确认 */}
-      {confirmDialog && (
-        <ConfirmDialog
-          title={confirmDialog.title}
-          message={confirmDialog.message}
-          detail={confirmDialog.detail}
-          confirmText={confirmDialog.confirmText}
-          cancelText={t("cancel")}
-          confirmVariant={confirmDialog.confirmVariant}
-          loading={installLoading}
-          onConfirm={async () => {
-            const run = confirmDialog.run;
-            setConfirmDialog(null);
-            await run();
-          }}
-          onCancel={() => setConfirmDialog(null)}
         />
       )}
     </section>
