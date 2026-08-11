@@ -379,13 +379,23 @@ fn parse_github_market_input(raw: &str) -> Result<(String, String, Option<String
 /// main/master probe when the repo metadata is unavailable.
 async fn resolve_github_branch(owner: &str, repo: &str) -> Result<String, String> {
     let repo_url = format!("https://api.github.com/repos/{}/{}", owner, repo);
-    if let Ok(bytes) = fetch_github_bytes(&repo_url).await {
-        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-            if let Some(default_branch) = json.get("default_branch").and_then(|v| v.as_str()) {
-                if !default_branch.is_empty() {
-                    return Ok(default_branch.to_string());
+    match fetch_github_bytes(&repo_url).await {
+        Ok(bytes) => {
+            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                if let Some(default_branch) = json.get("default_branch").and_then(|v| v.as_str()) {
+                    if !default_branch.is_empty() {
+                        return Ok(default_branch.to_string());
+                    }
                 }
             }
+            // Repo metadata is reachable but no default_branch — fall through
+            // to main/master probe so non-standard repos still work.
+        }
+        Err(e) => {
+            // If we can't read the repo info, branches/main and branches/master
+            // will also fail (the same access controls apply). Skip the extra
+            // round-trips and surface the cause immediately.
+            return Err(format!("Cannot access {}/{}: {}", owner, repo, e));
         }
     }
     let main_url = format!("https://api.github.com/repos/{}/{}/branches/main", owner, repo);
@@ -396,7 +406,7 @@ async fn resolve_github_branch(owner: &str, repo: &str) -> Result<String, String
     if fetch_github_bytes(&master_url).await.is_ok() {
         return Ok("master".to_string());
     }
-    Err(format!("Cannot determine default branch for {}/{}", owner, repo))
+    Err(format!("Cannot find default branch for {}/{}", owner, repo))
 }
 
 #[tauri::command]
