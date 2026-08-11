@@ -68,6 +68,7 @@ export default function SkillMarketPanel({
   const [showSourcesModal, setShowSourcesModal] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [installedOnly, setInstalledOnly] = useState(false);
+  const [marketSyncErrors, setMarketSyncErrors] = useState<Record<number, string[]>>({});
 
   const selectedProjectPath = projectPaths[installProjectId] ?? "";
 
@@ -110,6 +111,7 @@ export default function SkillMarketPanel({
     void toggleMarket;
     void deleteMarket;
     void syncMarketIndex;
+    void setMarketSyncErrors;
   }, []);
 
   async function loadMarkets() {
@@ -139,11 +141,31 @@ export default function SkillMarketPanel({
     setMarketLoading(true);
     try {
       const market = await api.addMarketByUrl(url, branch || undefined);
-      addToast("success", `${t("addMarket")}: ${market.owner}/${market.name} (${market.branch})`);
+      addToast("success", `${t("addMarket")}: ${market.owner}/${market.name}`);
       setMarketUrl("");
       setMarketBranch("");
       setShowAddMarket(false);
       await loadMarkets();
+
+      // Auto-sync so the user immediately sees whether the repo is reachable
+      // and whether it actually contains skills (instead of leaving an empty
+      // record and making the user click "Sync Index" again).
+      try {
+        const result = await api.syncMarketIndex(market.id);
+        setMarketSyncErrors((prev) => ({ ...prev, [market.id]: result.errors }));
+        if (result.skills_found === 0 && result.errors.length === 0) {
+          addToast("info", `${market.owner}/${market.name}: ${t("repoNoSkills")}`);
+        } else if (result.errors.length > 0) {
+          const first = result.errors[0] ?? "";
+          addToast("error", `${market.owner}/${market.name}: ${t("repoSyncFailed").replace("{0}", first)}`);
+        } else {
+          addToast("success", `${market.owner}/${market.name}: ${result.skills_found} ${result.skills_found === 1 ? "skill" : "skills"}`);
+        }
+        await Promise.all([loadMarkets(), loadRemoteSkills(market.id)]);
+      } catch (e) {
+        setMarketSyncErrors((prev) => ({ ...prev, [market.id]: [`${e}`] }));
+        addToast("error", `${market.owner}/${market.name}: ${t("repoSyncFailed").replace("{0}", `${e}`)}`);
+      }
     } catch (e) {
       addToast("error", `${t("addMarket")} failed: ${e}`);
     } finally {
@@ -168,6 +190,12 @@ export default function SkillMarketPanel({
     try {
       await api.deleteMarket(market.id);
       addToast("success", `${t("deleteMarket")}: ${market.id}`);
+      setMarketSyncErrors((prev) => {
+        if (!(market.id in prev)) return prev;
+        const next = { ...prev };
+        delete next[market.id];
+        return next;
+      });
       await loadMarkets();
       if (selectedMarketFilter !== "all" && Number(selectedMarketFilter) === market.id) {
         setSelectedMarketFilter("all");
@@ -183,9 +211,18 @@ export default function SkillMarketPanel({
     setMarketLoading(true);
     try {
       const result = await api.syncMarketIndex(market.id);
-      addToast("success", `${t("syncMarketIndex")}: ${result.skills_found}`);
+      setMarketSyncErrors((prev) => ({ ...prev, [market.id]: result.errors }));
+      if (result.skills_found === 0 && result.errors.length === 0) {
+        addToast("info", `${market.owner}/${market.name}: ${t("repoNoSkills")}`);
+      } else if (result.errors.length > 0) {
+        const first = result.errors[0] ?? "";
+        addToast("error", `${market.owner}/${market.name}: ${t("repoSyncFailed").replace("{0}", first)}`);
+      } else {
+        addToast("success", `${t("syncMarketIndex")}: ${result.skills_found}`);
+      }
       await Promise.all([loadMarkets(), loadRemoteSkills(market.id)]);
     } catch (e) {
+      setMarketSyncErrors((prev) => ({ ...prev, [market.id]: [`${e}`] }));
       addToast("error", `${t("syncMarketIndex")} failed: ${e}`);
     } finally {
       setMarketLoading(false);
@@ -516,6 +553,7 @@ export default function SkillMarketPanel({
           markets={markets}
           loading={marketLoading}
           skillCounts={remoteSkills}
+          marketErrors={marketSyncErrors}
           onAddToggle={() => setShowAddMarket((v) => !v)}
           showAdd={showAddMarket}
           marketUrl={marketUrl}

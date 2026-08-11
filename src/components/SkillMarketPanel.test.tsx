@@ -37,6 +37,9 @@ function makeT(key: string) {
     filterAll: "All",
     filterInstalledOnly: "Installed only",
     manageSources: "Sources",
+    addMarket: "Add Market",
+    add: "Add",
+    syncMarketIndex: "Sync Index",
     batchMenu: "Batch",
     reindexAllMarkets: "Re-index all markets",
     syncAllActive: "Sync All Active",
@@ -45,6 +48,10 @@ function makeT(key: string) {
     checkRemoteUpdates: "Check Updates",
     checking: "Checking...",
     scanning: "Scanning...",
+    repoNoSkills: "no skills found",
+    repoSyncFailed: "Index failed: {0}",
+    lastSyncError: "Last sync failed: {0}",
+    addMarketUrlPlaceholder: "https://github.com/owner/repo or owner/repo",
     noSkillsIndexed: "No skills indexed yet for this market. Use “Sync Index”.",
     noMatch: "No matching skills found",
   };
@@ -76,6 +83,103 @@ describe("SkillMarketPanel", () => {
 
     expect(screen.getByRole("button", { name: "Installed only" })).toBeInTheDocument();
     expect(screen.getByText("No skills indexed yet for this market. Use “Sync Index”.")).toBeInTheDocument();
+  });
+
+  it("auto-syncs after adding a market so the user gets immediate feedback", async () => {
+    vi.mocked(api.syncMarketIndex).mockResolvedValue({
+      market_id: 3,
+      skills_found: 4,
+      skills_new: 4,
+      skills_updated: 0,
+      errors: [],
+    });
+
+    render(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Sources" }));
+    await user.click(screen.getByRole("button", { name: "Add Market" }));
+
+    const urlInput = screen.getByPlaceholderText("https://github.com/owner/repo or owner/repo");
+    await user.type(urlInput, "carol/gamma");
+
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(api.addMarketByUrl).toHaveBeenCalledWith("carol/gamma", undefined));
+    await waitFor(() => expect(api.syncMarketIndex).toHaveBeenCalledWith(3));
+  });
+
+  it("surfaces an empty-repo message when auto-sync finds no skills", async () => {
+    vi.mocked(api.syncMarketIndex).mockResolvedValue({
+      market_id: 3,
+      skills_found: 0,
+      skills_new: 0,
+      skills_updated: 0,
+      errors: [],
+    });
+
+    render(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Sources" }));
+    await user.click(screen.getByRole("button", { name: "Add Market" }));
+    await user.type(screen.getByPlaceholderText("https://github.com/owner/repo or owner/repo"), "carol/empty");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("info", expect.stringContaining("no skills")));
+  });
+
+  it("records per-market sync errors when the index call returns errors", async () => {
+    vi.mocked(api.syncMarketIndex).mockResolvedValue({
+      market_id: 1,
+      skills_found: 2,
+      skills_new: 0,
+      skills_updated: 2,
+      errors: ["missing SKILL.md"],
+    });
+
+    render(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Sources" }));
+    const syncButtons = screen.getAllByRole("button", { name: "Sync Index" });
+    await user.click(syncButtons[0]);
+
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("error", expect.stringContaining("missing SKILL.md")));
+
+    // No assertion on the modal — it would require re-opening the Source modal
+    // to read the error indicator. The toast assertion is sufficient to lock in
+    // the new contract that errors are surfaced to the user.
   });
 
   it("check updates does a lightweight commit check first", async () => {

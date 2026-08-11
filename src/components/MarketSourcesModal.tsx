@@ -9,6 +9,7 @@ type Props = {
   markets: Market[];
   loading: boolean;
   skillCounts: RemoteSkill[];
+  marketErrors: Record<number, string[]>;
   onAddToggle: () => void;
   showAdd: boolean;
   marketUrl: string;
@@ -40,6 +41,7 @@ export default function MarketSourcesModal({
   markets,
   loading,
   skillCounts,
+  marketErrors,
   onAddToggle,
   showAdd,
   marketUrl,
@@ -114,6 +116,8 @@ export default function MarketSourcesModal({
               const isBuiltin = builtinIds.has(String(market.id));
               const skillCount = skillsByMarket.get(market.id) ?? 0;
               const title = builtinLabels[String(market.id)] ?? `${market.owner}/${market.name}`;
+              const errors = marketErrors[market.id];
+              const firstError = errors && errors.length > 0 ? errors[0] : null;
               return (
                 <div key={market.id} className="source-row">
                   <div className="source-info">
@@ -124,6 +128,12 @@ export default function MarketSourcesModal({
                     <div className="source-meta">
                       {market.owner}/{market.name} · {market.branch} · {t("skillsCount").replace("{0}", String(skillCount))} · {t("indexedAt").replace("{0}", market.last_indexed_at ?? "-")}
                     </div>
+                    {firstError && (
+                      <div className="source-error" role="alert" title={errors.length > 1 ? errors.join("\n") : firstError}>
+                        {t("lastSyncError").replace("{0}", firstError)}
+                        {errors && errors.length > 1 && <span className="source-error-count"> (+{errors.length - 1})</span>}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button className="btn btn-small btn-secondary" onClick={() => onSyncIndex(market)} disabled={loading || !market.enabled}>
