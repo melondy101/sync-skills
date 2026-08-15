@@ -935,3 +935,83 @@ fn sync_invariant_lock_is_domain_scoped_for_same_name() {
         "project domain must sync concurrently with the global same-name skill"
     );
 }
+
+// ==================== Market layout persistence ====================
+
+#[test]
+fn db_market_layout_defaults_to_subdir() {
+    let db = Database::new_in_memory().unwrap();
+    let market = db
+        .upsert_market("github", "owner", "repo", "main", "https://example/r", "subdir")
+        .unwrap();
+    // Even without explicitly opting in to "root", the default lookup should
+    // round-trip the chosen layout — this is what the UI uses to render
+    // a layout badge on the Sources modal.
+    assert_eq!(market.layout, "subdir");
+}
+
+#[test]
+fn db_market_layout_root_persists() {
+    let db = Database::new_in_memory().unwrap();
+    let market = db
+        .upsert_market("github", "karpathy", "skill", "main", "https://example/r", "root")
+        .unwrap();
+    assert_eq!(market.layout, "root");
+    let fetched = db.get_market(market.id).unwrap().unwrap();
+    assert_eq!(fetched.layout, "root", "layout must survive get_market round-trip");
+    let listed = db.list_markets().unwrap();
+    assert_eq!(listed[0].layout, "root", "list_markets must surface layout");
+}
+
+#[test]
+fn db_update_market_preserves_layout_on_edit() {
+    let db = Database::new_in_memory().unwrap();
+    let market = db
+        .upsert_market("github", "karpathy", "skill", "main", "https://example/r", "root")
+        .unwrap();
+    // Pretend the user renamed owner via update_market — the layout they
+    // chose must not silently flip back to "subdir".
+    db.update_market(market.id, true, None, None, None).unwrap();
+    let market = db.upsert_market(
+        "github",
+        "karpathy-renamed",
+        "skill",
+        "main",
+        "https://example/r2",
+        "root",
+    )
+    .unwrap();
+    let fetched = db.get_market(market.id).unwrap().unwrap();
+    assert_eq!(
+        fetched.layout, "root",
+        "user-selected layout must survive a later upsert"
+    );
+}
+
+#[test]
+fn db_update_remote_skill_description_only_touches_description() {
+    let db = Database::new_in_memory().unwrap();
+    let market = db
+        .upsert_market("github", "owner", "repo", "main", "https://example/r", "subdir")
+        .unwrap();
+    let id = db
+        .upsert_remote_skill(
+            market.id,
+            "demo",
+            None,
+            "https://example/r/tree/main/demo",
+            "/ssot/demo",
+            "hash-x",
+            "core-x",
+            false,
+            None,
+        )
+        .unwrap();
+    // Filling in a description must not clobber the existing URL/hash state.
+    db.update_remote_skill_description(id, Some("hello")).unwrap();
+    let fetched: Vec<crate::models::RemoteSkill> = db.list_remote_skills(None).unwrap();
+    let row = fetched.iter().find(|s| s.skill_name == "demo").unwrap();
+    assert_eq!(row.description.as_deref(), Some("hello"));
+    assert_eq!(row.remote_content_hash, "hash-x");
+    assert_eq!(row.remote_url, "https://example/r/tree/main/demo");
+}

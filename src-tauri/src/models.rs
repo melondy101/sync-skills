@@ -174,8 +174,17 @@ pub struct Market {
     pub last_indexed_at: Option<String>,
     pub last_checked_at: Option<String>,
     pub last_commit_sha: Option<String>,
+    /// How the repository lays out its skills: `"subdir"` (each subdirectory
+    /// of the repo root is a skill — the common layout, e.g. `anthropics/skills`),
+    /// or `"root"` (the repository itself is a single skill — e.g. `karpathy/skill`).
+    #[serde(default = "default_market_layout")]
+    pub layout: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+fn default_market_layout() -> String {
+    "subdir".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,6 +239,7 @@ pub struct MarketCommitUpdate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(non_snake_case)] // Wire-format field names must stay camelCase to match the existing TypeScript bindings.
 pub struct RemoteInstallation {
     pub id: i64,
     pub remoteSkillId: i64,

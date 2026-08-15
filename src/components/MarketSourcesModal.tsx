@@ -126,7 +126,7 @@ export default function MarketSourcesModal({
                       {isBuiltin && <span className="badge-builtin">{t("builtinBadge")}</span>}
                     </div>
                     <div className="source-meta">
-                      {market.owner}/{market.name} · {market.branch} · {t("skillsCount").replace("{0}", String(skillCount))} · {t("indexedAt").replace("{0}", market.last_indexed_at ?? "-")}
+                      {market.owner}/{market.name} · {market.branch} · {t("skillsCount").replace("{0}", String(skillCount))} · {t("marketLayout")}: {market.layout === "root" ? t("layoutRoot") : t("layoutSubdir")} · {t("indexedAt").replace("{0}", market.last_indexed_at ?? "-")}
                     </div>
                     {firstError && (
                       <div className="source-error" role="alert" title={errors.length > 1 ? errors.join("\n") : firstError}>

@@ -22,6 +22,7 @@ type Props = {
   projectPaths: Record<number, string>;
   tools: Tool[];
   onRemoteInstallationsChanged: (next: RemoteInstallation[]) => void;
+  onSkillsChanged: () => void;
   defaultProjectId: number;
   t: (key: string) => string;
   addToast: (type: "success" | "error" | "info", message: string) => void;
@@ -40,6 +41,7 @@ export default function SkillMarketPanel({
   projectPaths,
   tools,
   onRemoteInstallationsChanged,
+  onSkillsChanged,
   defaultProjectId,
   t,
   addToast,
@@ -311,6 +313,7 @@ export default function SkillMarketPanel({
       } else {
         addToast("success", `${t("syncToTools")}: ${result.synced_to}`);
       }
+      onSkillsChanged();
     } catch (e) {
       addToast("error", `${t("syncToTools")} failed: ${e}`);
     } finally {
@@ -339,6 +342,7 @@ export default function SkillMarketPanel({
     );
     try {
       await api.syncRemoteInstallationsToTools(installProjectId, marketId, selectedToolPath);
+      onSkillsChanged();
     } catch (e) {
       addToast("error", `${t("syncAllActive")} failed: ${e}`);
     } finally {
@@ -449,6 +453,9 @@ export default function SkillMarketPanel({
       onRemoteInstallationsChanged(
         await api.listRemoteInstallations(installProjectId, selectedMarketFilter === "all" ? null : Number(selectedMarketFilter)),
       );
+      // Surface the skill in the global/project SkillView (sync_remote_skill_to_tools
+      // already upserts the skills row, but App.tsx owns the cached list).
+      onSkillsChanged();
     } catch (e) {
       addToast("error", `${t("install")} failed: ${e}`);
     } finally {
@@ -465,6 +472,7 @@ export default function SkillMarketPanel({
       await api.syncRemoteSkillToTools(skill.id, savedProject, savedTool);
       addToast("success", `${t("updateBtn")}: ${skill.skill_name}`);
       await loadRemoteSkills(selectedMarketFilter === "all" ? undefined : Number(selectedMarketFilter));
+      onSkillsChanged();
     } catch (e) {
       addToast("error", `${t("updateBtn")} failed: ${e}`);
     } finally {

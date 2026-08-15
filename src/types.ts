@@ -228,6 +228,12 @@ export interface Market {
   last_indexed_at: string | null;
   last_checked_at: string | null;
   last_commit_sha: string | null;
+  /**
+   * Repository layout: "subdir" (each subdirectory is a skill, default)
+   * or "root" (the whole repo is one skill). Added in 0.1.19; older
+   * market rows return undefined at runtime and default to "subdir".
+   */
+  layout?: "subdir" | "root";
   created_at: string;
   updated_at: string;
 }

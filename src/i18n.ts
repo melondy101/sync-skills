@@ -258,6 +258,9 @@ export const translations: Record<Lang, Record<string, string>> = {
     disabled: "已停用",
     enable: "启用",
     disable: "停用",
+    marketLayout: "结构",
+    layoutSubdir: "子目录布局",
+    layoutRoot: "仓库根布局",
 
     // Toast messages
     failedLoadTools: "加载工具失败",
@@ -643,6 +646,9 @@ export const translations: Record<Lang, Record<string, string>> = {
     disabled: "Disabled",
     enable: "Enable",
     disable: "Disable",
+    marketLayout: "Layout",
+    layoutSubdir: "Subdirectory layout",
+    layoutRoot: "Repository root layout",
 
     // Toast messages
     failedLoadTools: "Failed to load tools",

@@ -751,6 +751,7 @@ function App() {
           projectPaths={projectPaths}
           tools={tools}
           onRemoteInstallationsChanged={setRemoteInstallations}
+          onSkillsChanged={() => { void loadSkills(); }}
           defaultProjectId={installProjectId}
         />
       )}
