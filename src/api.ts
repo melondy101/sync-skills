@@ -134,14 +134,14 @@ export const listMarketTemplates = () => invoke<MarketTemplate[]>("list_market_t
 export const addMarket = (provider: string, owner: string, name: string, branch: string) =>
   invoke<Market>("add_market", { provider, owner, name, branch });
 
-export const addMarketByUrl = (url: string, branch?: string) =>
-  invoke<Market>("add_market_by_url", { url, branch: branch ?? null });
+export const addMarketByUrl = (url: string, branch?: string, layout?: "auto" | "root" | "subdir") =>
+  invoke<Market>("add_market_by_url", { url, branch: branch ?? null, layout: layout ?? "auto" });
 
 export const checkMarketCommits = () =>
   invoke<MarketCommitUpdate[]>("check_market_commits");
 
-export const updateMarket = (id: number, provider: string, owner: string, name: string, branch: string, enabled: boolean) =>
-  invoke<Market>("update_market", { id, provider, owner, name, branch, enabled });
+export const updateMarket = (id: number, provider: string, owner: string, name: string, branch: string, enabled: boolean, layout?: string | null) =>
+  invoke<Market>("update_market", { id, provider, owner, name, branch, enabled, layout: layout ?? null });
 
 export const deleteMarket = (id: number) =>
   invoke("delete_market", { id });

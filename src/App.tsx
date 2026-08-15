@@ -10,7 +10,7 @@ import "./App.css";
 import * as api from "./api";
 import type {
   Tool, Project, SkillView, ScanResult, SkillUpdate,
-  Settings, InstallationInfo, ConflictView, RemoteInstallation,
+  Settings, InstallationInfo, ConflictView, RemoteInstallation, Market,
 } from "./types";
 import { makeT, type Lang } from "./i18n";
 import { useToasts } from "./hooks/useToasts";
@@ -76,6 +76,11 @@ function App() {
   const [conflicts, setConflicts] = useState<ConflictView[]>([]);
   const [remoteInstallations, setRemoteInstallations] = useState<RemoteInstallation[]>([]);
   const [, setRemoteInstallationsLoading] = useState(false);
+  // Markets are owned by SkillMarketPanel (so it can drive auto-sync, layout
+  // editing, etc.), but the parent needs a copy to render a provenance badge
+  // on each skill card. We get it through `onMarketsChanged` rather than
+  // duplicating the load, so there's a single source of truth.
+  const [marketsById, setMarketsById] = useState<Record<number, Market>>({});
 
   const projectPaths = useMemo(() => {
     const map: Record<number, string> = { 0: "" };
@@ -590,12 +595,14 @@ function App() {
                     hasUpdate={hasUpdate(skill)}
                     syncing={syncing.has(skill.id)}
                     checkingSingle={checkingSingle === skill.id}
+                    sourceMarket={skill.source_market_id != null ? marketsById[skill.source_market_id] : undefined}
                     getInstallStatus={getInstallStatus}
                     onToggle={handleToggle}
                     onSync={() => handleSyncSkill(skill.id)}
                     onCheckUpdate={() => handleCheckSingleSkill(skill.id)}
                     onHealthCheck={() => setLintTarget(skill)}
                     onEdit={() => setEditingSkill(skill)}
+                    onOpenMarket={() => setActiveTab("market")}
                   />
                 ))}
               </tbody>
@@ -612,6 +619,17 @@ function App() {
                 </div>
 
                 {skill.description && <p className="skill-desc">{skill.description}</p>}
+
+                {skill.source_market_id != null && marketsById[skill.source_market_id] && (
+                  <button
+                    type="button"
+                    className="market-provenance"
+                    onClick={() => setActiveTab("market")}
+                    title={t("openInMarket")}
+                  >
+                    {t("fromMarket").replace("{0}", `${marketsById[skill.source_market_id].owner}/${marketsById[skill.source_market_id].name}`)}
+                  </button>
+                )}
 
                 <code className="skill-path">{skill.source_path}</code>
 
@@ -752,6 +770,7 @@ function App() {
           tools={tools}
           onRemoteInstallationsChanged={setRemoteInstallations}
           onSkillsChanged={() => { void loadSkills(); }}
+          onMarketsChanged={(markets) => setMarketsById(Object.fromEntries(markets.map((m) => [m.id, m])))}
           defaultProjectId={installProjectId}
         />
       )}

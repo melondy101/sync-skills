@@ -436,13 +436,34 @@ pub fn add_market(db: State<'_, DbState>, provider: String, owner: String, name:
 }
 
 #[tauri::command]
-pub fn update_market(db: State<'_, DbState>, id: i64, provider: String, owner: String, name: String, branch: String, enabled: bool) -> Result<Market, String> {
+#[allow(clippy::too_many_arguments)] // `update_market` mirrors the persistent shape of the markets table; splitting it would be churn for callers.
+pub fn update_market(
+    db: State<'_, DbState>,
+    id: i64,
+    provider: String,
+    owner: String,
+    name: String,
+    branch: String,
+    enabled: bool,
+    // Optional layout override. `None` (or "auto") preserves the current
+    // stored layout; "root" / "subdir" force the value (validated server-side).
+    layout: Option<String>,
+) -> Result<Market, String> {
     let remote_url = format!("https://github.com/{}/{}/tree/{}", owner, name, branch);
     db.update_market(id, enabled, None, None, None)?;
-    // Preserve the current layout: passing the existing value keeps a user
-    // who toggled "root_skill" from having it silently reset on edit.
-    let layout = db.get_market(id)?.map(|m| m.layout).unwrap_or_else(|| "subdir".to_string());
-    db.upsert_market(&provider, &owner, &name, &branch, &remote_url, &layout)?;
+    let current_layout = db.get_market(id)?.map(|m| m.layout).unwrap_or_else(|| "subdir".to_string());
+    let next_layout = match layout.as_deref() {
+        Some("root") | Some("subdir") => layout.unwrap(),
+        _ => current_layout.clone(),
+    };
+    db.upsert_market(&provider, &owner, &name, &branch, &remote_url, &next_layout)?;
+    // upsert_market touches remote_url/layout on the same row, but if the
+    // caller kept owner/name/branch unchanged, set_market_layout is a no-op
+    // extra write that guarantees a flip from the preserved value still
+    // sticks even when other fields didn't change.
+    if next_layout != current_layout {
+        db.set_market_layout(id, &next_layout)?;
+    }
     db.get_market(id).map(|m| m.unwrap())
 }
 
@@ -473,6 +494,38 @@ fn parse_github_market_input(raw: &str) -> Result<(String, String, Option<String
         return Err(format!("无法解析市场地址: {}", raw));
     }
     Ok((owner, name, None))
+}
+
+/// Detect the layout of a GitHub market repo by probing the raw SKILL.md URL.
+/// Returns:
+///   - `Some("root")` when `{branch}/SKILL.md` exists at the repo root
+///   - `Some("subdir")` when the repo root has no SKILL.md but at least one
+///     subdirectory appears to contain one (we verify the root listing has
+///     ≥1 directory entry; probing every subdirectory would be expensive, so
+///     if even one entry is a directory, we trust the user picked a skill
+///     repo)
+///   - `None` when the repo is empty / unreachable in a way that prevents
+///     layout determination; callers fall back to "subdir"
+async fn detect_github_layout(owner: &str, repo: &str, branch: &str) -> Option<&'static str> {
+    let root_raw = format!(
+        "https://raw.githubusercontent.com/{}/{}/{}/SKILL.md",
+        owner,
+        repo,
+        branch.trim_start_matches('/'),
+    );
+    if fetch_github_bytes(&root_raw).await.is_ok() {
+        return Some("root");
+    }
+    let root_url = github_api_url(owner, repo, branch, "/");
+    if let Ok(contents) = fetch_github_json::<Vec<serde_json::Value>>(&root_url).await {
+        let has_dir = contents
+            .iter()
+            .any(|entry| entry.get("type").and_then(|v| v.as_str()) == Some("dir"));
+        if has_dir {
+            return Some("subdir");
+        }
+    }
+    None
 }
 
 /// Resolve the default branch for a GitHub repo. Verifies the repo is reachable
@@ -512,7 +565,13 @@ async fn resolve_github_branch(owner: &str, repo: &str) -> Result<String, String
 }
 
 #[tauri::command]
-pub async fn add_market_by_url(db: State<'_, DbState>, url: String, branch: Option<String>) -> Result<Market, String> {
+pub async fn add_market_by_url(
+    db: State<'_, DbState>,
+    url: String,
+    branch: Option<String>,
+    // `"root"`, `"subdir"`, or `"auto"` (probe SKILL.md locations and pick).
+    layout: Option<String>,
+) -> Result<Market, String> {
     let (owner, name, branch_hint) = parse_github_market_input(&url)?;
     let resolved_branch = match (branch, branch_hint) {
         (Some(b), _) => b,
@@ -520,7 +579,19 @@ pub async fn add_market_by_url(db: State<'_, DbState>, url: String, branch: Opti
         (None, None) => resolve_github_branch(&owner, &name).await?,
     };
     let remote_url = format!("https://github.com/{}/{}/tree/{}", owner, name, resolved_branch);
-    let market = db.upsert_market("github", &owner, &name, &resolved_branch, &remote_url, "subdir")?;
+
+    // Resolve the layout: explicit user choice wins; "auto" probes the repo
+    // (cheap raw HEAD on root + a root listing); anything unknown falls back
+    // to "subdir" so a fresh row is still scannable.
+    let chosen_layout: String = match layout.as_deref() {
+        Some("root") | Some("subdir") => layout.unwrap(),
+        _ => match detect_github_layout(&owner, &name, &resolved_branch).await {
+            Some(l) => l.to_string(),
+            None => "subdir".to_string(),
+        },
+    };
+
+    let market = db.upsert_market("github", &owner, &name, &resolved_branch, &remote_url, &chosen_layout)?;
     Ok(market)
 }
 
@@ -672,15 +743,18 @@ pub async fn download_remote_skill_to_ssot(db: State<'_, DbState>, remote_skill_
     let effective_name = parsed_name.unwrap_or_else(|| skill.skill_name.clone());
 
     // Upsert into the `skills` table at the global scope (project_id=0) so
-    // list_skills(0) sees the skill right away. Per-tool installations are
-    // written when sync_remote_skill_to_tools actually copies to a tool.
-    let (skill_db_id, _) = db.upsert_skill(
+    // list_skills(0) sees the skill right away, and stamp the source market
+    // so the global/project view can render a provenance badge. Per-tool
+    // installations are written when sync_remote_skill_to_tools copies to a
+    // tool.
+    let (skill_db_id, _) = db.upsert_skill_from_market(
         &effective_name,
         description.as_deref(),
         &skill.ssot_path,
         &content_hash,
         &core_hash,
         0,
+        skill.market_id,
     )?;
 
     // Update remote_skills description if it was empty (don't clobber richer
@@ -777,19 +851,21 @@ pub async fn sync_remote_skill_to_tools(
     match result {
         Ok(_) => {
             // Make the skill visible in the global/project skill list right
-            // away. The skills row is owned by the global scope (project_id=0)
-            // so the same identity is shared across all tools — we just
-            // attach a fresh skill_installations row keyed by the chosen
-            // (tool, project) so the toggle UI knows the tool has it.
+            // away. The skills row at project_id=0 was already upserted by
+            // download_remote_skill_to_ssot; here we also ensure a row in the
+            // chosen project scope (so the project's tab sees it under the
+            // chosen tool) and stamp the source market on whichever row was
+            // empty. Per-tool installation rows are what toggle the UI.
             let content_hash = crate::hash::compute_content_hash(&ssot_dir).unwrap_or_default();
             let core_hash = crate::hash::compute_core_hash(&ssot_dir.join("SKILL.md")).unwrap_or_default();
-            let (skill_db_id, _) = db.upsert_skill(
+            let (skill_db_id, _) = db.upsert_skill_from_market(
                 &remote.skill_name,
                 None,
                 &remote.ssot_path,
                 &content_hash,
                 &core_hash,
                 project_id,
+                remote.market_id,
             )?;
             db.ensure_installation(skill_db_id, tool_id, project_id)?;
             db.update_synced_at(skill_db_id, tool_id, project_id)?;

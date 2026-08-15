@@ -34,6 +34,11 @@ pub struct Skill {
     pub core_hash: String,
     pub project_id: i64,
     pub ssot_updated_at: Option<String>,
+    /// Set when the skill was first installed from a remote market; used by
+    /// the global/project view to render a "from: owner/repo" provenance
+    /// badge. Cleared automatically when the parent market row is deleted.
+    #[serde(default)]
+    pub source_market_id: Option<i64>,
     pub created_at: String,
     pub updated_at: String,
 }

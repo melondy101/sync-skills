@@ -484,6 +484,22 @@ impl Database {
             .map_err(|e| format!("Failed to migrate markets layout: {}", e))?;
         }
 
+        // skills.source_market_id: tracks which remote market a skill was
+        // installed from, so the global/project view can show a provenance
+        // badge. Nullable (skills can still originate from local tools), and
+        // uses ON DELETE SET NULL so removing a market just clears the badge.
+        let has_skill_source_market: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('skills') WHERE name = 'source_market_id'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .map(|count| count > 0)
+            .unwrap_or(false);
+        if !has_skill_source_market {
+            conn.execute_batch(
+                "ALTER TABLE skills ADD COLUMN source_market_id INTEGER REFERENCES markets(id) ON DELETE SET NULL;",
+            )
+            .map_err(|e| format!("Failed to migrate skills source_market_id: {}", e))?;
+        }
+
         Ok(())
     }
 
@@ -647,12 +663,62 @@ impl Database {
         Ok((id, true))
     }
 
+    /// Upsert a skill with a remote-market provenance tag. Used by the market
+    /// sync/install flows so the resulting `skills.source_market_id` is set.
+    /// Behaves exactly like `upsert_skill` for the rest; on a hit, only the
+    /// provenance column is refreshed when it was previously null (we don't
+    /// want to silently steal a badge that a different market already claimed).
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_skill_from_market(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        source_path: &str,
+        content_hash: &str,
+        core_hash: &str,
+        project_id: i64,
+        source_market_id: i64,
+    ) -> Result<(i64, bool), String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+
+        let existing: Option<(i64, Option<i64>)> = conn
+            .query_row(
+                "SELECT id, source_market_id FROM skills WHERE name = ?1 AND project_id = ?2",
+                params![name, project_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .ok();
+
+        if let Some((id, existing_market)) = existing {
+            conn.execute(
+                "UPDATE skills SET description = ?1, source_path = ?2, content_hash = ?3,
+                 core_hash = ?4, ssot_updated_at = datetime('now'), updated_at = datetime('now'),
+                 source_market_id = COALESCE(source_market_id, ?5)
+                 WHERE id = ?6",
+                params![description, source_path, content_hash, core_hash, source_market_id, id],
+            )
+            .map_err(|e| format!("Failed to update skill: {}", e))?;
+            let _ = existing_market;
+            return Ok((id, false));
+        }
+
+        let id_input = format!("{}:{}", project_id, name);
+        let id = compute_id_hash(&id_input);
+        conn.execute(
+            "INSERT INTO skills (id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, source_market_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'), ?8)",
+            params![id, name, description, source_path, content_hash, core_hash, project_id, source_market_id],
+        )
+        .map_err(|e| format!("Failed to insert skill: {}", e))?;
+        Ok((id, true))
+    }
+
     /// List all skills
     pub fn list_skills(&self) -> Result<Vec<Skill>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
 
         let mut stmt = conn
-            .prepare("SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, created_at, updated_at FROM skills ORDER BY name")
+            .prepare("SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, source_market_id, created_at, updated_at FROM skills ORDER BY name")
             .map_err(|e| format!("Prepare error: {}", e))?;
 
         let skills = stmt
@@ -666,8 +732,9 @@ impl Database {
                     core_hash: row.get(5)?,
                     project_id: row.get(6)?,
                     ssot_updated_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    source_market_id: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             })
             .map_err(|e| format!("Query error: {}", e))?
@@ -721,7 +788,7 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
 
         conn.query_row(
-            "SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, created_at, updated_at FROM skills WHERE id = ?1",
+            "SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, source_market_id, created_at, updated_at FROM skills WHERE id = ?1",
             params![skill_id],
             |row| {
                 Ok(Skill {
@@ -733,8 +800,9 @@ impl Database {
                     core_hash: row.get(5)?,
                     project_id: row.get(6)?,
                     ssot_updated_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    source_market_id: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             },
         )
@@ -749,7 +817,7 @@ impl Database {
         // Step 1: Get skills filtered by project_id
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, created_at, updated_at
+                "SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, source_market_id, created_at, updated_at
                  FROM skills WHERE project_id = ?1 ORDER BY name",
             )
             .map_err(|e| format!("Prepare error: {}", e))?;
@@ -765,8 +833,9 @@ impl Database {
                     core_hash: row.get(5)?,
                     project_id: row.get(6)?,
                     ssot_updated_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    source_market_id: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             })
             .map_err(|e| format!("Query error: {}", e))?
@@ -1324,6 +1393,19 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         conn.execute("DELETE FROM markets WHERE id = ?1", params![market_id])
             .map_err(|e| format!("Failed to delete market: {}", e))?;
+        Ok(())
+    }
+
+    /// Persist a layout change for an existing market row. Layout updates are
+    /// intentionally kept separate from `update_market` so the rest of the
+    /// field set doesn't grow new positional parameters.
+    pub fn set_market_layout(&self, market_id: i64, layout: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        conn.execute(
+            "UPDATE markets SET layout = ?1, updated_at = datetime('now') WHERE id = ?2",
+            params![layout, market_id],
+        )
+        .map_err(|e| format!("Failed to update market layout: {}", e))?;
         Ok(())
     }
 

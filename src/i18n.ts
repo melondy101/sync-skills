@@ -261,6 +261,9 @@ export const translations: Record<Lang, Record<string, string>> = {
     marketLayout: "结构",
     layoutSubdir: "子目录布局",
     layoutRoot: "仓库根布局",
+    layoutAuto: "自动检测",
+    fromMarket: "来源：{0}",
+    openInMarket: "去市场打开",
 
     // Toast messages
     failedLoadTools: "加载工具失败",
@@ -649,6 +652,9 @@ export const translations: Record<Lang, Record<string, string>> = {
     marketLayout: "Layout",
     layoutSubdir: "Subdirectory layout",
     layoutRoot: "Repository root layout",
+    layoutAuto: "Auto-detect",
+    fromMarket: "From: {0}",
+    openInMarket: "Open in market",
 
     // Toast messages
     failedLoadTools: "Failed to load tools",

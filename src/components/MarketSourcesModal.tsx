@@ -16,10 +16,13 @@ type Props = {
   setMarketUrl: (value: string) => void;
   marketBranch: string;
   setMarketBranch: (value: string) => void;
+  marketLayout: "auto" | "root" | "subdir";
+  setMarketLayout: (value: "auto" | "root" | "subdir") => void;
   onAddByUrl: () => void;
   onToggle: (market: Market) => void;
   onDeleteRequest: (market: Market) => void;
   onSyncIndex: (market: Market) => void;
+  onChangeLayout: (market: Market, layout: "root" | "subdir") => void;
   builtinIds: Set<string>;
   builtinLabels: Record<string, string>;
   onClose: () => void;
@@ -30,10 +33,21 @@ type BranchOption =
   | { value: "main"; label: string }
   | { value: "master"; label: string };
 
+type LayoutOption = {
+  value: "auto" | "root" | "subdir";
+  label: string;
+};
+
 const BRANCH_OPTIONS: BranchOption[] = [
   { value: "", label: "defaultBranchAuto" },
   { value: "main", label: "main" },
   { value: "master", label: "master" },
+];
+
+const LAYOUT_OPTIONS: LayoutOption[] = [
+  { value: "auto", label: "layoutAuto" },
+  { value: "subdir", label: "layoutSubdir" },
+  { value: "root", label: "layoutRoot" },
 ];
 
 export default function MarketSourcesModal({
@@ -48,10 +62,13 @@ export default function MarketSourcesModal({
   setMarketUrl,
   marketBranch,
   setMarketBranch,
+  marketLayout,
+  setMarketLayout,
   onAddByUrl,
   onToggle,
   onDeleteRequest,
   onSyncIndex,
+  onChangeLayout,
   builtinIds,
   builtinLabels,
   onClose,
@@ -95,6 +112,19 @@ export default function MarketSourcesModal({
                 </option>
               ))}
             </select>
+            <select
+              className="sort-select"
+              value={marketLayout}
+              onChange={(e) => setMarketLayout(e.target.value as "auto" | "root" | "subdir")}
+              aria-label={t("marketLayout")}
+              title={t("marketLayout")}
+            >
+              {LAYOUT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t("marketLayout")}: {t(option.label)}
+                </option>
+              ))}
+            </select>
             <button className="btn btn-primary" onClick={showAdd ? onAddByUrl : onAddToggle} disabled={loading || (showAdd && !marketUrl.trim())}>
               {showAdd ? t("add") : t("addMarket")}
             </button>
@@ -135,7 +165,18 @@ export default function MarketSourcesModal({
                       </div>
                     )}
                   </div>
-                  <div className="source-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div className="source-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <select
+                      className="sort-select"
+                      value={market.layout === "root" ? "root" : "subdir"}
+                      onChange={(e) => onChangeLayout(market, e.target.value as "root" | "subdir")}
+                      aria-label={t("marketLayout")}
+                      title={t("marketLayout")}
+                      disabled={loading}
+                    >
+                      <option value="subdir">{t("layoutSubdir")}</option>
+                      <option value="root">{t("layoutRoot")}</option>
+                    </select>
                     <button className="btn btn-small btn-secondary" onClick={() => onSyncIndex(market)} disabled={loading || !market.enabled}>
                       {t("syncMarketIndex")}
                     </button>

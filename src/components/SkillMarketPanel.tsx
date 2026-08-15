@@ -23,6 +23,7 @@ type Props = {
   tools: Tool[];
   onRemoteInstallationsChanged: (next: RemoteInstallation[]) => void;
   onSkillsChanged: () => void;
+  onMarketsChanged: (markets: Market[]) => void;
   defaultProjectId: number;
   t: (key: string) => string;
   addToast: (type: "success" | "error" | "info", message: string) => void;
@@ -42,6 +43,7 @@ export default function SkillMarketPanel({
   tools,
   onRemoteInstallationsChanged,
   onSkillsChanged,
+  onMarketsChanged,
   defaultProjectId,
   t,
   addToast,
@@ -53,6 +55,7 @@ export default function SkillMarketPanel({
   const [showAddMarket, setShowAddMarket] = useState(false);
   const [marketUrl, setMarketUrl] = useState("");
   const [marketBranch, setMarketBranch] = useState("");
+  const [marketLayout, setMarketLayout] = useState<"auto" | "root" | "subdir">("auto");
 
   const [installProjectId, setInstallProjectId] = useState<number>(defaultProjectId || 0);
   const [selectedToolPath, setSelectedToolPath] = useState<string>("");
@@ -133,6 +136,11 @@ export default function SkillMarketPanel({
         titles[market.id] = `${market.owner}/${market.name}`;
       }
       setMarketTitles(titles);
+      // Bubble the canonical list to the parent so the global/project view
+      // can render source-market provenance badges for skills installed from
+      // the market. Doing it here (vs. duplicating the loader in App.tsx)
+      // keeps the market UI as the single source of truth.
+      onMarketsChanged(markets);
     } catch (e) {
       addToast("error", `${t("failedLoadTools")}: ${e}`);
     } finally {
@@ -149,8 +157,13 @@ export default function SkillMarketPanel({
     }
     setMarketLoading(true);
     try {
-      const market = await api.addMarketByUrl(url, branch || undefined);
-      addToast("success", `${t("addMarket")}: ${market.owner}/${market.name}`);
+      const market = await api.addMarketByUrl(url, branch || undefined, marketLayout);
+      addToast(
+        "success",
+        `${t("addMarket")}: ${market.owner}/${market.name} · ${t("marketLayout")}: ${
+          market.layout === "root" ? t("layoutRoot") : t("layoutSubdir")
+        }`,
+      );
       setMarketUrl("");
       setMarketBranch("");
       setShowAddMarket(false);
@@ -185,8 +198,27 @@ export default function SkillMarketPanel({
   async function toggleMarket(market: Market) {
     setMarketLoading(true);
     try {
-      await api.updateMarket(market.id, market.provider, market.owner, market.name, market.branch, !market.enabled);
+      await api.updateMarket(market.id, market.provider, market.owner, market.name, market.branch, !market.enabled, market.layout);
       await loadMarkets();
+    } catch (e) {
+      addToast("error", `${t("editMarket")} failed: ${e}`);
+    } finally {
+      setMarketLoading(false);
+    }
+  }
+
+  async function changeMarketLayout(market: Market, layout: "root" | "subdir") {
+    if (market.layout === layout) return;
+    setMarketLoading(true);
+    try {
+      await api.updateMarket(market.id, market.provider, market.owner, market.name, market.branch, market.enabled, layout);
+      await loadMarkets();
+      addToast(
+        "success",
+        `${market.owner}/${market.name}: ${t("marketLayout")} → ${
+          layout === "root" ? t("layoutRoot") : t("layoutSubdir")
+        }`,
+      );
     } catch (e) {
       addToast("error", `${t("editMarket")} failed: ${e}`);
     } finally {
@@ -446,7 +478,20 @@ export default function SkillMarketPanel({
         addToast("error", `${installTarget.skill_name}: ${result.errors.join(", ")}`);
       } else {
         const toolName = tool?.name ?? toolPath;
-        addToast("success", t("installedToast").replace("{0}", installTarget.skill_name).replace("{1}", toolName));
+        const scope = projectId === 0
+          ? t("scopeGlobal")
+          : `${t("scopeProject")} · ${projects.find((p) => p.id === projectId)?.name ?? `#${projectId}`}`;
+        // Two-line toast: success line, then a hint about where the skill
+        // is now visible. Keeps the existing installedToast wording so
+        // translations stay in sync.
+        addToast(
+          "success",
+          t("installedToast").replace("{0}", installTarget.skill_name).replace("{1}", toolName),
+        );
+        addToast(
+          "info",
+          `${installTarget.skill_name} → ${scope}`,
+        );
       }
       setInstallTarget(null);
       await loadRemoteSkills(selectedMarketFilter === "all" ? undefined : Number(selectedMarketFilter));
@@ -626,10 +671,13 @@ export default function SkillMarketPanel({
           setMarketUrl={setMarketUrl}
           marketBranch={marketBranch}
           setMarketBranch={setMarketBranch}
+          marketLayout={marketLayout}
+          setMarketLayout={setMarketLayout}
           onAddByUrl={handleAddMarketByUrl}
           onToggle={toggleMarket}
           onDeleteRequest={requestDeleteMarket}
           onSyncIndex={syncMarketIndex}
+          onChangeLayout={changeMarketLayout}
           builtinIds={BUILTIN_MARKET_IDS}
           builtinLabels={BUILTIN_LABELS}
           onClose={() => setShowSourcesModal(false)}

@@ -42,6 +42,7 @@ export interface SkillView {
   core_hash: string;
   project_id: number;
   ssot_updated_at: string | null;
+  source_market_id: number | null;
   created_at: string;
   updated_at: string;
   installed_tools: InstallationInfo[];

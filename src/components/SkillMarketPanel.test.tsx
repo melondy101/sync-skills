@@ -100,6 +100,7 @@ describe("SkillMarketPanel", () => {
         tools={[]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -135,6 +136,7 @@ describe("SkillMarketPanel", () => {
         tools={[]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -150,7 +152,7 @@ describe("SkillMarketPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "Add" }));
 
-    await waitFor(() => expect(api.addMarketByUrl).toHaveBeenCalledWith("carol/gamma", undefined));
+    await waitFor(() => expect(api.addMarketByUrl).toHaveBeenCalledWith("carol/gamma", undefined, "auto"));
     await waitFor(() => expect(api.syncMarketIndex).toHaveBeenCalledWith(3));
   });
 
@@ -170,6 +172,7 @@ describe("SkillMarketPanel", () => {
         tools={[]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -201,6 +204,7 @@ describe("SkillMarketPanel", () => {
         tools={[]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -227,6 +231,7 @@ describe("SkillMarketPanel", () => {
         tools={[]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -251,6 +256,7 @@ describe("SkillMarketPanel", () => {
         tools={[{ id: 1, name: "tool", global_path: "/tmp", project_rel_path: "", globalPath: "/tmp", projectRelPath: "", created_at: "", updated_at: "" }]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -273,6 +279,7 @@ describe("SkillMarketPanel", () => {
         tools={[]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -302,6 +309,7 @@ describe("SkillMarketPanel", () => {
         tools={[]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -327,6 +335,7 @@ describe("SkillMarketPanel", () => {
         tools={[]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -361,6 +370,7 @@ describe("SkillMarketPanel", () => {
         tools={[{ id: 1, name: "tool", global_path: "/tmp", project_rel_path: "", globalPath: "/tmp", projectRelPath: "", created_at: "", updated_at: "" }]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -399,6 +409,7 @@ describe("SkillMarketPanel", () => {
         tools={[{ id: 1, name: "tool", global_path: "/tmp", project_rel_path: "", globalPath: "/tmp", projectRelPath: "", created_at: "", updated_at: "" }]}
         onRemoteInstallationsChanged={vi.fn()}
         onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
         defaultProjectId={0}
         t={makeT}
         addToast={toast}
@@ -429,4 +440,7 @@ describe("SkillMarketPanel", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
   });
 });
+
+
+
 

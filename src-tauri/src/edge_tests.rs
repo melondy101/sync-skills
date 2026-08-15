@@ -1015,3 +1015,110 @@ fn db_update_remote_skill_description_only_touches_description() {
     assert_eq!(row.remote_content_hash, "hash-x");
     assert_eq!(row.remote_url, "https://example/r/tree/main/demo");
 }
+
+// ==================== Skills ↔ market provenance ====================
+
+#[test]
+fn db_upsert_skill_from_market_stamps_provenance_on_new_row() {
+    let db = Database::new_in_memory().unwrap();
+    let market = db
+        .upsert_market("github", "owner", "repo", "main", "https://example/r", "subdir")
+        .unwrap();
+
+    let (id, is_new) = db
+        .upsert_skill_from_market("demo-skill", Some("hi"), "/ssot/demo-skill", "h1", "c1", 0, market.id)
+        .unwrap();
+    assert!(is_new);
+
+    let skill = db.get_skill_by_id(id).unwrap();
+    assert_eq!(
+        skill.source_market_id,
+        Some(market.id),
+        "source_market_id must be persisted on first install"
+    );
+    assert_eq!(skill.name, "demo-skill");
+}
+
+#[test]
+fn db_upsert_skill_from_market_preserves_existing_provenance() {
+    let db = Database::new_in_memory().unwrap();
+    let m1 = db
+        .upsert_market("github", "owner1", "repo1", "main", "https://example/r1", "subdir")
+        .unwrap();
+    let m2 = db
+        .upsert_market("github", "owner2", "repo2", "main", "https://example/r2", "subdir")
+        .unwrap();
+
+    // First install stamps m1.
+    db.upsert_skill_from_market("shared", Some("v1"), "/p", "h1", "c1", 0, m1.id).unwrap();
+    // A second install from m2 must NOT clobber m1's badge — only fill in
+    // a NULL badge on first install. This keeps the provenance stable when
+    // a skill is later installed from a different market.
+    db.upsert_skill_from_market("shared", Some("v2"), "/p", "h2", "c2", 0, m2.id).unwrap();
+
+    let skills = db.list_skills().unwrap();
+    let shared = skills.iter().find(|s| s.name == "shared").unwrap();
+    assert_eq!(
+        shared.source_market_id,
+        Some(m1.id),
+        "a second-market install must not steal the badge"
+    );
+}
+
+#[test]
+fn db_upsert_skill_from_market_fills_null_provenance() {
+    let db = Database::new_in_memory().unwrap();
+    let market = db
+        .upsert_market("github", "owner", "repo", "main", "https://example/r", "subdir")
+        .unwrap();
+
+    // Plain upsert first (no provenance) — common during a manual scan.
+    db.upsert_skill("orphan", None, "/p", "h", "c", 0).unwrap();
+    let pre = db.list_skills().unwrap();
+    assert_eq!(
+        pre.iter().find(|s| s.name == "orphan").unwrap().source_market_id,
+        None,
+        "sanity: pre-existing rows start with NULL provenance"
+    );
+
+    // Market install backfills the badge.
+    db.upsert_skill_from_market("orphan", Some("desc"), "/p", "h2", "c2", 0, market.id).unwrap();
+    let post = db.list_skills().unwrap();
+    assert_eq!(
+        post.iter().find(|s| s.name == "orphan").unwrap().source_market_id,
+        Some(market.id),
+        "an orphan skill must gain a provenance badge on its first market install"
+    );
+}
+
+#[test]
+fn db_set_market_layout_overrides_existing_value() {
+    let db = Database::new_in_memory().unwrap();
+    let market = db
+        .upsert_market("github", "owner", "repo", "main", "https://example/r", "subdir")
+        .unwrap();
+    assert_eq!(market.layout, "subdir");
+
+    db.set_market_layout(market.id, "root").unwrap();
+    let updated = db.get_market(market.id).unwrap().unwrap();
+    assert_eq!(
+        updated.layout, "root",
+        "set_market_layout must overwrite the existing layout"
+    );
+}
+
+#[test]
+fn db_list_skills_with_status_surfaces_source_market_id() {
+    let db = Database::new_in_memory().unwrap();
+    let market = db
+        .upsert_market("github", "owner", "repo", "main", "https://example/r", "subdir")
+        .unwrap();
+    db.upsert_skill_from_market("from-market", None, "/p", "h", "c", 0, market.id).unwrap();
+    db.upsert_skill("manual", None, "/p2", "h2", "c2", 0).unwrap();
+
+    let views = db.list_skills_with_status(0).unwrap();
+    let from_market = views.iter().find(|s| s.skill.name == "from-market").unwrap();
+    let manual = views.iter().find(|s| s.skill.name == "manual").unwrap();
+    assert_eq!(from_market.skill.source_market_id, Some(market.id));
+    assert_eq!(manual.skill.source_market_id, None);
+}

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { SkillView, Tool, InstallationInfo } from "../types";
+import type { SkillView, Tool, InstallationInfo, Market } from "../types";
 import type { TranslateFn } from "../i18n";
 
 interface SkillListRowProps {
@@ -11,12 +11,14 @@ interface SkillListRowProps {
   hasUpdate: boolean;
   syncing: boolean;
   checkingSingle: boolean;
+  sourceMarket?: Market;
   getInstallStatus: (skill: SkillView, toolId: number) => InstallationInfo | undefined;
   onToggle: (skillId: number, toolId: number, active: boolean) => void;
   onSync: () => void;
   onCheckUpdate: () => void;
   onHealthCheck: () => void;
   onEdit: () => void;
+  onOpenMarket: () => void;
 }
 
 export function SkillListRow({
@@ -26,12 +28,14 @@ export function SkillListRow({
   hasUpdate,
   syncing,
   checkingSingle,
+  sourceMarket,
   getInstallStatus,
   onToggle,
   onSync,
   onCheckUpdate,
   onHealthCheck,
   onEdit,
+  onOpenMarket,
 }: SkillListRowProps) {
   return (
     <>
@@ -41,6 +45,16 @@ export function SkillListRow({
           {hasUpdate && <span className="update-indicator" title={t("updateAvailable")}>●</span>}
           {syncing && <span className="sync-spinner">⟳</span>}
           {skill.description && <span className="list-skill-desc">{skill.description}</span>}
+          {sourceMarket && (
+            <button
+              type="button"
+              className="market-provenance market-provenance-inline"
+              onClick={onOpenMarket}
+              title={t("openInMarket")}
+            >
+              {t("fromMarket").replace("{0}", `${sourceMarket.owner}/${sourceMarket.name}`)}
+            </button>
+          )}
         </td>
         {tools.map((tool) => {
           const inst = getInstallStatus(skill, tool.id);
