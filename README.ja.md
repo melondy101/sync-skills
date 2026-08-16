@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-0.1.18-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/Tauri-v2-orange?style=flat-square&logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Rust-2021-brown?style=flat-square&logo=rust" alt="rust">
   <img src="https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react" alt="react">
@@ -146,7 +146,7 @@ sync-skills/
 | v0.3.0 | ✅ 完了 | テーマ切替、多言語対応、ハッシュ安定性修正 |
 | v0.4.0 | ✅ 完了 | 名前をアイデンティティとして、コンフリクト検出/解決、タイムスタンプ、プロジェクト編集、リバース同期、変更却下 |
 | v0.5.0 | 計画中 | LockManager 統合、core_hash 変更検出、ファイルウォッチャー |
-| v0.6.0 | 計画中 | アプリ内アップデートのワンクリックダウンロード＆インストール、UX 改善（オンボーディング改善、キーボードショートカット、一括操作、リストのパフォーマンス最適化） |
+| v0.6.0 | 進行中 | アプリ内アップデートのワンクリックダウンロード＆インストール、UX 改善（オンボーディング改善、キーボードショートカット、一括操作、リストのパフォーマンス最適化）— 一括操作（Market の sync-all / mark-all）はブランチ `codex/ui_optimization` で実装済み |
 | v0.7.0 | 構想中 | MCP 統合：MCP サーバー設定の管理とツール間同期、Agent 向け MCP インターフェースの提供 |
 
 ## ライセンス

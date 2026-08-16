@@ -1,8 +1,6 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { invoke } from "@tauri-apps/api/core";
-
 export interface Tool {
   id: number;
   name: string;
@@ -44,6 +42,7 @@ export interface SkillView {
   core_hash: string;
   project_id: number;
   ssot_updated_at: string | null;
+  source_market_id: number | null;
   created_at: string;
   updated_at: string;
   installed_tools: InstallationInfo[];
@@ -229,6 +228,13 @@ export interface Market {
   enabled: boolean;
   last_indexed_at: string | null;
   last_checked_at: string | null;
+  last_commit_sha: string | null;
+  /**
+   * Repository layout: "subdir" (each subdirectory is a skill, default)
+   * or "root" (the whole repo is one skill). Added in 0.1.19; older
+   * market rows return undefined at runtime and default to "subdir".
+   */
+  layout?: "subdir" | "root";
   created_at: string;
   updated_at: string;
 }
@@ -267,5 +273,14 @@ export interface MarketSyncResult {
   errors: string[];
 }
 
-export const syncRemoteInstallations = (projectId: number, marketId: number | null) =>
-  invoke<SyncResult>("sync_remote_installations", { projectId, marketId });
+export interface RemoteSkillInstalledResult {
+  updated: number;
+}
+
+export interface MarketCommitUpdate {
+  market_id: number;
+  market_title: string;
+  last_commit_sha: string | null;
+  new_commit_sha: string;
+}
+

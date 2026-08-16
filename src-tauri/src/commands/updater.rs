@@ -7,6 +7,7 @@
 use serde::Serialize;
 use tauri::Emitter;
 
+// Use explicit release endpoints to avoid stale or redirected URLs.
 const RELEASES_API: &str =
     "https://api.github.com/repos/huang-yi-dae/sync-skills/releases/latest";
 const RELEASES_PAGE: &str = "https://github.com/huang-yi-dae/sync-skills/releases";
@@ -77,11 +78,56 @@ fn pick_asset(assets: &[serde_json::Value]) -> Option<(String, String, u64)> {
 
 fn proxy_from_settings() -> Option<reqwest::Proxy> {
     let settings = crate::settings::Settings::load();
+    #[cfg(windows)]
+    if settings.use_system_proxy {
+        return http_system_proxy();
+    }
     if !settings.use_proxy {
         return None;
     }
-    let url = settings.proxy_url.filter(|url| !url.trim().is_empty())?;
+    let mut url = settings.proxy_url.filter(|url| !url.trim().is_empty())?;
+    if !url.contains("://") {
+        url = format!("http://{}", url);
+    }
     reqwest::Proxy::all(url).ok()
+}
+
+#[cfg(windows)]
+pub(crate) fn http_system_proxy() -> Option<reqwest::Proxy> {
+    static CACHED: std::sync::OnceLock<Option<reqwest::Proxy>> = std::sync::OnceLock::new();
+    CACHED.get_or_init(|| {
+        let key = match winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+            .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
+        {
+            Ok(key) => key,
+            Err(_) => return None,
+        };
+
+        let enabled: u32 = match key.get_value("ProxyEnable") {
+            Ok(value) => value,
+            Err(_) => return None,
+        };
+        if enabled == 0 {
+            return None;
+        }
+
+        let server: String = match key.get_value("ProxyServer") {
+            Ok(value) => value,
+            Err(_) => return None,
+        };
+        let server = server.trim();
+        if server.is_empty() {
+            return None;
+        }
+
+        let url = if server.contains("://") {
+            server.to_string()
+        } else {
+            format!("http://{}", server)
+        };
+        reqwest::Proxy::all(url).ok()
+    })
+    .clone()
 }
 
 fn tls_proxy_hint() -> Option<&'static str> {

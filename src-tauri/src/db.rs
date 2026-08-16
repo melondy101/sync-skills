@@ -417,6 +417,8 @@ impl Database {
                 remote_url      TEXT    NOT NULL,
                 last_indexed_at TEXT,
                 last_checked_at TEXT,
+                last_commit_sha TEXT,
+                layout          TEXT    NOT NULL DEFAULT 'subdir',
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(provider, owner, name, branch)
@@ -455,6 +457,47 @@ impl Database {
                 "ALTER TABLE markets ADD COLUMN remote_url TEXT NOT NULL DEFAULT '';",
             )
             .map_err(|e| format!("Failed to migrate markets remote_url: {}", e))?;
+        }
+
+        let has_commit_sha: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('markets') WHERE name = 'last_commit_sha'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_commit_sha {
+            conn.execute_batch(
+                "ALTER TABLE markets ADD COLUMN last_commit_sha TEXT;",
+            )
+            .map_err(|e| format!("Failed to migrate markets last_commit_sha: {}", e))?;
+        }
+
+        let has_layout: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('markets') WHERE name = 'layout'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .map(|count| count > 0)
+            .unwrap_or(false);
+        if !has_layout {
+            conn.execute_batch(
+                "ALTER TABLE markets ADD COLUMN layout TEXT NOT NULL DEFAULT 'subdir';",
+            )
+            .map_err(|e| format!("Failed to migrate markets layout: {}", e))?;
+        }
+
+        // skills.source_market_id: tracks which remote market a skill was
+        // installed from, so the global/project view can show a provenance
+        // badge. Nullable (skills can still originate from local tools), and
+        // uses ON DELETE SET NULL so removing a market just clears the badge.
+        let has_skill_source_market: bool = conn
+            .prepare("SELECT COUNT(*) FROM pragma_table_info('skills') WHERE name = 'source_market_id'")
+            .and_then(|mut stmt| stmt.query_row([], |row| row.get::<_, i64>(0)))
+            .map(|count| count > 0)
+            .unwrap_or(false);
+        if !has_skill_source_market {
+            conn.execute_batch(
+                "ALTER TABLE skills ADD COLUMN source_market_id INTEGER REFERENCES markets(id) ON DELETE SET NULL;",
+            )
+            .map_err(|e| format!("Failed to migrate skills source_market_id: {}", e))?;
         }
 
         Ok(())
@@ -620,12 +663,62 @@ impl Database {
         Ok((id, true))
     }
 
+    /// Upsert a skill with a remote-market provenance tag. Used by the market
+    /// sync/install flows so the resulting `skills.source_market_id` is set.
+    /// Behaves exactly like `upsert_skill` for the rest; on a hit, only the
+    /// provenance column is refreshed when it was previously null (we don't
+    /// want to silently steal a badge that a different market already claimed).
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_skill_from_market(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        source_path: &str,
+        content_hash: &str,
+        core_hash: &str,
+        project_id: i64,
+        source_market_id: i64,
+    ) -> Result<(i64, bool), String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+
+        let existing: Option<(i64, Option<i64>)> = conn
+            .query_row(
+                "SELECT id, source_market_id FROM skills WHERE name = ?1 AND project_id = ?2",
+                params![name, project_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .ok();
+
+        if let Some((id, existing_market)) = existing {
+            conn.execute(
+                "UPDATE skills SET description = ?1, source_path = ?2, content_hash = ?3,
+                 core_hash = ?4, ssot_updated_at = datetime('now'), updated_at = datetime('now'),
+                 source_market_id = COALESCE(source_market_id, ?5)
+                 WHERE id = ?6",
+                params![description, source_path, content_hash, core_hash, source_market_id, id],
+            )
+            .map_err(|e| format!("Failed to update skill: {}", e))?;
+            let _ = existing_market;
+            return Ok((id, false));
+        }
+
+        let id_input = format!("{}:{}", project_id, name);
+        let id = compute_id_hash(&id_input);
+        conn.execute(
+            "INSERT INTO skills (id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, source_market_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'), ?8)",
+            params![id, name, description, source_path, content_hash, core_hash, project_id, source_market_id],
+        )
+        .map_err(|e| format!("Failed to insert skill: {}", e))?;
+        Ok((id, true))
+    }
+
     /// List all skills
     pub fn list_skills(&self) -> Result<Vec<Skill>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
 
         let mut stmt = conn
-            .prepare("SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, created_at, updated_at FROM skills ORDER BY name")
+            .prepare("SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, source_market_id, created_at, updated_at FROM skills ORDER BY name")
             .map_err(|e| format!("Prepare error: {}", e))?;
 
         let skills = stmt
@@ -639,8 +732,9 @@ impl Database {
                     core_hash: row.get(5)?,
                     project_id: row.get(6)?,
                     ssot_updated_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    source_market_id: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             })
             .map_err(|e| format!("Query error: {}", e))?
@@ -694,7 +788,7 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
 
         conn.query_row(
-            "SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, created_at, updated_at FROM skills WHERE id = ?1",
+            "SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, source_market_id, created_at, updated_at FROM skills WHERE id = ?1",
             params![skill_id],
             |row| {
                 Ok(Skill {
@@ -706,8 +800,9 @@ impl Database {
                     core_hash: row.get(5)?,
                     project_id: row.get(6)?,
                     ssot_updated_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    source_market_id: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             },
         )
@@ -722,7 +817,7 @@ impl Database {
         // Step 1: Get skills filtered by project_id
         let mut stmt = conn
             .prepare(
-                "SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, created_at, updated_at
+                "SELECT id, name, description, source_path, content_hash, core_hash, project_id, ssot_updated_at, source_market_id, created_at, updated_at
                  FROM skills WHERE project_id = ?1 ORDER BY name",
             )
             .map_err(|e| format!("Prepare error: {}", e))?;
@@ -738,8 +833,9 @@ impl Database {
                     core_hash: row.get(5)?,
                     project_id: row.get(6)?,
                     ssot_updated_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    source_market_id: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
                 })
             })
             .map_err(|e| format!("Query error: {}", e))?
@@ -1156,7 +1252,7 @@ impl Database {
     pub fn list_markets(&self) -> Result<Vec<crate::models::Market>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let mut stmt = conn
-            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, created_at, updated_at, remote_url FROM markets ORDER BY created_at")
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, layout FROM markets ORDER BY created_at")
             .map_err(|e| format!("Prepare error: {}", e))?;
         let markets = stmt
             .query_map([], |row| {
@@ -1169,8 +1265,10 @@ impl Database {
                     enabled: row.get(5)?,
                     last_indexed_at: row.get(6)?,
                     last_checked_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    last_commit_sha: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                    layout: row.get::<_, String>(11)?,
                 })
             })
             .map_err(|e| format!("Query error: {}", e))?
@@ -1182,7 +1280,7 @@ impl Database {
     pub fn get_market(&self, market_id: i64) -> Result<Option<crate::models::Market>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let mut stmt = conn
-            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, created_at, updated_at, remote_url FROM markets WHERE id = ?1")
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, layout FROM markets WHERE id = ?1")
             .map_err(|e| format!("Prepare error: {}", e))?;
         let result = stmt
             .query_row(params![market_id], |row| {
@@ -1195,8 +1293,10 @@ impl Database {
                     enabled: row.get(5)?,
                     last_indexed_at: row.get(6)?,
                     last_checked_at: row.get(7)?,
-                    created_at: row.get(8)?,
-                    updated_at: row.get(9)?,
+                    last_commit_sha: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                    layout: row.get::<_, String>(11)?,
                 })
             });
         match result {
@@ -1206,34 +1306,84 @@ impl Database {
         }
     }
 
-    pub fn insert_market(&self, provider: &str, owner: &str, name: &str, branch: &str, remote_url: &str) -> Result<crate::models::Market, String> {
+    /// Look up a market by its natural key instead of by id.
+    ///
+    /// Legacy databases may contain market rows whose ids were computed with
+    /// an older hashing scheme, so after an ON CONFLICT upsert the stored id
+    /// can differ from the freshly computed one. Resolving by the unique
+    /// natural key works for both new and legacy rows.
+    pub fn get_market_by_key(&self, provider: &str, owner: &str, name: &str, branch: &str) -> Result<Option<crate::models::Market>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let id = crate::hash::compute_id_hash(&format!("{}:{}:{}:{}", provider, owner, name, branch));
-        conn.execute(
-            "INSERT INTO markets (id, provider, owner, name, branch, remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, provider, owner, name, branch, remote_url],
-        )
-        .map_err(|e| format!("Failed to insert market: {}", e))?;
-        self.get_market(id).map(|m| m.unwrap())
+        let mut stmt = conn
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, layout FROM markets WHERE provider = ?1 AND owner = ?2 AND name = ?3 AND branch = ?4")
+            .map_err(|e| format!("Prepare error: {}", e))?;
+        let result = stmt
+            .query_row(params![provider, owner, name, branch], |row| {
+                Ok(crate::models::Market {
+                    id: row.get(0)?,
+                    provider: row.get(1)?,
+                    owner: row.get(2)?,
+                    name: row.get(3)?,
+                    branch: row.get(4)?,
+                    enabled: row.get(5)?,
+                    last_indexed_at: row.get(6)?,
+                    last_checked_at: row.get(7)?,
+                    last_commit_sha: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                    layout: row.get::<_, String>(11)?,
+                })
+            });
+        match result {
+            Ok(market) => Ok(Some(market)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(format!("Query error: {}", e)),
+        }
     }
 
-    pub fn upsert_market(&self, provider: &str, owner: &str, name: &str, branch: &str, remote_url: &str) -> Result<crate::models::Market, String> {
-        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+    #[allow(dead_code)] // Kept as a future entry point; current callers go through `upsert_market`.
+    pub fn insert_market(&self, provider: &str, owner: &str, name: &str, branch: &str, remote_url: &str, layout: &str) -> Result<crate::models::Market, String> {
         let id = crate::hash::compute_id_hash(&format!("{}:{}:{}:{}", provider, owner, name, branch));
-        conn.execute(
-            "INSERT INTO markets (id, provider, owner, name, branch, remote_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT(provider, owner, name, branch) DO UPDATE SET remote_url=excluded.remote_url, updated_at=datetime('now')",
-            params![id, provider, owner, name, branch, remote_url],
-        )
-        .map_err(|e| format!("Failed to upsert market: {}", e))?;
-        self.get_market(id).map(|m| m.unwrap())
+        {
+            let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+            conn.execute(
+                "INSERT INTO markets (id, provider, owner, name, branch, remote_url, layout) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![id, provider, owner, name, branch, remote_url, layout],
+            )
+            .map_err(|e| format!("Failed to insert market: {}", e))?;
+        }
+        // Lock must be released before the follow-up query, which acquires it
+        // again (std::sync::Mutex is not reentrant; nesting deadlocks).
+        // Resolve by natural key so legacy rows with older ids still match.
+        self.get_market_by_key(provider, owner, name, branch)?
+            .ok_or_else(|| "Market not found after insert".to_string())
     }
 
-    pub fn update_market(&self, market_id: i64, enabled: bool, last_indexed_at: Option<&str>, last_checked_at: Option<&str>) -> Result<(), String> {
+    pub fn upsert_market(&self, provider: &str, owner: &str, name: &str, branch: &str, remote_url: &str, layout: &str) -> Result<crate::models::Market, String> {
+        let id = crate::hash::compute_id_hash(&format!("{}:{}:{}:{}", provider, owner, name, branch));
+        {
+            let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+            conn.execute(
+                "INSERT INTO markets (id, provider, owner, name, branch, remote_url, layout) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(provider, owner, name, branch) DO UPDATE SET remote_url=excluded.remote_url, layout=excluded.layout, updated_at=datetime('now')",
+                params![id, provider, owner, name, branch, remote_url, layout],
+            )
+            .map_err(|e| format!("Failed to upsert market: {}", e))?;
+        }
+        // Lock must be released before the follow-up query, which acquires it
+        // again (std::sync::Mutex is not reentrant; nesting deadlocks).
+        // Resolve by natural key: an ON CONFLICT update keeps the stored row's
+        // original id, which in legacy databases may differ from the freshly
+        // computed one.
+        self.get_market_by_key(provider, owner, name, branch)?
+            .ok_or_else(|| "Market not found after upsert".to_string())
+    }
+
+    pub fn update_market(&self, market_id: i64, enabled: bool, last_indexed_at: Option<&str>, last_checked_at: Option<&str>, last_commit_sha: Option<&str>) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         conn.execute(
-            "UPDATE markets SET enabled = ?1, last_indexed_at = ?2, last_checked_at = ?3, updated_at = datetime('now') WHERE id = ?4",
-            params![enabled as i64, last_indexed_at, last_checked_at, market_id],
+            "UPDATE markets SET enabled = ?1, last_indexed_at = ?2, last_checked_at = ?3, last_commit_sha = ?4, updated_at = datetime('now') WHERE id = ?5",
+            params![enabled as i64, last_indexed_at, last_checked_at, last_commit_sha, market_id],
         )
         .map_err(|e| format!("Failed to update market: {}", e))?;
         Ok(())
@@ -1246,6 +1396,20 @@ impl Database {
         Ok(())
     }
 
+    /// Persist a layout change for an existing market row. Layout updates are
+    /// intentionally kept separate from `update_market` so the rest of the
+    /// field set doesn't grow new positional parameters.
+    pub fn set_market_layout(&self, market_id: i64, layout: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        conn.execute(
+            "UPDATE markets SET layout = ?1, updated_at = datetime('now') WHERE id = ?2",
+            params![layout, market_id],
+        )
+        .map_err(|e| format!("Failed to update market layout: {}", e))?;
+        Ok(())
+    }
+
+    #[allow(dead_code, clippy::too_many_arguments)] // Reserved for the remote-market sync pipeline; field-by-field inserts use `update_remote_skill_description`.
     pub fn upsert_remote_skill(&self, market_id: i64, skill_name: &str, description: Option<&str>, remote_url: &str, ssot_path: &str, content_hash: &str, core_hash: &str, installed: bool, installed_at: Option<&str>) -> Result<i64, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let id = crate::hash::compute_id_hash(&format!("{}:{}", market_id, skill_name));
@@ -1267,16 +1431,29 @@ impl Database {
         Ok(id)
     }
 
+    /// Update only the description of a remote skill row. Used when the SSOT
+    /// copy has been freshly downloaded and we want to backfill the index
+    /// without overwriting fields the market sync owns.
+    pub fn update_remote_skill_description(&self, remote_skill_id: i64, description: Option<&str>) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        conn.execute(
+            "UPDATE remote_skills SET description = ?1, updated_at = datetime('now') WHERE id = ?2",
+            params![description, remote_skill_id],
+        )
+        .map_err(|e| format!("Failed to update remote skill description: {}", e))?;
+        Ok(())
+    }
+
     pub fn list_remote_skills(&self, market_id: Option<i64>) -> Result<Vec<crate::models::RemoteSkill>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let mut skills = Vec::new();
         if let Some(mid) = market_id {
             let mut stmt = conn.prepare("SELECT id, market_id, skill_name, description, remote_url, ssot_path, remote_content_hash, remote_core_hash, is_installed, installed_at, created_at, updated_at FROM remote_skills WHERE market_id = ?1 ORDER BY skill_name").map_err(|e| format!("Prepare error: {}", e))?;
-            let rows = stmt.query_map(params![mid], |row| remote_skill_row(row)).map_err(|e| format!("Query error: {}", e))?;
+            let rows = stmt.query_map(params![mid], remote_skill_row).map_err(|e| format!("Query error: {}", e))?;
             skills.extend(rows.filter_map(|r| r.ok()));
         } else {
             let mut stmt = conn.prepare("SELECT id, market_id, skill_name, description, remote_url, ssot_path, remote_content_hash, remote_core_hash, is_installed, installed_at, created_at, updated_at FROM remote_skills ORDER BY market_id, skill_name").map_err(|e| format!("Prepare error: {}", e))?;
-            let rows = stmt.query_map([], |row| remote_skill_row(row)).map_err(|e| format!("Query error: {}", e))?;
+            let rows = stmt.query_map([], remote_skill_row).map_err(|e| format!("Query error: {}", e))?;
             skills.extend(rows.filter_map(|r| r.ok()));
         }
         Ok(skills)
@@ -1284,41 +1461,35 @@ impl Database {
 
     pub fn list_remote_installations(&self, project_id: i64, market_id: Option<i64>) -> Result<Vec<crate::models::RemoteInstallation>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let mut rows = Vec::new();
+        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<crate::models::RemoteInstallation> {
+            Ok(crate::models::RemoteInstallation {
+                id: row.get(0)?,
+                remoteSkillId: row.get(0)?,
+                skillName: row.get(1)?,
+                remoteUrl: row.get(2)?,
+                ssotPath: row.get(3)?,
+                installedAt: row.get(4)?,
+                marketId: row.get(5)?,
+                marketTitle: format!("{}/{}", row.get::<_, String>(6)?, row.get::<_, String>(7)?),
+                projectId: project_id,
+                scope: "global".to_string(),
+            })
+        };
         if let Some(mid) = market_id {
             let mut stmt = conn.prepare("SELECT rs.id, rs.skill_name, rs.remote_url, rs.ssot_path, rs.installed_at, rs.market_id, m.owner, m.name FROM remote_skills rs JOIN markets m ON m.id = rs.market_id WHERE rs.is_installed = 1 AND rs.market_id = ?1 ORDER BY rs.skill_name").map_err(|e| format!("Prepare error: {}", e))?;
-            rows = stmt.query_map(params![mid], |row| {
-                Ok(crate::models::RemoteInstallation {
-                    id: row.get(0)?,
-                    remoteSkillId: row.get(0)?,
-                    skillName: row.get(1)?,
-                    remoteUrl: row.get(2)?,
-                    ssotPath: row.get(3)?,
-                    installedAt: row.get(4)?,
-                    marketId: row.get(5)?,
-                    marketTitle: format!("{}/{}", row.get::<_, String>(6)?, row.get::<_, String>(7)?),
-                    projectId: project_id,
-                    scope: "global".to_string(),
-                })
-            }).map_err(|e| format!("Query error: {}", e))?.filter_map(|r| r.ok()).collect();
+            let rows = stmt.query_map(params![mid], map_row)
+                .map_err(|e| format!("Query error: {}", e))?
+                .filter_map(|r| r.ok())
+                .collect();
+            Ok(rows)
         } else {
             let mut stmt = conn.prepare("SELECT rs.id, rs.skill_name, rs.remote_url, rs.ssot_path, rs.installed_at, rs.market_id, m.owner, m.name FROM remote_skills rs JOIN markets m ON m.id = rs.market_id WHERE rs.is_installed = 1 ORDER BY rs.market_id, rs.skill_name").map_err(|e| format!("Prepare error: {}", e))?;
-            rows = stmt.query_map([], |row| {
-                Ok(crate::models::RemoteInstallation {
-                    id: row.get(0)?,
-                    remoteSkillId: row.get(0)?,
-                    skillName: row.get(1)?,
-                    remoteUrl: row.get(2)?,
-                    ssotPath: row.get(3)?,
-                    installedAt: row.get(4)?,
-                    marketId: row.get(5)?,
-                    marketTitle: format!("{}/{}", row.get::<_, String>(6)?, row.get::<_, String>(7)?),
-                    projectId: project_id,
-                    scope: "global".to_string(),
-                })
-            }).map_err(|e| format!("Query error: {}", e))?.filter_map(|r| r.ok()).collect();
+            let rows = stmt.query_map([], map_row)
+                .map_err(|e| format!("Query error: {}", e))?
+                .filter_map(|r| r.ok())
+                .collect();
+            Ok(rows)
         }
-        Ok(rows)
     }
 
     pub fn set_remote_skill_installed(&self, remote_skill_id: i64, installed: bool) -> Result<(), String> {

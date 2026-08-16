@@ -10,7 +10,7 @@ import "./App.css";
 import * as api from "./api";
 import type {
   Tool, Project, SkillView, ScanResult, SkillUpdate,
-  Settings, InstallationInfo, ConflictView, RemoteInstallation,
+  Settings, InstallationInfo, ConflictView, RemoteInstallation, Market,
 } from "./types";
 import { makeT, type Lang } from "./i18n";
 import { useToasts } from "./hooks/useToasts";
@@ -27,6 +27,7 @@ import { OnboardingWizard } from "./components/OnboardingWizard";
 import { LintModal } from "./components/LintModal";
 import { SkillEditorModal } from "./components/SkillEditorModal";
 import SkillMarketPanel from "./components/SkillMarketPanel";
+import { ConfirmProvider } from "./components/ConfirmProvider";
 
 import { SkillListRow } from "./components/SkillListRow";
 
@@ -64,7 +65,7 @@ function App() {
   const [checkingSingle, setCheckingSingle] = useState<number | null>(null);
   const [updates, setUpdates] = useState<SkillUpdate[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterMarket, setFilterMarket] = useState<number>(-1); // -1 = all markets / local only
+  const [filterMarket] = useState<number>(-1); // -1 = all markets / local only
   const [sortBy, setSortBy] = useState<"name" | "updated_at" | "created_at">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
@@ -74,7 +75,12 @@ function App() {
   const [updatesInitialDiff, setUpdatesInitialDiff] = useState<UpdateDiffEntry | null>(null);
   const [conflicts, setConflicts] = useState<ConflictView[]>([]);
   const [remoteInstallations, setRemoteInstallations] = useState<RemoteInstallation[]>([]);
-  const [remoteInstallationsLoading, setRemoteInstallationsLoading] = useState(false);
+  const [, setRemoteInstallationsLoading] = useState(false);
+  // Markets are owned by SkillMarketPanel (so it can drive auto-sync, layout
+  // editing, etc.), but the parent needs a copy to render a provenance badge
+  // on each skill card. We get it through `onMarketsChanged` rather than
+  // duplicating the load, so there's a single source of truth.
+  const [marketsById, setMarketsById] = useState<Record<number, Market>>({});
 
   const projectPaths = useMemo(() => {
     const map: Record<number, string> = { 0: "" };
@@ -409,6 +415,7 @@ function App() {
 
   return (
     <main className="container">
+      <ConfirmProvider>
       <ToastContainer toasts={toasts} />
 
       {/* App header */}
@@ -476,6 +483,7 @@ function App() {
       )}
 
       {/* Action bar */}
+      {activeTab !== "market" && (
       <section className="section">
         <div className="action-bar">
           <button className="btn btn-primary" onClick={handleScan} disabled={scanning}>
@@ -502,21 +510,6 @@ function App() {
           </div>
           <select
             className="sort-select"
-            value={filterMarket}
-            onChange={(e) => setFilterMarket(parseInt(e.target.value, 10))}
-            disabled={remoteInstallationsLoading}
-          >
-            <option value={-1}>{t("allMarkets")}</option>
-            {Array.from(new Set((remoteInstallations ?? []).map((item) => item.marketId))).sort((a, b) => a - b).map((marketId) => {
-              const title = (remoteInstallations ?? []).find((item) => item.marketId === marketId)?.marketTitle ?? String(marketId);
-              return (
-                <option key={marketId} value={marketId}>{title}</option>
-              );
-            })}
-          </select>
-          <span className="sort-select" style={{ color: "var(--text-muted)" }}>{t("filterByMarket")}</span>
-          <select
-            className="sort-select"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           >
@@ -540,8 +533,10 @@ function App() {
           </button>
         </div>
       </section>
+      )}
 
       {/* Conflict banner + diff modal (M5) */}
+      {activeTab !== "market" && (
       <ConflictSection
         t={t}
         conflicts={conflicts}
@@ -551,8 +546,10 @@ function App() {
           await Promise.all([loadConflicts(), loadSkills()]);
         }}
       />
+      )}
 
       {/* Skill grid */}
+      {activeTab !== "market" && (
       <section className="section">
         <h2 className="section-title">
           {t("skills")} {filteredSkills.length > 0 && <span className="badge">{filteredSkills.length}</span>}
@@ -598,12 +595,14 @@ function App() {
                     hasUpdate={hasUpdate(skill)}
                     syncing={syncing.has(skill.id)}
                     checkingSingle={checkingSingle === skill.id}
+                    sourceMarket={skill.source_market_id != null ? marketsById[skill.source_market_id] : undefined}
                     getInstallStatus={getInstallStatus}
                     onToggle={handleToggle}
                     onSync={() => handleSyncSkill(skill.id)}
                     onCheckUpdate={() => handleCheckSingleSkill(skill.id)}
                     onHealthCheck={() => setLintTarget(skill)}
                     onEdit={() => setEditingSkill(skill)}
+                    onOpenMarket={() => setActiveTab("market")}
                   />
                 ))}
               </tbody>
@@ -620,6 +619,17 @@ function App() {
                 </div>
 
                 {skill.description && <p className="skill-desc">{skill.description}</p>}
+
+                {skill.source_market_id != null && marketsById[skill.source_market_id] && (
+                  <button
+                    type="button"
+                    className="market-provenance"
+                    onClick={() => setActiveTab("market")}
+                    title={t("openInMarket")}
+                  >
+                    {t("fromMarket").replace("{0}", `${marketsById[skill.source_market_id].owner}/${marketsById[skill.source_market_id].name}`)}
+                  </button>
+                )}
 
                 <code className="skill-path">{skill.source_path}</code>
 
@@ -690,6 +700,7 @@ function App() {
           </div>
         )}
       </section>
+      )}
 
       {/* Scan Result Modal */}
       {scanResult && (
@@ -748,6 +759,7 @@ function App() {
           onClose={() => setEditingSkill(null)}
         />
       )}
+
       {/* Skill market */}
       {activeTab === "market" && (
         <SkillMarketPanel
@@ -757,14 +769,18 @@ function App() {
           projectPaths={projectPaths}
           tools={tools}
           onRemoteInstallationsChanged={setRemoteInstallations}
+          onSkillsChanged={() => { void loadSkills(); }}
+          onMarketsChanged={(markets) => setMarketsById(Object.fromEntries(markets.map((m) => [m.id, m])))}
           defaultProjectId={installProjectId}
         />
       )}
+      </ConfirmProvider>
     </main>
   );
 }
 
 export default App;
+
 
 
 

@@ -109,7 +109,7 @@ fn parse_skill(dir: &Path, skill_md_path: &Path) -> Result<DiscoveredSkill, Stri
 }
 
 /// Parse YAML front matter from SKILL.md content
-fn parse_front_matter(content: &str, dir: &Path) -> Result<(String, Option<String>), String> {
+pub(crate) fn parse_front_matter(content: &str, dir: &Path) -> Result<(String, Option<String>), String> {
     // Look for front matter between --- delimiters
     let lines: Vec<&str> = content.lines().collect();
 

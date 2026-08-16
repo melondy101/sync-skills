@@ -17,6 +17,9 @@ node_modules/
 
 # Tauri
 src-tauri/target/
+# Parallel-build target dirs used for cargo feature-flag experiments
+src-tauri/target-out/
+src-tauri/target-out2/
 
 # Temp files
 *.tmp

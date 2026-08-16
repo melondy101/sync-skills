@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-0.1.18-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/Tauri-v2-orange?style=flat-square&logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Rust-2021-brown?style=flat-square&logo=rust" alt="rust">
   <img src="https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react" alt="react">
@@ -146,7 +146,7 @@ sync-skills/
 | v0.3.0 | ✅ 已完成 | 主题切换、多语言支持、哈希稳定性修复 |
 | v0.4.0 | ✅ 已完成 | 名字即身份、冲突检测/裁决、时间戳、项目编辑、反向同步、变更忽略 |
 | v0.5.0 | 计划中 | LockManager 接入、core_hash 变更检测、文件监听 |
-| v0.6.0 | 计划中 | 应用内更新一键下载安装、用户体验提升（引导优化、快捷键、批量操作、列表性能优化） |
+| v0.6.0 | 进行中 | 应用内更新一键下载安装、用户体验提升（引导优化、快捷键、批量操作、列表性能优化） — 批量操作（市场一键同步 / 批量标记）已落地，分支 `codex/ui_optimization` |
 | v0.7.0 | 规划中 | MCP 集成：MCP Server 配置管控与跨工具同步、对外提供 MCP 接口供 Agent 调用 |
 
 ## 许可证

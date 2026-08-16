@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-0.1.18-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/Tauri-v2-orange?style=flat-square&logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Rust-2021-brown?style=flat-square&logo=rust" alt="rust">
   <img src="https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react" alt="react">
@@ -146,7 +146,7 @@ The full pre-commit checklist (type check / lint / unit tests, 6 commands across
 | v0.3.0 | ✅ Done | Theme switching, i18n, hash stability fixes |
 | v0.4.0 | ✅ Done | Name-as-identity, conflict detection/resolution, timestamps, project edit, reverse sync, change dismissal |
 | v0.5.0 | Planned | LockManager integration, core_hash change detection, file watcher |
-| v0.6.0 | Planned | In-app one-click update download & install, UX improvements (onboarding polish, keyboard shortcuts, batch operations, list performance) |
+| v0.6.0 | In progress | In-app one-click update download & install, UX improvements (onboarding polish, keyboard shortcuts, batch operations, list performance) — batch operations (sync-all / mark-all in Market) landed on branch `codex/ui_optimization` |
 | v0.7.0 | Proposed | MCP integration: MCP server config management & cross-tool sync, expose an MCP interface for agents |
 
 ## License

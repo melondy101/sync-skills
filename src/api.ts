@@ -10,7 +10,7 @@ import type {
   SkillUpdate, SkillDiff, SyncLog, Settings, ConflictView,
   SkillFile, SkillLint, AppUpdateInfo,
   Market, MarketTemplate, RemoteSkill, RemoteSkillUpdate, MarketSyncResult,
-  RemoteInstallation,
+  RemoteInstallation, MarketCommitUpdate, RemoteSkillInstalledResult,
 } from "./types";
 
 // ==================== Tools ====================
@@ -134,8 +134,14 @@ export const listMarketTemplates = () => invoke<MarketTemplate[]>("list_market_t
 export const addMarket = (provider: string, owner: string, name: string, branch: string) =>
   invoke<Market>("add_market", { provider, owner, name, branch });
 
-export const updateMarket = (id: number, provider: string, owner: string, name: string, branch: string, enabled: boolean) =>
-  invoke<Market>("update_market", { id, provider, owner, name, branch, enabled });
+export const addMarketByUrl = (url: string, branch?: string, layout?: "auto" | "root" | "subdir") =>
+  invoke<Market>("add_market_by_url", { url, branch: branch ?? null, layout: layout ?? "auto" });
+
+export const checkMarketCommits = () =>
+  invoke<MarketCommitUpdate[]>("check_market_commits");
+
+export const updateMarket = (id: number, provider: string, owner: string, name: string, branch: string, enabled: boolean, layout?: string | null) =>
+  invoke<Market>("update_market", { id, provider, owner, name, branch, enabled, layout: layout ?? null });
 
 export const deleteMarket = (id: number) =>
   invoke("delete_market", { id });
@@ -189,7 +195,7 @@ export const setRemoteSkillInstalled = (remoteSkillId: number, active: boolean) 
   invoke("toggle_remote_installation", { remoteSkillId, projectId: 0, scope: "global", active });
 
 export const setAllRemoteSkillsInstalled = (projectId: number, marketId: number | null, active: boolean) =>
-  invoke<SyncResult>("set_all_remote_skills_installed", { projectId, marketId, active });
+  invoke<RemoteSkillInstalledResult>("set_all_remote_skills_installed", { projectId, marketId, active });
 
 export const getRemoteSkillDiff = (remoteSkillId: number) =>
   invoke<SkillDiff>("get_remote_skill_diff", { remoteSkillId });

@@ -13,8 +13,8 @@
   --card-hover: #f7f6f3;
 
   /* Warm amber accent + teal secondary */
-  --accent: #c47f1e;
-  --accent-dim: #a56a14;
+  --accent: #a56a14;
+  --accent-dim: #8f5a0f;
   --accent-glow: rgba(196, 127, 30, 0.1);
   --accent-glow-strong: rgba(196, 127, 30, 0.22);
   --teal: #1a9e8f;
@@ -31,7 +31,7 @@
   /* Text hierarchy */
   --text: #1a1a2e;
   --text-secondary: #555566;
-  --text-muted: #9999aa;
+  --text-muted: #6f6f80;
   --text-on-accent: #ffffff;
 
   /* Borders and inputs */
@@ -83,7 +83,7 @@
 
   --text: #e2e2ea;
   --text-secondary: #8e8ea0;
-  --text-muted: #55556a;
+  --text-muted: #7a7a8e;
   --text-on-accent: #08080c;
 
   --border: #1f1f2e;
@@ -124,7 +124,7 @@
 
     --text: #e2e2ea;
     --text-secondary: #8e8ea0;
-    --text-muted: #55556a;
+    --text-muted: #7a7a8e;
     --text-on-accent: #08080c;
 
     --border: #1f1f2e;
@@ -141,6 +141,11 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 body {
   font-family: var(--font-sans);
@@ -224,7 +229,7 @@ body::before {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .tab:hover {
@@ -268,7 +273,7 @@ body::before {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .project-btn:hover {
@@ -298,7 +303,7 @@ body::before {
   padding: 2px 6px;
   border-radius: 4px;
   line-height: 1;
-  transition: all 0.15s;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .project-edit:hover {
@@ -373,7 +378,7 @@ body::before {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -430,6 +435,55 @@ body::before {
 .btn-danger:hover {
   color: var(--error);
   background: var(--error-dim);
+}
+
+/* Filled danger button — used for confirm-on-destructive-action prompts.
+   Distinct from .btn-danger (ghost) so the destructive choice is visually
+   weightier than the cancel button without screaming for every delete icon. */
+.btn-danger-filled {
+  background: var(--error);
+  color: #fff;
+  border-color: var(--error);
+}
+.btn-danger-filled:hover:not(:disabled) {
+  background: var(--error);
+  filter: brightness(1.12);
+}
+
+/* ConfirmDialog progress — replaces the action buttons when the request
+   wants to show live progress (e.g. sync-all installing N skills). */
+.confirm-progress {
+  margin: 4px 0 18px;
+}
+.progress-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.progress-current {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
 }
 
 /* ==================== Tool List ==================== */
@@ -674,7 +728,7 @@ body::before {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 18px;
-  transition: all 0.25s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   position: relative;
   overflow: hidden;
 }
@@ -1018,32 +1072,6 @@ body::before {
   background: var(--accent, #3b82f6);
   transition: width 0.2s ease;
 }
-
-/* Collapsible section header (tool paths) */
-.section-title-toggle {
-  cursor: pointer;
-  user-select: none;
-  gap: 6px;
-}
-
-.section-title-toggle:hover {
-  color: var(--text-primary);
-}
-
-.collapse-chevron {
-  font-size: 12px;
-  width: 14px;
-  display: inline-block;
-  color: var(--text-muted);
-}
-
-.collapsed-count {
-  font-weight: 400;
-  color: var(--text-muted);
-  text-transform: none;
-  letter-spacing: normal;
-}
-
 .settings-row {
   display: flex;
   gap: 16px;
@@ -2206,3 +2234,207 @@ body::before {
 .skill-table tbody tr.skill-list-main:hover {
   background: var(--surface-hover);
 }
+/* ==================== Market Redesign ==================== */
+
+.market-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+}
+
+.market-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.chip {
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.chip:hover { border-color: var(--border-hover); color: var(--text); }
+
+.chip-active {
+  background: var(--accent-glow);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.market-card-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 39px;
+}
+
+.market-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.market-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.market-installed-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--success);
+}
+
+.btn-success-outline {
+  background: transparent;
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+.btn-success-outline:hover:not(:disabled) { background: var(--success-dim); }
+
+.btn-press:active:not(:disabled) { transform: scale(0.96); }
+
+/* 溢出菜单（原生 details 实现，零 JS） */
+.menu { position: relative; display: inline-flex; }
+.menu > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 12px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary::marker { content: ""; }
+.menu > summary::after {
+  content: "▾";
+  font-size: 9px;
+  opacity: 0.65;
+  transition: transform 0.15s ease;
+}
+.menu > summary:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.menu[open] > summary {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.menu[open] > summary::after { transform: rotate(180deg); }
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menu-item {
+  text-align: start;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.menu-item:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 市场源管理弹窗行 */
+.source-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.source-row:last-child { border-bottom: none; }
+.source-row .source-actions { padding-top: 2px; }
+.source-info { flex: 1; min-width: 0; }
+.source-name { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.source-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.source-error {
+  font-size: 11.5px;
+  color: var(--error);
+  margin-top: 4px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.source-error-count {
+  opacity: 0.7;
+  font-weight: 500;
+}
+.badge-builtin {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+.modal-wide { max-width: 640px; min-width: 560px; }
+
+/* 更新弹窗行 */
+.update-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.update-row:last-child { border-bottom: none; }
+.update-row-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.update-row-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.update-row-market { font-size: 12px; color: var(--text-muted); }
+.update-row-hash { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
