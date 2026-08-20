@@ -1,5 +1,7 @@
 # Skill Manager 设计讨论记录
 
+> 本文档记录项目关键设计决策及其演进。已落地的决策会标注实现状态；未落地的保留为设计约束或待办。
+
 ---
 
 ## 一、已确定的约束
@@ -62,86 +64,82 @@
 
 **结论：MVP 阶段不做区分，预留扩展点。**
 
+**实现状态**：远程市场已实现（§5.9）。当前通过 `markets` 表管理 GitHub 仓库源，`remote_skills` 表存储索引结果，`source_market_id` 标记技能来源。暂未实现 `source_type` 枚举区分，现有 `provider/owner/name/branch` 已足够。
+
 具体方案：
-- Skill 结构体中预留 `source_type: SkillSource` 字段
-- 枚举只留一个 `Unknown` variant，具体来源变体（`Marketplace` / `BareRepo` / `LocalUser` 等）等需要时再设计
-- 来源判断机制（如 `.skill-market.yaml` 文件标识或用户手动标记）也在正式设计时再定
+- `source_market_id` 标记技能来源市场
+- `layout` 字段区分仓库布局（subdir/root）
+- 未来可按需扩展 `source_type` 枚举
 
 ### （已解决）远程 GitHub 拉取流程
 
-**结论：参考 CC Switch 实现，MVP 阶段照搬其设计。**
+**结论：参考 CC Switch 实现，已落地。**
 
-具体方案（CC Switch 已验证的流程）：
-- **发现**：`https://github.com/{owner}/{name}/archive/refs/heads/{branch}.zip` 下载 ZIP → 解压到临时目录 → 递归扫描 SKILL.md → 返回 `DiscoverableSkill` 列表
+**实现状态**：远程市场功能已完整实现（§5.9）。
+
+具体方案（CC Switch 已验证的流程 + 实际实现）：
+- **发现**：`https://github.com/{owner}/{name}/archive/refs/heads/{branch}.zip` 下载 ZIP → 解压到临时目录 → 递归扫描 SKILL.md → 返回 `RemoteSkill` 列表
 - **分支回退**：请求的 branch → main → master，依次尝试
-- **选择性安装**：前端展示 Skill 列表（卡片形式，含名称/描述/来源），用户勾选后调用 `install_skill_unified` 只装选中的单个 Skill
-- **更新检测**：`check_skill_updates` 重新下载 ZIP → 扫描 → 用 SHA-256 计算 `content_hash`（递归遍历目录下所有非隐藏文件，按相对路径字典序排列，`"相对路径\0内容\0"` 依次喂给 SHA-256）→ 与 DB 中记录的 hash 对比
+- **选择性安装**：前端展示 Skill 卡片网格（含名称/描述/来源），用户点击安装 → InstallDialog 选择项目/工具 → 顺序调用 `download_remote_skill_to_ssot` + `sync_remote_skill_to_tools`
+- **更新检测**：`check_remote_updates` / `check_remote_ssot_updates` 重新下载 ZIP → 扫描 → 计算 `remote_content_hash` + `remote_core_hash` → 与 DB 对比
 - **更新触发**：无后台检测，仅用户手动点击"检查更新"
-- **仓库管理**：`SkillRepo { owner, name, branch, enabled }`，内置默认列表，用户可增删启用/禁用
+- **仓库管理**：`Market { provider, owner, name, branch, enabled, layout }`，内置 5 个默认市场，用户可增删启用/禁用
+- **批量操作**：`sync_all_market_indices`、`scan_all_remote_repositories`、`set_all_remote_skills_installed`
 
 **与用户设想的对照**：
-| 用户设想 | CC Switch 做法 |
-|---------|----------------|
-| 输入 URL → 扫描出 Skill 列表 | ✅ 一样 |
-| 选择性勾选安装 | ✅ 一样 |
-| 安装到 SSOT → 同步到各工具 | ✅ 一样 |
-| 打开检查 / 定时 / 手动检查更新 | ✅ 有打开检查和手动，暂没有定时 |
-| 管理界面有更新按钮 | ✅ 有 |
+| 用户设想 | 实际实现 |
+|---------|---------|
+| 输入 URL → 扫描出 Skill 列表 | ✅ `add_market_by_url` 支持任意 GitHub URL |
+| 选择性勾选安装 | ✅ 卡片式安装，InstallDialog 选择目标 |
+| 安装到 SSOT → 同步到各工具 | ✅ 顺序调用下载 + 同步 |
+| 打开检查 / 定时 / 手动检查更新 | ✅ 有手动检查更新 |
+| 管理界面有更新按钮 | ✅ Market 工具栏检查更新 + 徽标 |
 
 ### （已解决）拓展到其他代码托管平台
 
-**结论：MVP 阶段只做 GitHub，预留 adapter 抽象层。**
+**结论：MVP 阶段只做 GitHub，当前仍只支持 GitHub。**
 
 设计方案：
-- 定义 `RemoteProvider` trait / 接口，GitHub 作为第一个实现
-- 每个平台一个独立的 adapter 文件（如 `providers/github.rs`、`providers/gitlab.rs`），对外暴露统一格式的结果
-- 类似 CC Switch 中 API 供应商的设计思路——每个供应商一个 adapter，上层调用方无需感知具体平台的差异
-- 国内平台的适配在 MVP 之后按需添加
+- `providers.rs` 中定义 `RemoteProvider` trait，GitHub 作为唯一实现
+- 每个平台一个独立的 provider 文件（如 `providers/github.rs`），对外暴露统一格式的结果
+- 国内平台的适配在未来按需添加
 
 ### （已解决）Skill 完整生命周期管理
 
-**结论：分为远端 Skill 和本地自写 Skill 两条路径，处理方式不同。**
+**结论：分为远端 Skill 和本地 Skill 两条路径，处理方式不同。**
+
+**实现状态**：已完整实现。
 
 #### 远端 Skill（从 GitHub 等仓库拉取）
 - **单向同步**：SSOT → 各工具，不反向
 - 用户在各工具目录下修改远端 Skill → 工具检测到变化，但不会往回同步
 - 更新时重新从远端下载 → 覆盖 SSOT → 覆盖各工具
+- 远程 Skill 有 `remote_content_hash` 和 `remote_core_hash` 跟踪变化
 
-#### 本地自写 Skill
+#### 本地 Skill
 - **双向同步**：任一工具改了 → 推回 SSOT → 广播到其他启用该 Skill 的工具
 - 检测方式：本地扫描时检查哈希变化，发现变化则同步
-- 触发时机：无后台检测，集成在「检查更新」按钮中，按钮同时检查远端和本地
-- 冲突处理：本地自写 Skill 不存在多人同时修改的场景，以最后修改为准
+- 触发时机：无后台检测，用户手动点击"检查更新"或"同步"
+- 冲突处理：同名 Skill 不同内容时通过冲突检测和裁决 UI 解决
 
-#### 本地 Skill 的标识机制：`local.md`
-- 工具自动管理 `local.md` 文件，用户不需要感知
-- 检测逻辑：检查 Skill 目录下是否存在 `local.md`
-- 创建本地 Skill 时 → 工具自动生成 `local.md`
-- 从非远端目录导入 Skill → 工具自动补 `local.md`
-- 扫描时：有 `local.md` → 双向同步逻辑；没有 → 单向逻辑
-
-#### SSOT 存储结构（防同名冲突）
+#### SSOT 存储结构（按域隔离）
 ```
-~/.agents/skills/
-  ├── remote/<skill-name>/    ← 远端拉来的
-  └── local/<skill-name>/     ← 本地自写的
+~/.agents/skill-manager/ssot/
+  ├── <skill-name>/           ← 全局域
+  └── _p<project_id>/<skill-name>/  ← 项目域
 ```
-同步到 Agent 工具目录时保持扁平结构，同名冲突加 `-local` 后缀：
-```
-~/.claude/skills/
-  ├── my-skill/               ← 远端版本
-  └── my-skill-local/         ← 本地版本
-```
-同名冲突的具体处理方案留到实际出现时再细化。
+SSOT 目录下保留 `local.md` 标记文件，语义为"此目录由 Skill Manager 管理"。
 
 ### （已解决）全局 vs 项目级 Skill
 
-**结论：增加「项目」Tab，界面与全局同构，项目列表用户手动管理，Skill 来源单向继承。**
+**结论：增加「项目」Tab，界面与全局同构，项目列表用户手动管理，Skill 隔离。**
+
+**实现状态**：已完整实现。
 
 #### UI 布局
 ```
 ┌──────────────────────────────────────────┐
-│  [全局]  [项目]                          │  ← 顶部一级 Tab
+│  [全局]  [项目]  [Market]                 │  ← 顶部一级 Tab
 │                                          │
 │  ┌────────┐  ┌────────────────────────┐  │
 │  │ 项目1   │  │                        │  │
@@ -157,15 +155,16 @@
 ```
 
 #### 项目列表管理
-- **MVP 阶段**：用户手动添加项目（指定项目路径即可）
-- **预留拓展**：未来可自动检测 CodeX、Claude Code 等工具的工作区目录
+- 用户手动添加项目（指定项目路径即可）
+- 支持编辑和删除
 - 左侧「+ 添加」按钮手动添加
 
 #### 项目级 Skill 的存储位置
+SSOT 按 `(name, project_id)` 域隔离：
 ```
-<project-path>/.agents/skills/
-  ├── remote/<skill-name>/    ← 远端拉来的
-  └── local/<skill-name>/     ← 本地自写的
+~/.agents/skill-manager/ssot/
+  ├── <skill-name>/           ← 全局域
+  └── _p<project_id>/<skill-name>/  ← 项目域
 ```
 同步到 Agent 工具时依然保持 Agent 工具路径下的扁平结构。
 
@@ -177,42 +176,52 @@
 #### 检测触发
 - 无论用户切换到全局还是某个项目的页面，**所有（全局 + 所有已添加的项目）全部执行检测**
 - 检测内容：远端是否有更新 + 本地目录是否有变化
+- 远程市场支持按市场筛选检查更新
 
 ### （已解决）跨工具 lock 文件管理
 
-**结论：主流工具均不使用 lock 文件来管理 Skill，本工具也无需维护。自己用数据库记录安装状态和哈希即可。**
+**结论：主流工具均不使用 lock 文件来管理 Skill，本工具也无需维护。用数据库记录安装状态和哈希即可。**
 
-对于主流 AI 编码工具（Claude Code、Codex CLI、OpenCode、Gemini CLI 等），Skill 的发现机制都是**启动时扫描 SKILL.md 目录**，不存在 lock 文件或注册表：
+**实现状态**：已确认，当前实现不涉及 lock 文件管理。
+
+对于主流 AI 编码工具（Claude Code、Codex CLI、OpenCode、Gemini CLI、Cursor、Windsurf 等），Skill 的发现机制都是**启动时扫描 SKILL.md 目录**，不存在 lock 文件或注册表：
 - Claude Code：扫描 `~/.claude/skills/` + `.claude/skills/`
 - Codex CLI：扫描 `~/.codex/skills/` + `.agents/skills/`
 - 其他工具同理
 
-**唯一的例外**是 `~/.agents/.skill-lock.json`，但它只作为来源信息的元数据文件存在，工具不依赖它来决定是否加载 Skill。
-
-**对 MVP 的影响：**
+**对实现的影响：**
 - Skill 放在正确目录就能用，lock 文件不存在不影响任何功能
-- CC Switch 用自己维护的 SQLite 数据库记录安装状态和 `content_hash` 就足够了
+- 用 SQLite 数据库记录安装状态和 `content_hash` / `core_hash` 就足够了
 - 无需往工具目录里写 lock 文件
-- lock 文件只在更新检测时需要（通过数据库中的 hash 判断本地是否和远端一致）
+- 更新检测通过数据库中的 hash 判断本地是否和远端一致
 
-### （已解决）发现源的管理
+### （已解决）市场源设计
 
-**结论：直接沿用 CC Switch 的设计。**
+**结论：直接沿用 CC Switch 的设计，并扩展为完整市场功能。**
+
+**实现状态**：已完整实现（§5.9）。
 
 具体方案：
-- **内置 4 个默认 GitHub 仓库**（如 anthropics/skills 等），预置在代码中
+- **内置 5 个默认 GitHub 仓库**（anthropics/skills、superpowers/skills、mattpocock/skills、karpathy/skill、khazix/skills），预置在代码中
 - **仓库管理**：用户在 UI 上可「增 / 删 / 启用 / 禁用」仓库
 - **数据结构**：
   ```rust
-  SkillRepo {
-      owner: String,    // GitHub 用户/组织名
-      name: String,     // 仓库名称
-      branch: String,   // 分支 (默认 "main")
-      enabled: bool,    // 是否启用
+  Market {
+      id: i64,
+      provider: String,   // "github"
+      owner: String,      // GitHub 用户/组织名
+      name: String,       // 仓库名称
+      branch: String,     // 分支 (默认 "main")
+      enabled: bool,      // 是否启用
+      layout: Option<String>, // "subdir" | "root"
+      last_indexed_at: Option<String>,
+      last_checked_at: Option<String>,
+      last_commit_sha: Option<String>,
   }
   ```
 - **禁用的仓库**：不会被扫描或检查更新
-- **仓库增删改后**：只需在下次「检查更新」时重新扫描即可，无需立即重建索引
+- **仓库增删改后**：自动同步索引
+- **批量操作**：支持全部扫描、全部标记已安装、全部取消标记、同步所有已安装
 
 ---
 
@@ -274,7 +283,7 @@
 | `name` | TEXT | 用户起的别名 |
 | `path` | TEXT UNIQUE | 项目根目录绝对路径，重复时弹窗拒绝 |
 
-**全局作为一个特殊的内置项目**存在，id 为固定值（如 0），name="Global"，path 指向系统级 SSOT 目录 `~/.agents/skills/`。
+**全局作为一个特殊的内置项目**存在，id 为固定值 0，name="Global"。SSOT 实际位于 `~/.agents/skill-manager/ssot/`。
 
 #### skills — Skill 元数据
 
@@ -285,10 +294,13 @@
 | `description` | TEXT | SKILL.md front matter 的 description |
 | `source_path` | TEXT | SSOT 目录下的绝对路径 |
 | `content_hash` | TEXT | 目录全量文件的 SHA-256，用于检测内容变化 |
+| `core_hash` | TEXT | 仅 SKILL.md 的 SHA-256，用于冲突检测 |
+| `ssot_updated_at` | TEXT | SSOT 最后更新时间 |
+| `source_market_id` | INTEGER | 远程市场来源 ID（可为 null） |
 | `created_at` | TEXT | 创建时间 |
 | `updated_at` | TEXT | 更新时间 |
 
-MVP 阶段不分 remote / local，所有 Skill 一视同仁。
+当前实现已扩展：支持远程市场来源标记、core_hash 冲突检测、时间戳跟踪。
 
 #### skill_installations — Skill 与工具安装关系
 
@@ -297,9 +309,10 @@ MVP 阶段不分 remote / local，所有 Skill 一视同仁。
 | `id` | INTEGER PK | 自增 |
 | `skill_id` | INTEGER FK | → skills.id |
 | `tool_id` | INTEGER FK | → tools.id |
-| `project_id` | INTEGER FK | → projects.id；全局项目用固定 id（如 0） |
+| `project_id` | INTEGER FK | → projects.id；全局项目用固定 id 0 |
 | `status` | TEXT | `active` / `disabled` |
 | `synced_at` | TEXT | 最后一次同步时间 |
+| `installation_synced_at` | TEXT | 安装实例最后同步时间 |
 
 唯一约束 `(skill_id, tool_id, project_id)`。全局和项目共用同一张表，通过 `project_id` 区分。
 
@@ -318,40 +331,83 @@ MVP 阶段不分 remote / local，所有 Skill 一视同仁。
 
 每次实际的同步操作记录一条，用于追溯同步链路和排查失败原因。
 
-**DDL 文件：** `D:\Develop\Wiki\skill-manager-ddl.sql` — 包含完整的建表 SQL（含索引、外键、CHECK 约束）及 seed data INSERT 语句。
+#### dismissed_updates — 变更忽略
 
-### 3.6 本地 Skill 双向传播
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | INTEGER PK | 自增 |
+| `skill_id` | INTEGER FK | → skills.id |
+| `tool_id` | INTEGER FK | → tools.id |
+| `dismissed_hash` | TEXT | 用户忽略时的 hash |
+| `created_at` | TEXT | 创建时间 |
 
-本地自写 Skill（有 `local.md` 标记的）支持双向同步。默认半自动模式：扫描到变化后做标记 → 用户点击「同步」按钮后执行：①从改动目录复制到 SSOT（`local/<skill-name>/`）→ ②从 SSOT 复制到其他所有启用该 Skill 的工具目录。设置中可切换为全自动模式（扫到变化后自动执行）。同步前后用 `content_hash` 确认一致性。同名本地/远端 Skill 在工具目录用 `-local` 后缀区分。
+记录用户主动忽略的特定工具变更，hash 匹配则不再提示。
+
+**DDL 文件：** `doc/skill-manager-ddl.sql` — 包含完整的建表 SQL（含索引、外键、CHECK 约束）及 seed data INSERT 语句。
+
+### 3.6 SSOT 同步与反向同步
+
+本地 Skill 支持双向同步：扫描到变化后做标记 → 用户点击「同步」按钮后执行：①从改动目录复制到 SSOT → ②从 SSOT 复制到其他所有启用该 Skill 的工具目录。同步前后用 `content_hash` 确认一致性。
+
+**反向同步**：可将 SSOT 内容推送到指定工具目录，覆盖本地更改。
+
+SSOT 按 `(name, project_id)` 域隔离：全局域 `~/.agents/skill-manager/ssot/<name>/`，项目域 `~/.agents/skill-manager/ssot/_p<project_id>/<name>/`。
+
+`local.md` 标记文件保留在 SSOT 目录下，语义为"此目录由 Skill Manager 管理"，hash 计算时跳过。
 
 ### 3.7 Skill 可视化列表
 
-主界面展示本地 Skill 列表（名称 + 描述 + 来源 + 已安装工具数）。每个 Skill 有启用/禁用开关（禁用后不再同步到该工具）。列表在扫描完成后自动刷新。
+主界面展示本地 Skill 列表（名称 + 描述 + 来源 + 已安装工具数 + SSOT 更新时间）。每个 Skill 有启用/禁用开关（禁用后不再同步到该工具）。列表在扫描完成后自动刷新。支持卡片/列表两种视图、搜索、排序。
 
 ### 3.8 操作反馈
 
-所有用户操作（扫描、同步、安装、配置）结束后都有明确反馈：成功有绿色提示（含数量统计，如"扫描完成，发现 3 个 Skill"），失败有红色错误详情（含错误码或错误信息）。反馈停留时间至少 3 秒或在消息中心可查。
+所有用户操作（扫描、同步、安装、配置、市场操作）结束后都有明确反馈：成功有绿色提示（含数量统计，如"扫描完成，发现 3 个 Skill"），失败有红色错误详情（含错误码或错误信息）。反馈停留时间至少 3 秒或在消息中心可查。
+
+### 3.9 远程市场
+
+从 GitHub 仓库浏览、搜索、一键安装 Skill。内置 5 个默认市场源，支持用户添加自定义仓库。支持批量操作（全部扫描、全部标记已安装、全部取消标记、同步所有已安装）。支持检查远程更新。
+
+### 3.10 应用内更新
+
+检测并下载安装新版本应用。检查 GitHub Release 最新版本，下载安装包到本地，启动安装程序。
+
+### 3.11 引导与健康检查
+
+**首次启动引导**：新用户引导 wizard，帮助配置工具路径和首次扫描。
+
+**Skill 健康检查**：对 Skill 进行 Lint 检查，发现潜在问题（如 front matter 缺失、路径错误等），支持自动修复。
+
+**内置编辑器**：直接在应用内编辑 SKILL.md 文件，无需跳转到外部编辑器。
 
 ---
 
-> **MVP 阶段不包含的功能（已讨论但后置）：**
-> - 远端 GitHub 仓库拉取 Skill
-> - Remote / Local 分类 Tab
-> - 公开市场与裸仓库的区分
+> **已实现但原属 post-MVP 的功能：**
+> - 远端 GitHub 仓库拉取 Skill（市场功能）
+> - 公开市场与裸仓库的区分（ markets 表 + layout 字段）
+> - 应用内更新
+> - 首次启动引导
+> - Skill 健康检查 / Lint
+> - 内置 SKILL.md 编辑器
+> - 活动日志面板
+>
+> **仍未实现的功能：**
 > - 其他代码托管平台适配
 > - 自动检测工作区目录
 > - 定时检测同步
+> - 文件系统监听自动同步
 
 ---
 
 ## 四、技术选型
 
-**方案：Tauri v2 + React（SPA）+ SQLite**
+**方案：Tauri v2 + React 19 + TypeScript + SQLite**
 
 | 层面 | 选型 | 理由 |
 |------|------|------|
-| 桌面框架 | **Tauri v2** | 和 CC Switch 一致；打包体积小（~5MB）；原生性能 |
-| 前端 | **React** | 与你正在学的 Next.js 共享 React 生态（组件、状态管理、hooks），技能直接迁移 |
-| 数据库 | **SQLite** | 量级够用、零配置、嵌入式、进程内读写 |
-| 后端 | **Rust** | Tauri 自带 Rust 后端，处理文件扫描、哈希计算、SQLite 读写等底层操作 |
-| 打包 | Tauri builder | 输出原生 exe，无需 Node 运行时依赖 |
+| 桌面框架 | **Tauri v2** | 打包体积小（~5MB）；原生性能；支持 Windows/macOS/Linux |
+| 前端 | **React 19 + TypeScript** | 类型安全；组件生态成熟；与 Tauri v2 前端绑定无关 |
+| 数据库 | **SQLite (rusqlite)** | 量级够用、零配置、嵌入式、Rust 侧直接操作，事务控制灵活 |
+| 后端 | **Rust** | Tauri 自带 Rust 后端，处理文件扫描、哈希计算、SQLite 读写、远程拉取等底层操作 |
+| 异步运行时 | **tokio** | Tauri 自带，用于 spawn_blocking 包裹同步 DB/文件操作 |
+| 序列化 | **serde / serde_json / serde_yaml** | Rust 侧数据序列化与 YAML front matter 解析 |
+| 打包 | Tauri builder | 输出原生安装包（.msi/.nsis/.dmg/.AppImage/.deb），无需 Node 运行时依赖 |

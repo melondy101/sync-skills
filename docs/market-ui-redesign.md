@@ -2,6 +2,7 @@
 
 - 日期：2026-08-10
 - 状态：**已实现**（2026-08-11 完成于分支 `codex/ui_optimization`；执行手册：`docs/market-ui-impl-guide.md`；提交列表见 `git log --oneline codex/ui_optimization`）
+- 后续演化（2026-08-17 合入 main）：`fe72f57` 批量菜单打磨 · `aa6cdf5`/`f3c6dd5` 仓库可达性校验 · `a4a7e09` 加源自动同步 + 每源错误条 · `4c2daa2`/`8c00616` 破坏性动作二次确认 · `8d2f7b9` sync-all 进度 + ConfirmDialog 抽出 context · `cb02a0a`/`ecdb263` 让市场 UI 可用
 - 范围：「市场」Tab 整体重设计 + 相关全局设计规范修正
 - 方法依据：ui-designer 工作流 + [jakubkrehel/skills](https://github.com/jakubkrehel/skills)（better-interface / better-layout / better-ui / better-colors / better-typography / better-writing）
 - 关联文档：`docs/ui-review-2026-08-08.md`（全量 UI 评审，本文档继承其 P0/P1 结论）、`doc/PRD.md`、`doc/design-discussion.md`

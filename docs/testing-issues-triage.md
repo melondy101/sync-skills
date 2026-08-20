@@ -1,11 +1,12 @@
 # Skill Studio / 跨工具 Skill 同步 —— 问题整理清单
 
 > 整理时间：2026-07-18
-> 涉及功能：Skill 同步中心、SSOT（单一真理源中央备份）、跨工具扫描（Claude Code / Codex / Cline / Gemini / WorkBuddy）
+> 涉及功能：Skill 同步中心、SSOT（单一真理源中央备份）、跨工具扫描（Claude Code / Codex CLI / Cline / Gemini / OpenCode）
 > 状态：全部已修复（P0/P1 见提交 `4cb08af`；P2 见后续提交）
 >
 > 说明：本文档原状态为「待提交反馈」，但同日的提交 `4cb08af` 已实际修复全部 P0/P1 问题，
 > 并将本文件移入 `docs/`。此前文档未同步更新，故此处补全修复记录；P2 体验增强随后也已实现。
+> 这些修复已在后续版本中合入 main。
 
 ---
 
