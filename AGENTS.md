@@ -21,8 +21,10 @@ Tauri v2 桌面应用（Rust + React 19 + TypeScript + SQLite），用于跨 AI 
 
 ## 文档指向
 - 贡献流程与代码规范：`CONTRIBUTING.md`
-- 规划 / 设计：`doc/`（PRD、design-discussion、phase-3、DDL）
+- 规划 / 设计：`doc/`（PRD、design-discussion、phase-3）
 - 问题追踪与解决记录：`docs/testing-issues-triage.md`
+- 市场 UI 改造设计与执行手册：`docs/market-ui-redesign.md`、`docs/market-ui-impl-guide.md`
+- UI 评审报告：`docs/ui-review-2026-08-08.md`
 - 用户文档：`README.md`（中 / 英 / 日）
 
 ## 不要提交
