@@ -44,8 +44,10 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
 - **Change Dismissal** — Persistently ignore specific tool changes until content changes again
 - **Project-level Management** — Configure independent skill sets per project, with edit support
 - **Diff Detection** — Built-in LCS diff view (side-by-side / unified) showing precise file-level changes
-- **Theme Switching** — Light / Dark / Follow System
-- **i18n** — 中文 / English / 日本語
+- **Skill Market** — Browse, search, and one-click install skills from GitHub repos with built-in market source management
+- **App Self-update** — One-click detection, download, and install of new versions
+- **Onboarding & Health Check** — First-run wizard, built-in Lint checks with auto-fix, and an in-app SKILL.md editor
+- **Theme & i18n** — Light / Dark / Follow System, 中文 / English / 日本語
 - **Activity Logs** — Complete audit trail of all operations
 
 ## Architecture
@@ -70,6 +72,9 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
 ```
 
 **Stack:** Tauri v2 (Rust + React 19 + TypeScript + SQLite)
+
+The main UI has three tabs: **Global** (global skill management), **Projects** (project-level skill management), and **Market** (remote skill marketplace).
+**Settings** and **Logs** panels are available from the top-right. The app supports minimize-to-tray.
 
 ## Installation
 
@@ -118,19 +123,36 @@ Installers for all platforms are built automatically via GitHub Actions — no l
 
 > Installers are currently unsigned, so Windows / macOS will show SmartScreen / Gatekeeper warnings.
 
+**Note**: The current `main` branch is 22 commits ahead of the `v0.1.18` tag and includes unreleased changes such as the redesigned Market tab, in-app updates, onboarding wizard, health checks, and more. The package version will be bumped in the next release.
+
 ## Development
 
 ```
 sync-skills/
 ├── src/                    # Frontend (React + TypeScript)
-│   ├── App.tsx             # Main component
+│   ├── App.tsx             # Main component & routing
 │   ├── App.css             # Styles (CSS variable theme system)
+│   ├── api.ts              # Tauri IPC wrappers
+│   ├── i18n.ts             # Localization strings
 │   ├── types.ts            # TypeScript type definitions
-│   └── main.tsx            # Entry point
-├── src-tauri/src/          # Rust backend (lib.rs / commands/ / ops.rs / sync.rs / db.rs / scanner.rs / diff.rs / lock.rs / lint.rs, etc.)
-├── doc/                    # Planning docs (PRD, design, phase plan, DDL)
-├── docs/                   # Issue tracker & resolution notes (e.g. testing-issues-triage.md)
-└── .github/workflows/      # CI: verify.yml quality gate + release.yml multi-platform installers
+│   ├── main.tsx            # Entry point
+│   ├── components/         # UI components
+│   └── hooks/              # Custom hooks
+├── src-tauri/src/          # Rust backend
+│   ├── lib.rs              # Entry point & command registration
+│   ├── commands/           # Tauri command layer
+│   ├── ops.rs              # Domain logic
+│   ├── sync.rs             # File sync
+│   ├── scanner.rs          # Directory scanning
+│   ├── diff.rs             # LCS diff algorithm
+│   ├── db.rs               # SQLite data access
+│   ├── lock.rs             # LockManager
+│   ├── lint.rs             # SKILL.md health checks
+│   ├── market.rs           # Remote marketplace
+│   └── ...
+├── doc/                    # Planning docs (PRD, design, phase plan)
+├── docs/                   # Issue triage, UI reviews, market redesign docs
+└── .github/workflows/      # CI: verify.yml + release.yml
 ```
 
 ### Verification
@@ -145,8 +167,8 @@ The full pre-commit checklist (type check / lint / unit tests, 6 commands across
 | v0.2.0 | ✅ Done | Auto-discovery, sorting/filtering, diff detection, diff view |
 | v0.3.0 | ✅ Done | Theme switching, i18n, hash stability fixes |
 | v0.4.0 | ✅ Done | Name-as-identity, conflict detection/resolution, timestamps, project edit, reverse sync, change dismissal |
-| v0.5.0 | Planned | LockManager integration, core_hash change detection, file watcher |
-| v0.6.0 | In progress | In-app one-click update download & install, UX improvements (onboarding polish, keyboard shortcuts, batch operations, list performance) — batch operations (sync-all / mark-all in Market) landed on branch `codex/ui_optimization` |
+| v0.5.0 | ✅ Done | LockManager integration, core_hash change detection; file watcher still planned |
+| v0.6.0 | ✅ In progress | In-app update, onboarding wizard, health check / Lint, built-in editor, batch operations (sync-all / mark-all in Market) landed; list performance & keyboard shortcuts still iterating |
 | v0.7.0 | Proposed | MCP integration: MCP server config management & cross-tool sync, expose an MCP interface for agents |
 
 ## License

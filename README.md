@@ -44,8 +44,10 @@ Skill Manager 提供一个桌面 GUI，让你在一个地方管理所有 Skill�
 - **变更忽略** — 持久化忽略特定工具的变更，hash 匹配则不再提示
 - **项目级管理** — 为不同项目配置独立的 Skill 集合，支持编辑
 - **差异检测** — 内置 LCS diff 视图（并排 / 统一两种模式），精确展示文件级变更
-- **主题切换** — 亮色 / 暗色 / 跟随系统
-- **多语言** — 中文 / English / 日本語
+- **Skill 市场** — 从 GitHub 仓库浏览、搜索、一键安装 Skill，内置市场源管理与批量操作
+- **应用内更新** — 一键检测并下载安装新版本
+- **引导与健康检查** — 首次启动引导向导、内置 Lint 检查与自动修复、SKILL.md 内置编辑器
+- **主题与多语言** — 亮色 / 暗色 / 跟随系统，中文 / English / 日本語
 - **活动日志** — 完整的操作审计记录
 
 ## 架构
@@ -70,6 +72,9 @@ Skill Manager 提供一个桌面 GUI，让你在一个地方管理所有 Skill�
 ```
 
 **技术栈：** Tauri v2 (Rust + React 19 + TypeScript + SQLite)
+
+主界面分为三个 Tab：**Global**（全局 Skill 管理）、**Projects**（项目级 Skill 管理）、**Market**（远程 Skill 市场）。
+右上角可进入 **Settings** 和 **Logs** 面板。应用支持最小化到系统托盘。
 
 ## 安装
 
@@ -118,19 +123,36 @@ pnpm tauri dev
 
 > 当前安装包未做代码签名，Windows / macOS 会提示 SmartScreen / Gatekeeper 警告。
 
+**注意**：当前 main 分支已超出 `v0.1.18` 标签（截至本更新已有 22 个后续提交），最新功能包括市场 UI 改造、应用内更新、引导向导、健康检查等；正式版本号将在下次发版时统一 bump。
+
 ## 开发
 
 ```
 sync-skills/
 ├── src/                    # 前端 (React + TypeScript)
-│   ├── App.tsx             # 主组件
+│   ├── App.tsx             # 主组件与路由
 │   ├── App.css             # 样式（CSS 变量主题系统）
+│   ├── api.ts              # Tauri IPC 封装
+│   ├── i18n.ts             # 多语言文本
 │   ├── types.ts            # TypeScript 类型定义
-│   └── main.tsx            # 入口
-├── src-tauri/src/          # Rust 后端（lib.rs / commands/ / ops.rs / sync.rs / db.rs / scanner.rs / diff.rs / lock.rs / lint.rs 等）
-├── doc/                    # 规划文档（PRD、设计、阶段计划、DDL）
-├── docs/                   # 问题清单与已解决记录（如 testing-issues-triage.md）
-└── .github/workflows/      # CI：verify.yml 质量门禁 + release.yml 多平台安装包构建
+│   ├── main.tsx            # 入口
+│   ├── components/         # UI 组件
+│   └── hooks/              # 自定义 Hooks
+├── src-tauri/src/          # Rust 后端
+│   ├── lib.rs              # 入口与命令注册
+│   ├── commands/           # Tauri 命令薄层
+│   ├── ops.rs              # 领域逻辑
+│   ├── sync.rs             # 文件同步
+│   ├── scanner.rs          # 目录扫描
+│   ├── diff.rs             # LCS 差异算法
+│   ├── db.rs               # SQLite 数据访问
+│   ├── lock.rs             # LockManager
+│   ├── lint.rs             # SKILL.md 健康检查
+│   ├── market.rs           # 远程市场
+│   └── ...
+├── doc/                    # 规划文档（PRD、设计、阶段计划）
+├── docs/                   # 问题追踪、UI 评审、市场改造文档
+└── .github/workflows/      # CI：verify.yml + release.yml
 ```
 
 ### 验证
@@ -145,8 +167,8 @@ sync-skills/
 | v0.2.0 | ✅ 已完成 | 自动发现、排序筛选、差异检测、diff 视图 |
 | v0.3.0 | ✅ 已完成 | 主题切换、多语言支持、哈希稳定性修复 |
 | v0.4.0 | ✅ 已完成 | 名字即身份、冲突检测/裁决、时间戳、项目编辑、反向同步、变更忽略 |
-| v0.5.0 | 计划中 | LockManager 接入、core_hash 变更检测、文件监听 |
-| v0.6.0 | 进行中 | 应用内更新一键下载安装、用户体验提升（引导优化、快捷键、批量操作、列表性能优化） — 批量操作（市场一键同步 / 批量标记）已落地，分支 `codex/ui_optimization` |
+| v0.5.0 | ✅ 已完成 | LockManager 接入、core_hash 变更检测；文件监听仍计划中 |
+| v0.6.0 | ✅ 进行中 | 应用内更新、引导优化（Onboarding Wizard）、健康检查/Lint、内置编辑器、批量操作（市场一键同步 / 批量标记）已落地；列表性能优化、快捷键等仍在迭代 |
 | v0.7.0 | 规划中 | MCP 集成：MCP Server 配置管控与跨工具同步、对外提供 MCP 接口供 Agent 调用 |
 
 ## 许可证
