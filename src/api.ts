@@ -197,5 +197,4 @@ export const setRemoteSkillInstalled = (remoteSkillId: number, active: boolean) 
 export const setAllRemoteSkillsInstalled = (projectId: number, marketId: number | null, active: boolean) =>
   invoke<RemoteSkillInstalledResult>("set_all_remote_skills_installed", { projectId, marketId, active });
 
-export const getRemoteSkillDiff = (remoteSkillId: number) =>
-  invoke<SkillDiff>("get_remote_skill_diff", { remoteSkillId });
+

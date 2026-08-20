@@ -231,7 +231,7 @@ export interface Market {
   last_commit_sha: string | null;
   /**
    * Repository layout: "subdir" (each subdirectory is a skill, default)
-   * or "root" (the whole repo is one skill). Added in 0.1.19; older
+   * or "root" (the whole repo is one skill). Added in 0.1.18; older
    * market rows return undefined at runtime and default to "subdir".
    */
   layout?: "subdir" | "root";
