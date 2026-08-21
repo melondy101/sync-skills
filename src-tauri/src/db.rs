@@ -1459,6 +1459,19 @@ impl Database {
         Ok(skills)
     }
 
+    /// Look up a single remote skill by id. Returns `None` when not found.
+    /// Prefer this over `list_remote_skills(None)?.find(...)` to avoid a
+    /// full-table scan on every call (the Detail Modal opens often).
+    pub fn get_remote_skill(&self, remote_skill_id: i64) -> Result<Option<crate::models::RemoteSkill>, String> {
+        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut stmt = conn.prepare("SELECT id, market_id, skill_name, description, remote_url, ssot_path, remote_content_hash, remote_core_hash, is_installed, installed_at, created_at, updated_at FROM remote_skills WHERE id = ?1").map_err(|e| format!("Prepare error: {}", e))?;
+        let mut rows = stmt.query_map(params![remote_skill_id], remote_skill_row).map_err(|e| format!("Query error: {}", e))?;
+        match rows.next() {
+            Some(row) => Ok(Some(row.map_err(|e| e.to_string())?)),
+            None => Ok(None),
+        }
+    }
+
     pub fn list_remote_installations(&self, project_id: i64, market_id: Option<i64>) -> Result<Vec<crate::models::RemoteInstallation>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<crate::models::RemoteInstallation> {

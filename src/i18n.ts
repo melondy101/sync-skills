@@ -269,6 +269,25 @@ export const translations: Record<Lang, Record<string, string>> = {
     fromMarket: "来源：{0}",
     openInMarket: "去市场打开",
 
+    // T4 Remote Skill Detail Modal
+    remoteSkillDetailTitle: "技能详情",
+    description: "描述",
+    files: "文件",
+    fileTreeLabel: "技能文件",
+    skillMdLabel: "SKILL.md",
+    sourceMarket: "来源市场",
+    installStatus: "安装状态",
+    hashComparison: "版本对比",
+    copyBtn: "复制",
+    copyHash: "复制完整哈希",
+    copiedHash: "哈希已复制",
+    copyFailed: "复制失败",
+    notInstalledHint: "尚未安装，请先安装后查看完整内容。",
+    failedLoadSkillDetail: "加载技能详情失败",
+    openDetailAria: "打开 {0} 的详情",
+    hashNoLocal: "（未安装）",
+    hashClickToExpand: "点击展开完整哈希",
+
     // Toast messages
     failedLoadTools: "加载工具失败",
     failedLoadSkills: "加载 Skill 失败",
@@ -663,6 +682,25 @@ export const translations: Record<Lang, Record<string, string>> = {
     layoutAuto: "Auto-detect",
     fromMarket: "From: {0}",
     openInMarket: "Open in market",
+
+    // T4 Remote Skill Detail Modal
+    remoteSkillDetailTitle: "Skill detail",
+    description: "Description",
+    files: "Files",
+    fileTreeLabel: "Skill files",
+    skillMdLabel: "SKILL.md",
+    sourceMarket: "Source market",
+    installStatus: "Install status",
+    hashComparison: "Version comparison",
+    copyBtn: "Copy",
+    copyHash: "Copy full hash",
+    copiedHash: "Hash copied",
+    copyFailed: "Copy failed",
+    notInstalledHint: "Not installed yet. Install the skill to see its full content.",
+    failedLoadSkillDetail: "Failed to load skill detail",
+    openDetailAria: "Open detail for {0}",
+    hashNoLocal: "(not installed)",
+    hashClickToExpand: "Click to expand the full hash",
 
     // Toast messages
     failedLoadTools: "Failed to load tools",

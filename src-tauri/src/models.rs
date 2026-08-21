@@ -220,6 +220,34 @@ pub struct RemoteSkillUpdate {
     pub has_changes: bool,
 }
 
+/// Detail-Modal payload for a remote skill (T4).
+///
+/// Returned by `get_remote_skill_detail`. Reads SSOT-on-disk contents only;
+/// nothing is downloaded here — the user must install first to see the
+/// file tree and SKILL.md preview.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteSkillDetail {
+    pub remote_skill_id: i64,
+    pub skill_name: String,
+    pub description: Option<String>,
+    pub remote_url: String,
+    pub ssot_path: String,
+    pub remote_content_hash: String,
+    pub remote_core_hash: String,
+    /// SHA-256 of the SSOT directory contents (matches the same computation
+    /// `check_remote_ssot_updates` uses). `None` when SSOT is absent.
+    pub local_content_hash: Option<String>,
+    /// SHA-256 of the SSOT SKILL.md (matches `core_hash`). `None` when SSOT
+    /// is absent.
+    pub local_core_hash: Option<String>,
+    /// Empty when SSOT hasn't been written yet (skill is not installed).
+    pub skill_md_content: Option<String>,
+    /// Relative paths under SSOT, excluding SKILL.md/local.md and dotfiles.
+    pub files: Vec<String>,
+    /// `true` when SSOT directory is absent (skill is not installed).
+    pub ssot_missing: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MarketSyncResult {
     pub market_id: i64,

@@ -9,7 +9,7 @@ import type {
   Tool, ToolTemplate, Project, SkillView, ScanResult, SyncResult,
   SkillUpdate, SkillDiff, SyncLog, Settings, ConflictView,
   SkillFile, SkillLint, AppUpdateInfo,
-  Market, MarketTemplate, RemoteSkill, RemoteSkillUpdate, MarketSyncResult,
+  Market, MarketTemplate, RemoteSkill, RemoteSkillDetail, RemoteSkillUpdate, MarketSyncResult,
   RemoteInstallation, MarketCommitUpdate, RemoteSkillInstalledResult,
 } from "./types";
 
@@ -196,5 +196,10 @@ export const setRemoteSkillInstalled = (remoteSkillId: number, active: boolean) 
 
 export const setAllRemoteSkillsInstalled = (projectId: number, marketId: number | null, active: boolean) =>
   invoke<RemoteSkillInstalledResult>("set_all_remote_skills_installed", { projectId, marketId, active });
+
+// ==================== Remote Skill Detail (T4) ====================
+
+export const getRemoteSkillDetail = (remoteSkillId: number) =>
+  invoke<RemoteSkillDetail>("get_remote_skill_detail", { remoteSkillId });
 
 

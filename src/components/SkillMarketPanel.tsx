@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import * as api from "../api";
 import InstallDialog from './InstallDialog';
 import MarketSourcesModal from './MarketSourcesModal';
+import { RemoteSkillDetailModal } from './RemoteSkillDetailModal';
 import RemoteUpdatesModal from './RemoteUpdatesModal';
 import { useConfirm } from './ConfirmProvider';
 import type {
@@ -76,6 +77,9 @@ export default function SkillMarketPanel({
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [installedOnly, setInstalledOnly] = useState(false);
   const [marketSyncErrors, setMarketSyncErrors] = useState<Record<number, string[]>>({});
+
+  // T4 detail Modal: the skill whose card was clicked (null = closed).
+  const [detailSkill, setDetailSkill] = useState<RemoteSkill | null>(null);
 
   const { showConfirm, setProgress } = useConfirm();
 
@@ -607,7 +611,20 @@ export default function SkillMarketPanel({
             const hasUpdate = updateKeys.has(`${skill.market_id}:${skill.skill_name}`);
             const market = markets.find((m) => m.id === skill.market_id);
             return (
-              <div key={skill.id} className={`skill-card ${hasUpdate ? "skill-has-update" : ""}`}>
+              <div
+                key={skill.id}
+                className={`skill-card ${hasUpdate ? "skill-has-update" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-label={t("openDetailAria").replace("{0}", skill.skill_name)}
+                onClick={() => setDetailSkill(skill)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setDetailSkill(skill);
+                  }
+                }}
+              >
                 <div className="skill-header">
                   <h3 className="skill-name">{skill.skill_name}</h3>
                 </div>
@@ -615,7 +632,7 @@ export default function SkillMarketPanel({
                 <div className="market-card-meta">
                   {market ? marketTitle(market) : ""}
                 </div>
-                <div className="market-card-footer">
+                <div className="market-card-footer" onClick={(e) => e.stopPropagation()}>
                   {!skill.is_installed ? (
                     <button className="btn btn-small btn-primary btn-press" onClick={() => setInstallTarget(skill)} disabled={installLoading}>
                       {t("install")}
@@ -698,6 +715,26 @@ export default function SkillMarketPanel({
           onClose={() => setShowUpdatesModal(false)}
         />
       )}
+
+      {/* T4: Remote skill detail Modal. Opened by clicking a card. */}
+      {detailSkill && (() => {
+        const detailMarket = markets.find((m) => m.id === detailSkill.market_id);
+        return (
+          <RemoteSkillDetailModal
+            t={t}
+            skill={detailSkill}
+            marketTitle={detailMarket ? marketTitle(detailMarket) : ""}
+            isInstalled={detailSkill.is_installed}
+            installedAt={detailSkill.installed_at}
+            addToast={addToast}
+            onClose={() => setDetailSkill(null)}
+            onInstall={() => {
+              setDetailSkill(null);
+              setInstallTarget(detailSkill);
+            }}
+          />
+        );
+      })()}
     </section>
   );
 }

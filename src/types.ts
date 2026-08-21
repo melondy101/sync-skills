@@ -279,6 +279,31 @@ export interface RemoteSkillUpdate {
   has_changes: boolean;
 }
 
+/**
+ * T4 detail-Modal payload. Mirrors `RemoteSkillDetail` in
+ * `src-tauri/src/models.rs`. Reads SSOT-on-disk contents only; the user must
+ * install the skill first to see SKILL.md content and the file tree.
+ */
+export interface RemoteSkillDetail {
+  remote_skill_id: number;
+  skill_name: string;
+  description: string | null;
+  remote_url: string;
+  ssot_path: string;
+  remote_content_hash: string;
+  remote_core_hash: string;
+  /** SHA-256 of the SSOT directory contents. `null` when SSOT is absent. */
+  local_content_hash: string | null;
+  /** SHA-256 of the SSOT SKILL.md. `null` when SSOT is absent. */
+  local_core_hash: string | null;
+  /** `null` when the SSOT copy is absent (skill is not installed yet). */
+  skill_md_content: string | null;
+  /** Relative paths under SSOT, excluding SKILL.md/local.md and dotfiles. */
+  files: string[];
+  /** `true` when the SSOT directory does not exist on disk. */
+  ssot_missing: boolean;
+}
+
 export interface MarketSyncResult {
   market_id: number;
   skills_found: number;

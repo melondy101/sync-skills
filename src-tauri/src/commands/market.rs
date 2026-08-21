@@ -1053,3 +1053,19 @@ pub async fn set_all_remote_skills_installed(db: State<'_, DbState>, _project_id
     }
     Ok(crate::models::RemoteSkillInstalledResult { updated })
 }
+
+// ==================== Remote Skill Detail (T4) ====================
+
+/// Detail payload for the T4 Market: RemoteSkillDetailModal. Thin adapter —
+/// all domain logic (SSOT walk, hash, file tree) lives in
+/// `ops::remote_skill_detail`. Never triggers a download.
+#[tauri::command]
+pub async fn get_remote_skill_detail(
+    db: State<'_, DbState>,
+    remote_skill_id: i64,
+) -> Result<crate::models::RemoteSkillDetail, String> {
+    let skill = db
+        .get_remote_skill(remote_skill_id)?
+        .ok_or_else(|| format!("remote skill {remote_skill_id} not found"))?;
+    crate::ops::remote_skill_detail::build_remote_skill_detail(&skill)
+}

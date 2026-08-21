@@ -4,6 +4,8 @@
 //! Core domain operations shared by multiple commands.
 //! These functions are pure logic over Database/LockManager — no Tauri types.
 
+pub mod remote_skill_detail;
+
 use crate::db::Database;
 use crate::lock::LockManager;
 use crate::models::{self, ScanDetail, ScanResult, SkillUpdate, SyncResult};

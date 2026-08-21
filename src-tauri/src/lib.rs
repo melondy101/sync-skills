@@ -190,6 +190,7 @@ pub fn run() {
             commands::market::check_remote_updates,
             commands::market::check_remote_ssot_updates,
             commands::market::set_all_remote_skills_installed,
+            commands::market::get_remote_skill_detail,
             // commands::market::get_remote_skill_diff removed with remote diff redesign
             commands::market::list_remote_installations,
             commands::market::toggle_remote_installation,

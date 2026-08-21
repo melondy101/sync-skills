@@ -34,10 +34,42 @@ const markets = [
 
 const toast = vi.fn();
 
+const remoteSkills = [
+  {
+    id: 10,
+    market_id: 1,
+    skill_name: "demo-skill",
+    description: "Demonstrates the T4 detail Modal.",
+    remote_url: "https://github.com/alice/alpha-market/tree/main/demo-skill",
+    ssot_path: "/tmp/ssot/demo-skill",
+    remote_content_hash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    remote_core_hash: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+    is_installed: true,
+    installed_at: "2026-08-20 12:00:00",
+    created_at: "2026-08-20 11:00:00",
+    updated_at: "2026-08-20 12:00:00",
+  },
+];
+
+const detailPayload = {
+  remote_skill_id: 10,
+  skill_name: "demo-skill",
+  description: "Demonstrates the T4 detail Modal.",
+  remote_url: "https://github.com/alice/alpha-market/tree/main/demo-skill",
+  ssot_path: "/tmp/ssot/demo-skill",
+  remote_content_hash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+  remote_core_hash: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+  local_content_hash: "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+  local_core_hash: "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100",
+  skill_md_content: "---\nname: demo-skill\ndescription: demo\n---\nbody",
+  files: ["references/spec.md", "scripts/build.sh"],
+  ssot_missing: false,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.listMarkets).mockResolvedValue(markets);
-  vi.mocked(api.listRemoteSkills).mockResolvedValue([]);
+  vi.mocked(api.listRemoteSkills).mockResolvedValue(remoteSkills);
   vi.mocked(api.listRemoteInstallations).mockResolvedValue([]);
   vi.mocked(api.scanAllRemoteRepositories).mockResolvedValue([]);
   vi.mocked(api.checkMarketCommits).mockResolvedValue([]);
@@ -48,6 +80,7 @@ beforeEach(() => {
   vi.mocked(api.syncMarketIndex).mockResolvedValue({ market_id: 1, skills_found: 0, skills_new: 0, skills_updated: 0, errors: [] });
   vi.mocked(api.deleteMarket).mockResolvedValue(undefined);
   vi.mocked(api.syncRemoteInstallationsToTools).mockResolvedValue({ skill_id: 0, skill_name: "", synced_to: 0, errors: [] });
+  vi.mocked(api.getRemoteSkillDetail).mockResolvedValue(detailPayload);
 });
 
 function makeT(key: string) {
@@ -87,12 +120,29 @@ function makeT(key: string) {
     confirmSyncAllTitle: "Sync all installed skills?",
     confirmSyncAllMessage: "Every installed skill will be copied or symlinked to {0}.",
     skillsCount: "{0} skills",
+    remoteSkillDetailTitle: "Skill detail",
+    openDetailAria: "Open detail for {0}",
+    copyHash: "Copy full hash",
+    copyBtn: "Copy",
+    description: "Description",
+    files: "Files",
+    sourceMarket: "Source market",
+    installStatus: "Install status",
+    hashComparison: "Version comparison",
+    skillMdLabel: "SKILL.md",
+    fileTreeLabel: "Skill files",
+    installedTag: "Installed",
+    hashClickToExpand: "Click to expand the full hash",
   };
   return map[key] ?? key;
 }
 
 describe("SkillMarketPanel", () => {
   it("shows the redesigned market toolbar, chips, and empty state", async () => {
+    // Empty list_remote_skills for this test so the empty-state branch is
+    // exercised independently of the T4 mock data.
+    vi.mocked(api.listRemoteSkills).mockResolvedValue([]);
+
     renderWithProviders(
       <SkillMarketPanel
         projects={[]}
@@ -438,6 +488,140 @@ describe("SkillMarketPanel", () => {
     // Complete the sync → dialog closes.
     resolveSync();
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+  });
+
+  it("T4: clicking a card opens the detail Modal with description, file tree, and hash row", async () => {
+    renderWithProviders(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    // The market filter chip click triggers loadRemoteSkills().
+    const chip = await screen.findByText("alice/alpha-market");
+    await user.click(chip);
+
+    await waitFor(() => {
+      expect(screen.getByText("demo-skill")).toBeInTheDocument();
+    });
+    const card = await screen.findByRole("button", { name: "Open detail for demo-skill" });
+    await user.click(card);
+
+    const dialog = await screen.findByRole("dialog", { name: "Skill detail" });
+    expect(dialog).toBeInTheDocument();
+
+    // Description section is rendered with the full description text.
+    expect(within(dialog).getByText("Demonstrates the T4 detail Modal.")).toBeInTheDocument();
+
+    // File tree (references/spec.md, scripts/build.sh).
+    expect(within(dialog).getByText("references/spec.md")).toBeInTheDocument();
+    expect(within(dialog).getByText("scripts/build.sh")).toBeInTheDocument();
+
+    // Hash row: 6-char prefix of remote_content_hash + Copy button.
+    // (Both local and remote happen to share the same prefix in this fixture;
+    // assert via the dialog text content rather than a single `getByText`.)
+    expect(within(dialog).getByRole("button", { name: "Copy full hash" })).toBeInTheDocument();
+  });
+
+  it("T4: pressing Enter on a focused card opens the detail Modal", async () => {
+    renderWithProviders(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    // Load skills by clicking the market chip.
+    const chip = await screen.findByText("alice/alpha-market");
+    await user.click(chip);
+
+    const card = await screen.findByRole("button", { name: "Open detail for demo-skill" });
+    card.focus();
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByRole("dialog", { name: "Skill detail" })).toBeInTheDocument();
+  });
+
+  it("T4: Esc closes the detail Modal", async () => {
+    renderWithProviders(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    const chip = await screen.findByText("alice/alpha-market");
+    await user.click(chip);
+
+    const card = await screen.findByRole("button", { name: "Open detail for demo-skill" });
+    await user.click(card);
+
+    const dialog = await screen.findByRole("dialog", { name: "Skill detail" });
+    expect(dialog).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Skill detail" })).not.toBeInTheDocument());
+  });
+
+  it("T4: clicking the hash-row prefix expands the full local hash with a Copy button", async () => {
+    renderWithProviders(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+
+    const user = userEvent.setup();
+    const chip = await screen.findByText("alice/alpha-market");
+    await user.click(chip);
+
+    const card = await screen.findByRole("button", { name: "Open detail for demo-skill" });
+    await user.click(card);
+
+    const dialog = await screen.findByRole("dialog", { name: "Skill detail" });
+    // Local prefix is fedcba (from local_content_hash above).
+    expect(within(dialog).getByText("fedcba")).toBeInTheDocument();
+    // Full hash NOT yet shown — only the 6-char prefix is rendered.
+    expect(within(dialog).queryByText(/^fedcba0987654321/)).not.toBeInTheDocument();
+
+    // Click the prefix → expand.
+    await user.click(within(dialog).getByText("fedcba"));
+    expect(within(dialog).getByText(/^fedcba0987654321/)).toBeInTheDocument();
+
+    // Two Copy buttons: one for local, one for remote.
+    expect(within(dialog).getAllByRole("button", { name: "Copy full hash" })).toHaveLength(2);
   });
 });
 
