@@ -116,6 +116,20 @@ export interface Settings {
   use_system_proxy: boolean;
   use_proxy: boolean;
   proxy_url: string | null;
+  /**
+   * Phase 4 / issue #5 (T1 — Settings extension).
+   * When true (default), the Market update modal shows a diff view before
+   * installing. When false, only the commit message + hash are shown.
+   */
+  view_market_diff_before_update: boolean;
+  /**
+   * Phase 4 / issue #5 (T1 — Settings extension).
+   * When true, the file-system watcher (Phase 4 / M12) auto-syncs on SKILL.md
+   * change. Mirrors `sync_mode == "full-auto"`; the backend exposes a
+   * `effective_auto_sync_on_file_change` helper that ORs both. The frontend
+   * mirrors this rule so the UI stays in sync without a round-trip.
+   */
+  auto_sync_on_file_change: boolean;
 }
 
 export interface DiffLine {

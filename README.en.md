@@ -123,7 +123,7 @@ Installers for all platforms are built automatically via GitHub Actions — no l
 
 > Installers are currently unsigned, so Windows / macOS will show SmartScreen / Gatekeeper warnings.
 
-**Note**: The current `main` branch is 22 commits ahead of the `v0.1.18` tag and includes unreleased changes such as the redesigned Market tab, in-app updates, onboarding wizard, health checks, and more. The package version will be bumped in the next release.
+**Note**: The current `main` branch is several commits ahead of the `v0.1.18` tag and includes unreleased changes such as the redesigned Market tab, in-app updates, onboarding wizard, health checks, and more. The package version will be bumped in the next release. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ## Development
 

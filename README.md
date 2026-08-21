@@ -123,7 +123,7 @@ pnpm tauri dev
 
 > 当前安装包未做代码签名，Windows / macOS 会提示 SmartScreen / Gatekeeper 警告。
 
-**注意**：当前 main 分支已超出 `v0.1.18` 标签（截至本更新已有 22 个后续提交），最新功能包括市场 UI 改造、应用内更新、引导向导、健康检查等；正式版本号将在下次发版时统一 bump。
+**注意**：当前 `main` 已超出 `v0.1.18` 标签若干提交，包含市场 UI 改造、应用内更新、引导向导、健康检查等未发布变更；正式版本号将在下次发版时统一 bump。详见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 
 ## 开发
 

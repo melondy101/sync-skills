@@ -32,6 +32,9 @@ src-tauri/target-out2/
 # Agent memory
 .workbuddy/
 
+# Git worktrees (project-local isolation)
+.worktrees/
+
 # Agent tooling reports
 .qoder/
 

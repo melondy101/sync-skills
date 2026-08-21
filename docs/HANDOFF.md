@@ -13,7 +13,7 @@
 **许可证**：AGPL-3.0-only  
 **上游仓库**：`github.com/huang-yi-dae/sync-skills`  
 
-当前 main 分支已超出 `v0.1.18` 标签 22 个提交，包含未发布的远程市场 UI 改造、应用内更新、引导、健康检查等能力。下次发版时统一 bump 版本号。
+当前 `main` 分支已超出 `v0.1.18` 标签若干提交，包含未发布的远程市场 UI 改造、应用内更新、引导、健康检查等能力。下次发版时统一 bump 版本号。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
@@ -54,8 +54,20 @@ sync-skills/
 │   ├── i18n.ts              # zh / en / ja 多语言字符串
 │   ├── components/
 │   │   ├── SkillMarketPanel.tsx   # 远程市场面板（最大组件）
-│   │   ├── UpdatesModal.tsx       # 更新 diff 弹窗
+│   │   ├── MarketSourcesModal.tsx # 市场源管理弹窗
+│   │   ├── RemoteUpdatesModal.tsx # 更新弹窗
 │   │   ├── InstallDialog.tsx      # 远程技能安装对话框
+│   │   ├── ConfirmDialog.tsx      # 二次确认弹窗
+│   │   ├── ConfirmProvider.tsx    # 二次确认 context
+│   │   ├── OnboardingWizard.tsx   # 首次启动引导
+│   │   ├── LintModal.tsx          # Skill 健康检查弹窗
+│   │   ├── SkillEditorModal.tsx   # SKILL.md 内置编辑器
+│   │   ├── ConflictSection.tsx    # 冲突检测与裁决
+│   │   ├── DiffView.tsx           # 差异视图（unified / 并排）
+│   │   ├── UpdatesModal.tsx       # 本地更新弹窗
+│   │   ├── LogsPanel.tsx          # 活动日志面板
+│   │   ├── SettingsPanel.tsx      # 设置面板
+│   │   ├── ToastContainer.tsx     # 全局 toast
 │   │   └── ...
 │   └── hooks/
 │       ├── useTheme.ts
@@ -66,7 +78,13 @@ sync-skills/
 │   │   ├── market.rs         # 远程市场（最大命令文件，~1000 行）
 │   │   ├── syncing.rs        # 同步相关命令
 │   │   ├── scan.rs           # 扫描命令
-│   │   └── ...
+│   │   ├── projects.rs       # 项目 CRUD
+│   │   ├── skills.rs         # 技能 enable/disable/操作
+│   │   ├── conflicts.rs      # 冲突检测与裁决
+│   │   ├── logs.rs           # 活动日志读写
+│   │   ├── app_settings.rs   # 应用级设置
+│   │   ├── tools.rs          # 工具路径注册
+│   │   └── updater.rs        # 应用内更新
 │   ├── ops.rs                # 核心领域逻辑（scan/sync/check 等）
 │   ├── sync.rs               # 文件复制/替换/SSOT 路径
 │   ├── scanner.rs            # 目录递归扫描 + front matter 解析
@@ -76,6 +94,9 @@ sync-skills/
 │   ├── lint.rs               # SKILL.md 健康检查
 │   ├── market.rs             # 远程市场领域逻辑
 │   ├── models.rs             # Rust 数据结构
+│   ├── settings.rs           # 设置读写
+│   ├── providers.rs          # 远程技能 provider 抽象（GitHub）
+│   ├── discovery.rs          # 工具自动发现
 │   └── hash.rs               # content_hash / core_hash / id_hash
 ├── doc/
 │   ├── PRD.md                # 产品需求文档（当前最权威的规格说明）

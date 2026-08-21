@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 市场源管理弹窗：增/删/启用/禁用/同步索引
 - 远程技能 provenance badge：显示技能来源市场
 - user-selectable layout：支持 subdir/root 仓库布局
+- **Phase 4 / T1 — Settings 扩展**：新增两项设置项 `view_market_diff_before_update`（默认 on，Market 检测到更新时弹差异对比）和 `auto_sync_on_file_change`（默认 off，为 Phase 4 / M12 文件监听预留）。后端 `Settings` 结构新增 `effective_auto_sync_on_file_change` 助手，封装"`auto_sync_on_file_change || sync_mode == "full-auto"`"的规范 OR，供下游消费方（文件监听等）统一引用。旧版 settings.json 自动向下兼容。详见 `docs/spec-market-ux-polish.md`（GitHub issue #5）。
 
 ### Changed
 - 工具预设从 5 个扩展到 13+ 个（新增 Cursor、Windsurf、Aider、Roo Code、Trae、Kiro、Augment、Qoder）

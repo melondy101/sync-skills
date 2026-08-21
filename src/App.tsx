@@ -5,7 +5,7 @@
 // projects, settings, updates, conflicts) and top-level UI state, and wires the
 // feature components together. All rendering details live in src/components/.
 
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import * as api from "./api";
 import type {
@@ -39,7 +39,26 @@ function App() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [skills, setSkills] = useState<SkillView[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [settings, setSettings] = useState<Settings>({ sync_mode: "semi-auto", prefer_symlink: false, theme: "light", language: "zh", close_action: "tray", use_system_proxy: true, use_proxy: false, proxy_url: null }); // TODO: wire real defaults in settings loader
+  const [settings, setSettings] = useState<Settings>({ sync_mode: "semi-auto", prefer_symlink: false, theme: "light", language: "zh", close_action: "tray", use_system_proxy: true, use_proxy: false, proxy_url: null, view_market_diff_before_update: true, auto_sync_on_file_change: false }); // TODO: wire real defaults in settings loader
+
+  // Settings update with coupling: when the user changes `sync_mode`, mirror
+  // it onto `auto_sync_on_file_change` so the two UI controls stay in sync
+  // per the Phase 4 / T1 spec ("Mirrors `sync_mode == "full-auto"`"). The
+  // reverse direction (toggling the checkbox directly) leaves `sync_mode`
+  // alone so the two remain independently editable.
+  // The canonical OR that downstream code (file watcher, Phase 4 / M12) reads
+  // lives in `src-tauri/src/settings.rs::Settings::effective_auto_sync_on_file_change`.
+  const handleSettingsChange = useCallback((next: Settings) => {
+    setSettings((prev) => {
+      if (prev.sync_mode !== next.sync_mode) {
+        return {
+          ...next,
+          auto_sync_on_file_change: next.sync_mode === "full-auto",
+        };
+      }
+      return next;
+    });
+  }, []);
 
   const t = makeT(settings.language as Lang);
   useTheme(settings.theme);
@@ -399,7 +418,7 @@ function App() {
       <SettingsPanel
         t={t}
         settings={settings}
-        onChange={setSettings}
+        onChange={handleSettingsChange}
         onSave={handleSaveSettings}
         onBack={() => setActivePanel("main")}
       />

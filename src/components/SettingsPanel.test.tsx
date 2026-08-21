@@ -5,35 +5,38 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SettingsPanel } from "./SettingsPanel";
+import type { Settings } from "../types";
 import * as api from "../api";
 
 const t = (key: string) => key;
 
+// Helper: every Settings shape in these tests starts from the same baseline
+// and only overrides what a particular test cares about. Keeps the new
+// Phase 4 / T1 fields (`view_market_diff_before_update`,
+// `auto_sync_on_file_change`) consistent across fixtures.
+function makeSettings(overrides: Partial<Settings> = {}): Settings {
+  return {
+    sync_mode: "semi-auto",
+    prefer_symlink: false,
+    theme: "light",
+    language: "zh",
+    close_action: "tray",
+    use_system_proxy: true,
+    use_proxy: true,
+    proxy_url: "http://127.0.0.1:10090",
+    view_market_diff_before_update: true,
+    auto_sync_on_file_change: false,
+    ...overrides,
+  };
+}
+
 describe("SettingsPanel", () => {
   it("shows the minimize-to-tray option and a check updates button", async () => {
-    vi.spyOn(api, "getSettings").mockResolvedValue({
-      sync_mode: "semi-auto",
-      prefer_symlink: false,
-      theme: "light",
-      language: "zh",
-      close_action: "tray",
-      use_system_proxy: true,
-      use_proxy: true,
-      proxy_url: "http://127.0.0.1:10090",
-    } as any);
+    vi.spyOn(api, "getSettings").mockResolvedValue(makeSettings() as any);
     render(
       <SettingsPanel
         t={t}
-        settings={{
-          sync_mode: "semi-auto",
-          prefer_symlink: false,
-          theme: "light",
-          language: "zh",
-          close_action: "tray",
-          use_system_proxy: true,
-          use_proxy: true,
-          proxy_url: "http://127.0.0.1:10090",
-        }}
+        settings={makeSettings()}
         onChange={() => {}}
         onSave={() => {}}
         onBack={() => {}}
@@ -52,16 +55,7 @@ describe("SettingsPanel", () => {
     render(
       <SettingsPanel
         t={t}
-        settings={{
-          sync_mode: "semi-auto",
-          prefer_symlink: false,
-          theme: "light",
-          language: "zh",
-          close_action: "tray",
-          use_system_proxy: false,
-          use_proxy: true,
-          proxy_url: "http://127.0.0.1:10090",
-        }}
+        settings={makeSettings({ use_system_proxy: false })}
         onChange={() => {}}
         onSave={() => {}}
         onBack={() => {}}
@@ -82,16 +76,7 @@ describe("SettingsPanel", () => {
     render(
       <SettingsPanel
         t={t}
-        settings={{
-          sync_mode: "semi-auto",
-          prefer_symlink: false,
-          theme: "light",
-          language: "zh",
-          close_action: "tray",
-          use_system_proxy: false,
-          use_proxy: true,
-          proxy_url: "https://127.0.0.1:10090",
-        }}
+        settings={makeSettings({ use_system_proxy: false, proxy_url: "https://127.0.0.1:10090" })}
         onChange={() => {}}
         onSave={() => {}}
         onBack={() => {}}
@@ -103,4 +88,53 @@ describe("SettingsPanel", () => {
       "updateCheckFailed: Error: HTTP 403; the proxy itself may also need its certificate trusted"
     );
   });
+
+  it("exposes the Phase 4 / T1 toggles with both checked-by-default values", () => {
+    render(
+      <SettingsPanel
+        t={t}
+        settings={makeSettings()}
+        onChange={() => {}}
+        onSave={() => {}}
+        onBack={() => {}}
+      />,
+    );
+
+    const marketDiffToggle = screen.getByRole("checkbox", {
+      name: "viewMarketDiffBeforeUpdate",
+    });
+    const autoSyncToggle = screen.getByRole("checkbox", {
+      name: "autoSyncOnFileChange",
+    });
+
+    expect(marketDiffToggle).toBeChecked();
+    expect(autoSyncToggle).not.toBeChecked();
+    // Both controls remain independently editable; the spec's "mirrors" rule
+    // is enforced by App.tsx (when sync_mode changes, auto_sync_on_file_change
+    // follows) and by the backend helper `effective_auto_sync_on_file_change`
+    // (canonical OR of the two fields for downstream consumers).
+    expect(autoSyncToggle).toBeEnabled();
+  });
+
+  it("renders auto_sync_on_file_change as a normal checkbox in full-auto", () => {
+    // Under full-auto, the explicit flag still drives the checkbox display.
+    // The watcher (Phase 4 / M12) consumes the backend helper that ORs the
+    // flag with sync_mode, so the UI does not need to conflate them.
+    render(
+      <SettingsPanel
+        t={t}
+        settings={makeSettings({ sync_mode: "full-auto" })}
+        onChange={() => {}}
+        onSave={() => {}}
+        onBack={() => {}}
+      />,
+    );
+
+    const autoSyncToggle = screen.getByRole("checkbox", {
+      name: "autoSyncOnFileChange",
+    });
+    expect(autoSyncToggle).not.toBeChecked();
+    expect(autoSyncToggle).toBeEnabled();
+  });
 });
+

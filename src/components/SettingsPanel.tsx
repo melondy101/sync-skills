@@ -155,6 +155,34 @@ export function SettingsPanel({
         <label className="settings-label">
           <input
             type="checkbox"
+            checked={settings.auto_sync_on_file_change}
+            onChange={(e) => onChange({ ...settings, auto_sync_on_file_change: e.target.checked })}
+          />
+          {" "}{t("autoSyncOnFileChange")}
+        </label>
+        <p className="settings-hint">
+          {t("autoSyncOnFileChangeHint")}
+        </p>
+      </div>
+
+      <div className="settings-group">
+        <label className="settings-label">
+          <input
+            type="checkbox"
+            checked={settings.view_market_diff_before_update}
+            onChange={(e) => onChange({ ...settings, view_market_diff_before_update: e.target.checked })}
+          />
+          {" "}{t("viewMarketDiffBeforeUpdate")}
+        </label>
+        <p className="settings-hint">
+          {t("viewMarketDiffBeforeUpdateHint")}
+        </p>
+      </div>
+
+      <div className="settings-group">
+        <label className="settings-label">
+          <input
+            type="checkbox"
             checked={settings.prefer_symlink}
             onChange={(e) => onChange({ ...settings, prefer_symlink: e.target.checked })}
           />
