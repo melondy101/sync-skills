@@ -45,7 +45,7 @@ cd src-tauri && cargo test       # Rust 单元测试
 
 ### 后端（Rust + Tauri v2）
 
-- 遵循四层结构：`lib.rs` 只做注册；`commands/` 是按资源域划分的薄命令层；领域逻辑写在 `ops.rs` / `sync.rs` 等核心模块；数据访问收敛在 `db.rs`。
+- 遵循四层结构：`lib.rs` 只做注册；`commands/` 是按资源域划分的薄命令层；领域逻辑写在 `ops/`（子模块拆分）+ `sync.rs` 等核心模块；数据访问收敛在 `db.rs`。
 - Rust 代码须通过 `cargo clippy --all-targets -- -D warnings`（CI 中强制）。
 - 新增 Tauri command 时：放入 `commands/` 对应域文件（或新建域文件并在 `commands/mod.rs` 注册），并加入 `lib.rs` 的 `invoke_handler` 列表。
 - 涉及同一 skill 的同步 / 检测操作必须经过 `LockManager` 串行化。

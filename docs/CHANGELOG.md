@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 远程技能 provenance badge：显示技能来源市场
 - user-selectable layout：支持 subdir/root 仓库布局
 - **Phase 4 / T1 — Settings 扩展**：新增两项设置项 `view_market_diff_before_update`（默认 on，Market 检测到更新时弹差异对比）和 `auto_sync_on_file_change`（默认 off，为 Phase 4 / M12 文件监听预留）。后端 `Settings` 结构新增 `effective_auto_sync_on_file_change` 助手，封装"`auto_sync_on_file_change || sync_mode == "full-auto"`"的规范 OR，供下游消费方（文件监听等）统一引用。旧版 settings.json 自动向下兼容。详见 `docs/spec-market-ux-polish.md`（GitHub issue #5）。
+- **Phase 4 / T4 — Market 详情 Modal**：点击远程技能卡片打开 `RemoteSkillDetailModal`，按顺序展示描述 → `RemoteSkillFileTree`（递归 SSOT，跳过 `SKILL.md` / `local.md` / 隐藏项）→ SKILL.md 只读预览 → 来源市场（`remote_url` / `ssot_path`）→ 本地安装状态 → 哈希对比行（6 字符 mono 前缀，点击展开完整 64 字符 hash + Copy；无 hover-preview）。新 IPC `get_remote_skill_detail`；后端域逻辑在 `ops::remote_skill_detail::build_remote_skill_detail`，命令层仅适配；新 `db::Database::get_remote_skill(id)` 单行查询（避免全表扫描）；`RemoteSkillDetail` 模型新增 `local_content_hash` / `local_core_hash` 字段。无障碍：`role="dialog"` + `aria-modal` + focus trap + Esc / backdrop 关闭 + 焦点归还 + 哈希按钮 Space/Enter 激活 + `aria-keyshortcuts="Enter Space"`。详见 `docs/spec-market-ux-polish.md`（GitHub issue #6）。
 
 ### Changed
 - 工具预设从 5 个扩展到 13+ 个（新增 Cursor、Windsurf、Aider、Roo Code、Trae、Kiro、Augment、Qoder）

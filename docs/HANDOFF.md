@@ -54,6 +54,8 @@ sync-skills/
 │   ├── i18n.ts              # zh / en / ja 多语言字符串
 │   ├── components/
 │   │   ├── SkillMarketPanel.tsx   # 远程市场面板（最大组件）
+│   │   ├── RemoteSkillDetailModal.tsx # 远程技能详情 Modal（T4）
+│   │   ├── RemoteSkillFileTree.tsx    # 详情 Modal 内 SSOT 文件树（T4）
 │   │   ├── MarketSourcesModal.tsx # 市场源管理弹窗
 │   │   ├── RemoteUpdatesModal.tsx # 更新弹窗
 │   │   ├── InstallDialog.tsx      # 远程技能安装对话框
@@ -71,7 +73,8 @@ sync-skills/
 │   │   └── ...
 │   └── hooks/
 │       ├── useTheme.ts
-│       └── useToasts.ts
+│       ├── useToasts.ts
+│       └── useFocusTrap.ts          # Modal 焦点 trap（T4 详情 Modal 复用，可推广到其他 modal）
 ├── src-tauri/src/
 │   ├── lib.rs                # Tauri 入口，注册所有 command
 │   ├── commands/             # 薄命令层，每个域一个文件
@@ -85,7 +88,9 @@ sync-skills/
 │   │   ├── app_settings.rs   # 应用级设置
 │   │   ├── tools.rs          # 工具路径注册
 │   │   └── updater.rs        # 应用内更新
-│   ├── ops.rs                # 核心领域逻辑（scan/sync/check 等）
+│   ├── ops/                  # 核心领域逻辑（按子域拆分）
+│   │   ├── mod.rs            # 聚合 re-export
+│   │   └── remote_skill_detail.rs # 远程技能详情域逻辑（T4）
 │   ├── sync.rs               # 文件复制/替换/SSOT 路径
 │   ├── scanner.rs            # 目录递归扫描 + front matter 解析
 │   ├── diff.rs               # LCS diff 算法（阈值 5000 行）
@@ -134,7 +139,7 @@ sync-skills/
 ### 4.2 代码风格
 
 - **前端**：函数组件 + hooks，不引入新依赖，样式写在 `App.css`
-- **后端**：四层结构 — `lib.rs` 注册 → `commands/` 薄层 → `ops.rs` 领域逻辑 → `db.rs` 数据访问
+- **后端**：四层结构 — `lib.rs` 注册 → `commands/` 薄层 → `ops/`（按子域拆分的领域逻辑）→ `db.rs` 数据访问
 - **数据库**：`rusqlite` + `Mutex<Connection>`，迁移逻辑在 `db.rs` 的 `init_schema()` 里
 - **错误处理**：统一 `Result<T, String>`，不要 panic；字符串按字符而非字节索引
 
@@ -155,15 +160,16 @@ sync-skills/
 |------|------|---------|
 | 工具管理（13+ 预设工具） | ✅ | `discovery.rs`, `commands/tools.rs` |
 | Skill 扫描（递归 + front matter） | ✅ | `scanner.rs`, `commands/scan.rs` |
-| SSOT 同步 + 反向同步 | ✅ | `sync.rs`, `ops.rs`, `commands/syncing.rs` |
+| SSOT 同步 + 反向同步 | ✅ | `sync.rs`, `ops/`, `commands/syncing.rs` |
 | 名字即身份（name-as-identity） | ✅ | `db.rs`（UNIQUE(name, project_id)） |
 | core_hash（仅 SKILL.md） | ✅ | `hash.rs`, 用于冲突检测 |
 | content_hash（全目录） | ✅ | `hash.rs`, 用于 diff 展示 |
-| LockManager | ✅ | `lock.rs`, `ops.rs` 多处使用 |
+| LockManager | ✅ | `lock.rs`, `ops/` 多处使用 |
 | 冲突检测与裁决 | ✅ | `commands/conflicts.rs`, `ConflictSection.tsx` |
 | 差异预览（unified / 并排） | ✅ | `diff.rs`, `DiffView.tsx` |
 | 变更忽略 | ✅ | `db.rs` dismissed_updates 表 |
 | 远程市场（GitHub） | ✅ | `market.rs`, `commands/market.rs`, `SkillMarketPanel.tsx` |
+| Market 详情 Modal（T4） | ✅ | `ops/remote_skill_detail.rs`, `commands/market.rs::get_remote_skill_detail`, `RemoteSkillDetailModal.tsx`, `RemoteSkillFileTree.tsx`, `useFocusTrap.ts` |
 | 应用内更新 | ✅ | `commands/updater.rs` |
 | 首次启动引导 | ✅ | `OnboardingWizard.tsx` |
 | Skill 健康检查 / Lint | ✅ | `lint.rs`, `LintModal.tsx` |
@@ -190,6 +196,7 @@ sync-skills/
 | Windows 链接器错误 | `cargo check` 偶发 `link.exe error 1224` | 杀毒软件干扰，重试一次即可 |
 | 远程市场 ZIP 解析 | 部分仓库 layout 判断可能不准 | 用户可手动切换 layout（subdir/root） |
 | 数据库并发 | `Mutex<Connection>` 是全局锁 | 当前数据量下可接受，如需性能再优化 |
+| Market Modal 无障碍统一 | 仍有 6+ 个其他 modal 未加 `role="dialog"` / focus trap / Esc 关闭（T4 详情 Modal 已合规；ui-review #3 收口未完成） | 复用 `useFocusTrap` 逐 modal 改造 |
 
 ---
 
@@ -252,7 +259,7 @@ sync-skills/
 如果你要继续开发，建议按这个顺序：
 
 1. **熟悉核心流程**：跑一遍 `pnpm tauri dev`，执行一次完整扫描 → 同步 → 检查更新 → 远程安装
-2. **读 `ops.rs`**：它是核心领域逻辑的集中地，理解了它就理解了 60% 的业务
+2. **读 `ops/`**：它是核心领域逻辑的集中地（`ops/mod.rs` + 各子模块），理解了它就理解了 60% 的业务
 3. **读 `db.rs`**：理解数据模型和迁移机制
 4. **读 `commands/market.rs`**：当前最复杂的命令文件，理解远程市场流程
 5. **跑测试**：`pnpm test && cd src-tauri && cargo test`，确保基线干净
