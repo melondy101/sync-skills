@@ -29,6 +29,9 @@ src-tauri/target-out2/
 .tmp-*
 .learn-tmp/
 
+# Scratch / artifact directories AGENTS.md says not to commit
+.scratch/
+
 # Agent memory
 .workbuddy/
 
