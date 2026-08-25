@@ -9,6 +9,7 @@ import MarketSourcesModal from './MarketSourcesModal';
 import { RemoteSkillDetailModal } from './RemoteSkillDetailModal';
 import RemoteUpdatesModal from './RemoteUpdatesModal';
 import { useConfirm } from './ConfirmProvider';
+import { Icon } from "./Icon";
 import type {
   Market,
   Project,
@@ -574,7 +575,8 @@ export default function SkillMarketPanel({
       {/* 筛选 chips */}
       <div className="market-chips">
         <button
-          className={`chip ${selectedMarketFilter === "all" ? "chip-active" : ""}`}
+          type="button"
+          className={`market-chip ${selectedMarketFilter === "all" ? "market-chip-active" : ""}`}
           onClick={() => { setSelectedMarketFilter("all"); loadRemoteSkills(undefined); }}
         >
           {t("filterAll")}
@@ -582,17 +584,28 @@ export default function SkillMarketPanel({
         {markets.filter((m) => m.enabled).map((m) => (
           <button
             key={m.id}
-            className={`chip ${String(selectedMarketFilter) === String(m.id) ? "chip-active" : ""}`}
+            type="button"
+            className={`market-chip ${String(selectedMarketFilter) === String(m.id) ? "market-chip-active" : ""}`}
             onClick={() => { setSelectedMarketFilter(String(m.id)); loadRemoteSkills(m.id); }}
           >
             {marketTitle(m)}
           </button>
         ))}
         <button
-          className={`chip ${installedOnly ? "chip-active" : ""}`}
+          type="button"
+          className={`market-chip ${installedOnly ? "market-chip-active" : ""}`}
           onClick={() => setInstalledOnly((v) => !v)}
         >
           {t("filterInstalledOnly")}
+        </button>
+        <button
+          type="button"
+          className="market-chip market-chip-add"
+          onClick={() => setShowSourcesModal(true)}
+          aria-label={t("addMarketSources")}
+          title={t("addMarketSources")}
+        >
+          <Icon name="plus" size={12} />
         </button>
       </div>
 

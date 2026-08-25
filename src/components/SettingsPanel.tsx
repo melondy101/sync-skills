@@ -8,6 +8,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import * as api from "../api";
 import type { AppUpdateInfo, Settings } from "../types";
 import type { TranslateFn } from "../i18n";
+import { Icon } from "./Icon";
+import { ToggleSwitch } from "./ToggleSwitch";
 
 type UpdateCheckState =
   | { status: "idle" }
@@ -19,6 +21,15 @@ type UpdateCheckState =
   | { status: "downloaded"; info: AppUpdateInfo; path: string }
   | { status: "installing" }
   | { status: "error"; error: string };
+
+type Section = "appearance" | "sync" | "proxy" | "update";
+
+const SECTIONS: ReadonlyArray<{ key: Section; labelKey: string }> = [
+  { key: "appearance", labelKey: "appearance" },
+  { key: "sync", labelKey: "syncMode" },
+  { key: "proxy", labelKey: "proxySection" },
+  { key: "update", labelKey: "appUpdateSection" },
+];
 
 export function SettingsPanel({
   t,
@@ -36,6 +47,7 @@ export function SettingsPanel({
   // App self-update check (local to this panel)
   const [appVersion, setAppVersion] = useState("");
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckState>({ status: "idle" });
+  const [section, setSection] = useState<Section>("appearance");
 
   useEffect(() => {
     getVersion().then(setAppVersion).catch(() => {});
@@ -107,212 +119,231 @@ export function SettingsPanel({
         </button>
       </div>
 
-      <div className="settings-group">
-        <label className="settings-label">{t("appearance")}</label>
-        <div className="settings-row">
-          <div className="settings-field">
-            <span className="settings-field-label">{t("theme")}</span>
-            <select
-              className="settings-select"
-              value={settings.theme}
-              onChange={(e) => onChange({ ...settings, theme: e.target.value })}
-            >
-              <option value="light">{t("themeLight")}</option>
-              <option value="dark">{t("themeDark")}</option>
-              <option value="system">{t("themeSystem")}</option>
-            </select>
-          </div>
-          <div className="settings-field">
-            <span className="settings-field-label">{t("language")}</span>
-            <select
-              className="settings-select"
-              value={settings.language}
-              onChange={(e) => onChange({ ...settings, language: e.target.value })}
-            >
-              <option value="zh">{t("langZh")}</option>
-              <option value="en">{t("langEn")}</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-group">
-        <label className="settings-label">{t("syncMode")}</label>
-        <select
-          className="settings-select"
-          value={settings.sync_mode}
-          onChange={(e) => onChange({ ...settings, sync_mode: e.target.value })}
-        >
-          <option value="semi-auto">{t("syncModeSemi")}</option>
-          <option value="full-auto">{t("syncModeFull")}</option>
-        </select>
-        <p className="settings-hint">
-          {t("syncModeHint")}
-        </p>
-      </div>
-
-      <div className="settings-group">
-        <label className="settings-label">
-          <input
-            type="checkbox"
-            checked={settings.auto_sync_on_file_change}
-            onChange={(e) => onChange({ ...settings, auto_sync_on_file_change: e.target.checked })}
-          />
-          {" "}{t("autoSyncOnFileChange")}
-        </label>
-        <p className="settings-hint">
-          {t("autoSyncOnFileChangeHint")}
-        </p>
-      </div>
-
-      <div className="settings-group">
-        <label className="settings-label">
-          <input
-            type="checkbox"
-            checked={settings.view_market_diff_before_update}
-            onChange={(e) => onChange({ ...settings, view_market_diff_before_update: e.target.checked })}
-          />
-          {" "}{t("viewMarketDiffBeforeUpdate")}
-        </label>
-        <p className="settings-hint">
-          {t("viewMarketDiffBeforeUpdateHint")}
-        </p>
-      </div>
-
-      <div className="settings-group">
-        <label className="settings-label">
-          <input
-            type="checkbox"
-            checked={settings.prefer_symlink}
-            onChange={(e) => onChange({ ...settings, prefer_symlink: e.target.checked })}
-          />
-          {" "}{t("preferSymlink")}
-        </label>
-        <p className="settings-hint">
-          {t("symlinkHint")}
-        </p>
-      </div>
-
-      <div className="settings-group">
-        <label className="settings-label">{t("closeAction")}</label>
-        <select
-          className="settings-select"
-          value={settings.close_action}
-          onChange={(e) => onChange({ ...settings, close_action: e.target.value })}
-        >
-          <option value="exit">{t("closeActionExit")}</option>
-          <option value="tray">{t("closeActionTray")}</option>
-          <option value="minimize">{t("closeActionMinimize")}</option>
-        </select>
-        <p className="settings-hint">
-          {t("closeActionHint")}
-        </p>
-      </div>
-
-      <div className="settings-group">
-        <label className="settings-label">{t("proxySection")}</label>
-        <label className="settings-label">
-          <input
-            type="checkbox"
-            checked={settings.use_system_proxy}
-            onChange={(e) => onChange({ ...settings, use_system_proxy: e.target.checked })}
-          />
-          {" "}{t("systemProxy")}
-        </label>
-        <label className="settings-label">
-          <input
-            type="checkbox"
-            checked={settings.use_proxy}
-            disabled={settings.use_system_proxy}
-            onChange={(e) => onChange({ ...settings, use_proxy: e.target.checked })}
-          />
-          {" "}{t("useProxy")}
-        </label>
-        <div className="settings-row">
-          <div className="settings-field">
-            <span className="settings-field-label">{t("proxyUrl")}</span>
-            <input
-              className="settings-input"
-              type="text"
-              value={settings.proxy_url ?? ""}
-              onChange={(e) => onChange({ ...settings, proxy_url: e.target.value || null })}
-              placeholder={t("proxyUrlPlaceholder")}
-              disabled={settings.use_system_proxy || !settings.use_proxy}
-            />
-          </div>
-        </div>
-        <p className="settings-hint">{t("proxyHint")}</p>
-      </div>
-      <div className="settings-group">
-        <label className="settings-label">{t("appUpdateSection")}</label>
-        <div className="app-update-row">
-          <span className="app-version">{t("currentVersion")}: v{appVersion || "?"}</span>
-          <button
-            className="btn btn-small"
-            onClick={handleCheckAppUpdate}
-            disabled={["checking", "downloading", "installing"].includes(updateCheck.status)}
-          >
-            {updateCheck.status === "checking" ? t("checkingAppUpdate") : t("checkAppUpdate")}
-          </button>
-        </div>
-        {updateCheck.status === "latest" && (
-          <p className="settings-hint update-latest">✓ {t("upToDate")} (v{updateCheck.latest})</p>
-        )}
-        {updateCheck.status === "none" && (
-          <p className="settings-hint">{t("noReleases")}</p>
-        )}
-        {updateCheck.status === "outdated" && (
-          <div className="app-update-row">
-            <span className="settings-hint update-available">
-              {t("newVersionFound")}: v{updateCheck.info.latest_version}
-            </span>
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label={t("settingsTitle")}>
+          {SECTIONS.map((s) => (
             <button
-              className="btn btn-primary btn-small"
-              onClick={() => handleDownloadUpdate(updateCheck.info)}
+              key={s.key}
+              type="button"
+              className={`settings-nav-item${section === s.key ? " settings-nav-item-active" : ""}`}
+              onClick={() => setSection(s.key)}
+              aria-current={section === s.key ? "page" : undefined}
             >
-              {updateCheck.info.asset_url ? t("downloadUpdate") : t("viewRelease")}
+              {t(s.labelKey)}
             </button>
-          </div>
-        )}
-        {updateCheck.status === "downloading" && (
-          <div className="app-update-row">
-            <div className="update-progress-track">
-              <div
-                className="update-progress-fill"
-                style={{ width: `${updateCheck.percent}%` }}
-              />
-            </div>
-            <span className="settings-hint">
-              {t("downloadingUpdate")}... {updateCheck.percent}%
-            </span>
-          </div>
-        )}
-        {updateCheck.status === "downloaded" && (
-          <div className="app-update-row">
-            <span className="settings-hint update-latest">✓ {t("downloadComplete")}</span>
-            <button
-              className="btn btn-primary btn-small"
-              onClick={() => handleInstallUpdate(updateCheck.path)}
-            >
-              {t("installNow")}
-            </button>
-            <span className="settings-hint">{t("installHint")}</span>
-          </div>
-        )}
-        {updateCheck.status === "installing" && (
-          <p className="settings-hint">{t("installingUpdate")}</p>
-        )}
-        {updateCheck.status === "error" && (
-          <div>
-            <p className="settings-hint update-error">{t("updateCheckFailed")}: {updateCheck.error}</p>
-            <p className="settings-hint">{t("updateProxyHint")}</p>
-          </div>
-        )}
+          ))}
+        </nav>
+
+        <div className="settings-content">
+          {section === "appearance" && (
+            <>
+              <div className="settings-group">
+                <label className="settings-label">{t("theme")}</label>
+                <div className="theme-cards">
+                  {(["light", "dark", "system"] as const).map((theme) => (
+                    <button
+                      key={theme}
+                      type="button"
+                      className={`theme-card${settings.theme === theme ? " theme-card-active" : ""}`}
+                      onClick={() => onChange({ ...settings, theme })}
+                      aria-pressed={settings.theme === theme}
+                    >
+                      <div className={`theme-preview theme-preview-${theme}`} />
+                      <div className="theme-card-label">
+                        {t(`theme${theme.charAt(0).toUpperCase()}${theme.slice(1)}`)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="settings-group">
+                <label className="settings-label">{t("language")}</label>
+                <div className="theme-cards">
+                  {(["zh", "en"] as const).map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      className={`theme-card${settings.language === lang ? " theme-card-active" : ""}`}
+                      onClick={() => onChange({ ...settings, language: lang })}
+                      aria-pressed={settings.language === lang}
+                    >
+                      <div className="theme-card-label">{t(`lang${lang.toUpperCase()}`)}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="settings-group">
+                <label className="settings-label">{t("closeAction")}</label>
+                <select
+                  className="settings-select"
+                  value={settings.close_action}
+                  onChange={(e) => onChange({ ...settings, close_action: e.target.value })}
+                >
+                  <option value="exit">{t("closeActionExit")}</option>
+                  <option value="tray">{t("closeActionTray")}</option>
+                  <option value="minimize">{t("closeActionMinimize")}</option>
+                </select>
+                <p className="settings-hint">{t("closeActionHint")}</p>
+              </div>
+            </>
+          )}
+
+          {section === "sync" && (
+            <>
+              <div className="settings-group">
+                <label className="settings-label">{t("syncMode")}</label>
+                <select
+                  className="settings-select"
+                  value={settings.sync_mode}
+                  onChange={(e) => onChange({ ...settings, sync_mode: e.target.value })}
+                >
+                  <option value="semi-auto">{t("syncModeSemi")}</option>
+                  <option value="full-auto">{t("syncModeFull")}</option>
+                </select>
+                <p className="settings-hint">{t("syncModeHint")}</p>
+              </div>
+
+              <div className="settings-group">
+                <ToggleSwitch
+                  checked={settings.auto_sync_on_file_change}
+                  onChange={(next) => onChange({ ...settings, auto_sync_on_file_change: next })}
+                  label={t("autoSyncOnFileChange")}
+                />
+                <p className="settings-hint">{t("autoSyncOnFileChangeHint")}</p>
+              </div>
+
+              <div className="settings-group">
+                <ToggleSwitch
+                  checked={settings.view_market_diff_before_update}
+                  onChange={(next) => onChange({ ...settings, view_market_diff_before_update: next })}
+                  label={t("viewMarketDiffBeforeUpdate")}
+                />
+                <p className="settings-hint">{t("viewMarketDiffBeforeUpdateHint")}</p>
+              </div>
+
+              <div className="settings-group">
+                <ToggleSwitch
+                  checked={settings.prefer_symlink}
+                  onChange={(next) => onChange({ ...settings, prefer_symlink: next })}
+                  label={t("preferSymlink")}
+                />
+                <p className="settings-hint">{t("symlinkHint")}</p>
+              </div>
+            </>
+          )}
+
+          {section === "proxy" && (
+            <>
+              <div className="settings-group">
+                <ToggleSwitch
+                  checked={settings.use_system_proxy}
+                  onChange={(next) => onChange({ ...settings, use_system_proxy: next })}
+                  label={t("systemProxy")}
+                />
+              </div>
+              <div className="settings-group">
+                <ToggleSwitch
+                  checked={settings.use_proxy}
+                  disabled={settings.use_system_proxy}
+                  onChange={(next) => onChange({ ...settings, use_proxy: next })}
+                  label={t("useProxy")}
+                />
+              </div>
+              <div className="settings-group">
+                <label className="settings-label">{t("proxyUrl")}</label>
+                <input
+                  className="settings-input"
+                  type="text"
+                  value={settings.proxy_url ?? ""}
+                  onChange={(e) => onChange({ ...settings, proxy_url: e.target.value || null })}
+                  placeholder={t("proxyUrlPlaceholder")}
+                  disabled={settings.use_system_proxy || !settings.use_proxy}
+                />
+              </div>
+              <p className="settings-hint">{t("proxyHint")}</p>
+            </>
+          )}
+
+          {section === "update" && (
+            <>
+              <div className="settings-group">
+                <label className="settings-label">{t("appUpdateSection")}</label>
+                <div className="app-update-row">
+                  <span className="app-version">{t("currentVersion")}: v{appVersion || "?"}</span>
+                  <button
+                    className="btn btn-small"
+                    onClick={handleCheckAppUpdate}
+                    disabled={["checking", "downloading", "installing"].includes(updateCheck.status)}
+                  >
+                    {updateCheck.status === "checking" ? t("checkingAppUpdate") : t("checkAppUpdate")}
+                  </button>
+                </div>
+                {updateCheck.status === "latest" && (
+                  <p className="settings-hint update-latest"><Icon name="check" size={14} /> {t("upToDate")} (v{updateCheck.latest})</p>
+                )}
+                {updateCheck.status === "none" && (
+                  <p className="settings-hint">{t("noReleases")}</p>
+                )}
+                {updateCheck.status === "outdated" && (
+                  <div className="app-update-row">
+                    <span className="settings-hint update-available">
+                      {t("newVersionFound")}: v{updateCheck.info.latest_version}
+                    </span>
+                    <button
+                      className="btn btn-primary btn-small"
+                      onClick={() => handleDownloadUpdate(updateCheck.info)}
+                    >
+                      {updateCheck.info.asset_url ? t("downloadUpdate") : t("viewRelease")}
+                    </button>
+                  </div>
+                )}
+                {updateCheck.status === "downloading" && (
+                  <div className="app-update-row">
+                    <div className="update-progress-track">
+                      <div
+                        className="update-progress-fill"
+                        style={{ width: `${updateCheck.percent}%` }}
+                      />
+                    </div>
+                    <span className="settings-hint">
+                      {t("downloadingUpdate")}... {updateCheck.percent}%
+                    </span>
+                  </div>
+                )}
+                {updateCheck.status === "downloaded" && (
+                  <div className="app-update-row">
+                    <span className="settings-hint update-latest"><Icon name="check" size={14} /> {t("downloadComplete")}</span>
+                    <button
+                      className="btn btn-primary btn-small"
+                      onClick={() => handleInstallUpdate(updateCheck.path)}
+                    >
+                      {t("installNow")}
+                    </button>
+                    <span className="settings-hint">{t("installHint")}</span>
+                  </div>
+                )}
+                {updateCheck.status === "installing" && (
+                  <p className="settings-hint">{t("installingUpdate")}</p>
+                )}
+                {updateCheck.status === "error" && (
+                  <div>
+                    <p className="settings-hint update-error">{t("updateCheckFailed")}: {updateCheck.error}</p>
+                    <p className="settings-hint">{t("updateProxyHint")}</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      <button className="btn btn-primary" onClick={onSave}>
-        {t("saveSettings")}
-      </button>
+      <div className="settings-footer">
+        <button className="btn btn-primary" onClick={onSave}>
+          {t("saveSettings")}
+        </button>
+      </div>
     </section>
   );
 }

@@ -6,10 +6,14 @@ import * as api from "../api";
 import type { ScanResult, ToolTemplate } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { Icon } from "./Icon";
 
 /**
  * First-run onboarding wizard (3 steps): add discovered tools -> scan -> done.
  * Visibility is controlled by the parent via the localStorage "onboardingDone" flag.
+ *
+ * Renders as a full-bleed branded splash (ticket #11): centered hero,
+ * dot-based step indicator, 2-column tool grid, primary CTA centered.
  */
 export function OnboardingWizard({
   t,
@@ -69,20 +73,24 @@ export function OnboardingWizard({
     }
   }
 
-  const steps = [t("wizardStepTools"), t("wizardStepScan"), t("wizardStepDone")];
+  const totalSteps = 3;
 
   return (
-    <div className="modal-overlay">
-      <div className="modal wizard-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>{t("wizardTitle")}</h3>
-        <p className="wizard-intro">{t("wizardIntro")}</p>
+    <div className="modal-overlay wizard-fullscreen">
+      <div className="modal wizard-splash" onClick={(e) => e.stopPropagation()}>
+        <div className="wizard-hero">
+          <Icon name="hexagon" size={56} className="wizard-hero-icon" />
+          <h2>Skill Manager</h2>
+          <p>{t("wizardTagline")}</p>
+        </div>
 
-        {/* Step indicator */}
-        <div className="wizard-steps">
-          {steps.map((label, i) => (
-            <span key={i} className={`wizard-step-dot${i === step ? " wizard-step-active" : ""}${i < step ? " wizard-step-done" : ""}`}>
-              {label}
-            </span>
+        {/* Dot-based step indicator */}
+        <div className="wizard-dots" aria-label={`Step ${step + 1} of ${totalSteps}`}>
+          {Array.from({ length: totalSteps }).map((_, i) => (
+            <span
+              key={i}
+              className={`wizard-dot${i === step ? " wizard-dot-active" : ""}${i < step ? " wizard-dot-done" : ""}`}
+            />
           ))}
         </div>
 
@@ -95,21 +103,28 @@ export function OnboardingWizard({
               <div className="wizard-placeholder">{t("wizardNoTools")}</div>
             ) : (
               <>
-                <ul className="wizard-tool-list">
+                <div className="wizard-tool-grid">
                   {discovered.map((dt) => (
-                    <li key={dt.name} className="wizard-tool-item">
-                      <span className="tool-name">{dt.name}</span>
-                      <code className="path-text">{dt.global_path}</code>
-                    </li>
+                    <div key={dt.name} className="wizard-tool-tile">
+                      <div className="wizard-tool-tile-avatar">{dt.name.slice(0, 2).toUpperCase()}</div>
+                      <div className="wizard-tool-tile-name">{dt.name}</div>
+                      <code className="wizard-tool-tile-path" title={dt.global_path}>{dt.global_path}</code>
+                    </div>
                   ))}
-                </ul>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleAddDiscovered}
-                  disabled={adding || addedCount !== null}
-                >
-                  {adding ? t("adding") : addedCount !== null ? `${t("addedTools")} ${addedCount} ${t("toolUnit")}` : t("addAll")}
-                </button>
+                </div>
+                <div className="wizard-actions">
+                  <button
+                    className="btn btn-primary btn-large"
+                    onClick={handleAddDiscovered}
+                    disabled={adding || addedCount !== null}
+                  >
+                    {adding
+                      ? t("adding")
+                      : addedCount !== null
+                        ? `${t("addedTools")} ${addedCount} ${t("toolUnit")}`
+                        : t("addAll")}
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -131,9 +146,11 @@ export function OnboardingWizard({
                 )}
               </div>
             ) : (
-              <button className="btn btn-primary" onClick={handleScan} disabled={scanning}>
-                {scanning ? t("scanning") : t("scanAll")}
-              </button>
+              <div className="wizard-actions">
+                <button className="btn btn-primary btn-large" onClick={handleScan} disabled={scanning}>
+                  {scanning ? t("scanning") : t("scanAll")}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -144,14 +161,14 @@ export function OnboardingWizard({
           </div>
         )}
 
-        <div className="modal-actions">
-          {step < 2 ? (
+        <div className="wizard-actions wizard-nav-actions">
+          {step < totalSteps - 1 ? (
             <>
-              <button className="btn btn-primary" onClick={() => setStep(step + 1)}>{t("wizardNext")}</button>
-              <button className="btn btn-secondary" onClick={onClose}>{t("wizardSkip")}</button>
+              <button className="btn btn-primary btn-large" onClick={() => setStep(step + 1)}>{t("wizardNext")}</button>
+              <button className="btn btn-ghost" onClick={onClose}>{t("wizardSkip")}</button>
             </>
           ) : (
-            <button className="btn btn-primary" onClick={onClose}>{t("wizardFinish")}</button>
+            <button className="btn btn-primary btn-large" onClick={onClose}>{t("wizardFinish")}</button>
           )}
         </div>
       </div>
