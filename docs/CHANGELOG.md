@@ -5,11 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-**说明**：当前 `main` 分支已超出 `v0.1.18` 标签，以下记录包含已合入但未发布的变更。正式版本号将在下次发版时统一 bump。
-
 ---
 
-## [Unreleased]
+## [0.2.0] - 2026-08-26
 
 ### Added
 - 远程 Skill 市场功能（§5.9）：从 GitHub 仓库浏览、搜索、一键安装 Skill
@@ -27,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - user-selectable layout：支持 subdir/root 仓库布局
 - **Phase 4 / T1 — Settings 扩展**：新增两项设置项 `view_market_diff_before_update`（默认 on，Market 检测到更新时弹差异对比）和 `auto_sync_on_file_change`（默认 off，为 Phase 4 / M12 文件监听预留）。后端 `Settings` 结构新增 `effective_auto_sync_on_file_change` 助手，封装"`auto_sync_on_file_change || sync_mode == "full-auto"`"的规范 OR，供下游消费方（文件监听等）统一引用。旧版 settings.json 自动向下兼容。详见 `docs/spec-market-ux-polish.md`（GitHub issue #5）。
 - **Phase 4 / T4 — Market 详情 Modal**：点击远程技能卡片打开 `RemoteSkillDetailModal`，按顺序展示描述 → `RemoteSkillFileTree`（递归 SSOT，跳过 `SKILL.md` / `local.md` / 隐藏项）→ SKILL.md 只读预览 → 来源市场（`remote_url` / `ssot_path`）→ 本地安装状态 → 哈希对比行（6 字符 mono 前缀，点击展开完整 64 字符 hash + Copy；无 hover-preview）。新 IPC `get_remote_skill_detail`；后端域逻辑在 `ops::remote_skill_detail::build_remote_skill_detail`，命令层仅适配；新 `db::Database::get_remote_skill(id)` 单行查询（避免全表扫描）；`RemoteSkillDetail` 模型新增 `local_content_hash` / `local_core_hash` 字段。无障碍：`role="dialog"` + `aria-modal` + focus trap + Esc / backdrop 关闭 + 焦点归还 + 哈希按钮 Space/Enter 激活 + `aria-keyshortcuts="Enter Space"`。详见 `docs/spec-market-ux-polish.md`（GitHub issue #6）。
+- UI 设计 token 体系扩展（`src/ui-enhancements.css`）：pill tab、暗色卡片顶部高光线、亮色卡片阴影、accent / error 状态左边框、synced-dot、8 套 avatar 渐变预设、action-bar 分组、settings 双栏布局、theme cards、market chips、wizard splash
+- 零依赖 SVG 图标系统：`src/components/Icon.tsx`（23 个图标），`src/components/SkillAvatar.tsx`（36px 首字母渐变 tile，颜色由 skill name hash 决定），`src/components/ToggleSwitch.tsx`
+- OnboardingWizard 改造为全屏 branded splash（中心 hero + dot 步骤指示器 + 2 列工具 grid + 主 CTA 居中）
+- SettingsPanel 改造为双栏布局（左侧分类导航：appearance / sync / proxy / update；右侧内容区）；主题与语言切换改为视觉卡片；boolean 设置统一使用 ToggleSwitch
+- 顶部 action-bar 拆三组（主操作 / 搜索 / 视图 + 溢出菜单），健康检查 / 日志 / 设置收纳到 `⋯` 菜单
+- Skill 卡片加 SkillAvatar，30+ skills 不再混成一团
+- 全部工具同步的 skill 在 toggle 区出绿色 synced-dot
+- 五级字号 CSS 变量（`--fs-caption` / `--fs-meta` / `--fs-body` / `--fs-title` / `--fs-heading`），替代散乱的 10/11/12/13/14/15 px；遗留的 7 处 `font-size: 10px` 全部归位
+- 本地打包字体：`@fontsource-variable/dm-sans` + `@fontsource-variable/jetbrains-mono`（通过 `src/main.tsx` import），移除对 Google Fonts CDN 的依赖，离线 / 内网 / Tauri 环境也能正常显示
+- 新增 i18n key：`wizardTagline`、`allSynced`、`moreActions`、`addMarketSources`（zh + en）
 
 ### Changed
 - 工具预设从 5 个扩展到 13+ 个（新增 Cursor、Windsurf、Aider、Roo Code、Trae、Kiro、Augment、Qoder）
@@ -38,10 +46,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 对比度 tokens 修正（accent / text-muted 达到 AA 标准）
 - 全局 `:focus-visible` 焦点环
 - 图标从 unicode 统一为 SVG（部分组件）
+- 全部 unicode 图标统一替换为 SVG（品牌 ⬡、视图切换 ▦/☰、更新 ●、同步 ⟳、编辑 ✎、关闭 ×、警告 ⚠、成功 ✓、日志方向 → / ←、modal 关闭 ✕ 等）
+- `SkillMarketPanel` 筛选 chip 改为统一 `market-chip` class，末尾追加 `+` chip 打开添加市场源弹窗（避免与 modal 内的 "Add Market" 撞 aria-label）
+- SettingsPanel 测试同步升级到两栏布局（用 `role="switch"` + `aria-checked` 替代 `role="checkbox"`，并要求先点击分类导航）
 - `transition: all` 改为显式属性列表
 
 ### Fixed
-- 修复市场添加时仓库不可达的错误提示（HTTP cause  surfaced）
+- 修复市场筛选的「Add Market」按钮与新增 `+` chip 在无障碍名称上的冲突（前者用 `addMarket`，后者用 `addMarketSources`）
+- 修复市场添加时仓库不可达的错误提示（HTTP cause surfaced）
 - 修复市场添加后自动同步索引 + 每源错误条
 - 修复批量操作二次确认（删除市场、sync-all）
 - 修复 sync-all 进度显示 + ConfirmDialog 抽到 context
@@ -56,6 +68,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - 信任操作系统证书存储（rustls-tls-native-roots），解决 GitHub 连接 MITM 代理的证书问题
+
+### Design Docs
+- `docs/ui-improvement-proposals.md`：竞品对标（Raycast / Linear / VS Code / Obsidian / Zed / Warp）+ 逐屏优化方案
+- `docs/ui-improvement-plan.md`：10 任务执行手册 + 15 张竖切 tickets（四 commit 节奏：A tokens + icons；B cards + bar + signals；C onboarding + settings + market；D type + fonts）
+- `docs/ui-mockups/before-after-comparison.html`：改造前后视觉对比
 
 ---
 
