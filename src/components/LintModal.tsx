@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import * as api from "../api";
 import type { SkillLint } from "../types";
 import type { TranslateFn } from "../i18n";
+import { Icon } from "./Icon";
 
 /**
  * Skill health check modal. Without `skill` it lints every skill in the
@@ -84,7 +85,7 @@ export function LintModal({
         ) : results === null ? (
           <div className="lint-status">{t("lintRunning")}</div>
         ) : withIssues.length === 0 ? (
-          <div className="lint-status lint-ok">✓ {t("lintAllGood")}</div>
+          <div className="lint-status lint-ok"><Icon name="check" size={14} /> {t("lintAllGood")}</div>
         ) : (
           <div className="lint-list">
             {withIssues.map((r) => (

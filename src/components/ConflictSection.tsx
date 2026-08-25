@@ -7,6 +7,7 @@ import type { ConflictView, SkillDiff } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
 import { DiffFilesView, DiffViewControls } from "./DiffView";
+import { Icon } from "./Icon";
 
 /** Conflict banner (M5) with per-version resolve buttons and a diff modal. */
 export function ConflictSection({
@@ -64,7 +65,7 @@ export function ConflictSection({
       <section className="section">
         <div className="conflict-banner">
           <div className="conflict-header">
-            <span className="conflict-icon">⚠</span>
+            <Icon name="alert-triangle" size={16} className="conflict-icon" />
             <span className="conflict-title">{t("conflictsTitle")}</span>
             <span className="badge badge-conflict">{conflicts.length}</span>
           </div>

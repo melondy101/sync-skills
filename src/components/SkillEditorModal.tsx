@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import * as api from "../api";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { Icon } from "./Icon";
 
 /**
  * Built-in SKILL.md editor. Loads the SSOT copy on mount; saving writes the
@@ -78,7 +79,7 @@ export function SkillEditorModal({
       <div className="modal editor-modal" onClick={(e) => e.stopPropagation()}>
         <div className="editor-header">
           <h3>{t("editorTitle")} — {skillName}</h3>
-          {dirty && <span className="editor-dirty-dot" title={t("editorUnsaved")}>●</span>}
+          {dirty && <Icon name="circle" size={8} className="editor-dirty-dot" />}
         </div>
         {filePath && <code className="skill-path editor-path" title={filePath}>{filePath}</code>}
 

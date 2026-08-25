@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { RemoteSkillUpdate } from "../types";
+import { Icon } from "./Icon";
 
 type Props = {
   t: (key: string) => string;
@@ -21,7 +22,7 @@ export default function RemoteUpdatesModal({ t, updates, marketTitles, loading, 
             {t("updatesAvailableTitle")}（{updates.length}）
           </h3>
           <button className="btn btn-small btn-ghost" onClick={onClose} aria-label={t("close")}>
-            ✕
+            <Icon name="x" size={14} />
           </button>
         </div>
 

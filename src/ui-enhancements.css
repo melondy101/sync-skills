@@ -1,0 +1,591 @@
+/* Copyright (c) 2026 Skill Manager Contributors
+   SPDX-License-Identifier: AGPL-3.0-only
+
+   UI Enhancement tokens & utility classes.
+   Append to App.css or import as a separate file.
+*/
+
+/* ==================== New Design Tokens ==================== */
+
+:root {
+  /* Surface ladder extension */
+  --surface-1: var(--surface);
+  --surface-2: var(--bg-elevated);
+  --surface-3: #e8e7e3;
+
+  /* Top-edge highlight (dark theme only, transparent in light) */
+  --edge-highlight: transparent;
+
+  /* Avatar gradient presets (for CSS-only usage) */
+  --avatar-0: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --avatar-1: linear-gradient(135deg, #ec4899, #f43f5e);
+  --avatar-2: linear-gradient(135deg, #f59e0b, #ef4444);
+  --avatar-3: linear-gradient(135deg, #10b981, #06b6d4);
+  --avatar-4: linear-gradient(135deg, #3b82f6, #6366f1);
+  --avatar-5: linear-gradient(135deg, #8b5cf6, #ec4899);
+  --avatar-6: linear-gradient(135deg, #14b8a6, #22d3ee);
+  --avatar-7: linear-gradient(135deg, #f97316, #facc15);
+}
+
+[data-theme="dark"] {
+  --surface-3: #1a1a26;
+  --edge-highlight: rgba(255, 255, 255, 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --surface-3: #1a1a26;
+    --edge-highlight: rgba(255, 255, 255, 0.05);
+  }
+}
+
+/* ==================== Pill Tabs ==================== */
+
+.tabs {
+  border-radius: 9999px !important;
+  padding: 2px !important;
+  border: 1px solid var(--border);
+}
+
+.tab {
+  border-radius: 9999px !important;
+  padding: 6px 20px !important;
+}
+
+/* ==================== Card Top-Edge Highlight (Linear style) ==================== */
+
+.skill-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--edge-highlight), transparent);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  pointer-events: none;
+}
+
+/* Light theme: subtle shadow instead of edge highlight */
+.skill-card {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.12s ease, background-color 0.12s ease,
+    box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.skill-card:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* ==================== Status Signals ==================== */
+
+/* Has-update: accent left border */
+.skill-has-update {
+  border-left: 3px solid var(--accent);
+}
+
+/* Has-conflict: error left border */
+.skill-has-conflict {
+  border-left: 3px solid var(--error);
+}
+
+/* Synced badge dot */
+.synced-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* ==================== Tab Content Transition ==================== */
+
+.tab-content {
+  animation: fadeSlideIn 200ms ease-out;
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ==================== Card Stagger Entrance ==================== */
+
+.skill-card {
+  animation: cardIn 250ms ease-out backwards;
+}
+
+.skill-card:nth-child(1) { animation-delay: 0ms; }
+.skill-card:nth-child(2) { animation-delay: 30ms; }
+.skill-card:nth-child(3) { animation-delay: 60ms; }
+.skill-card:nth-child(4) { animation-delay: 90ms; }
+.skill-card:nth-child(5) { animation-delay: 120ms; }
+.skill-card:nth-child(6) { animation-delay: 150ms; }
+.skill-card:nth-child(7) { animation-delay: 180ms; }
+.skill-card:nth-child(8) { animation-delay: 210ms; }
+.skill-card:nth-child(n+9) { animation-delay: 240ms; }
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ==================== Market Filter Chips ==================== */
+
+.market-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.market-chip {
+  padding: 5px 14px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.market-chip:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
+
+.market-chip-active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.market-chip-add {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+/* ==================== Log Timeline ==================== */
+
+.log-timeline {
+  position: relative;
+  padding-left: 28px;
+}
+
+.log-timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+.log-time-group {
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.log-time-group::before {
+  content: '';
+  position: absolute;
+  left: -24px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--info);
+  border: 2px solid var(--bg);
+}
+
+.log-time-group.log-success::before {
+  background: var(--success);
+}
+
+.log-time-group.log-error::before {
+  background: var(--error);
+}
+
+.log-time-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+}
+
+.log-entry-line {
+  padding: 3px 0;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.log-entry-line .log-status-icon {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.log-entry-line .log-skill-name {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* ==================== Settings Sidebar Layout ==================== */
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 32px;
+  min-height: 400px;
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-nav-item {
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-sans);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.settings-nav-item:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.settings-nav-item-active {
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* Theme selection cards */
+.theme-cards {
+  display: flex;
+  gap: 10px;
+}
+
+.theme-card {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: center;
+  background: transparent;
+  font-family: var(--font-sans);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.theme-card:hover {
+  border-color: var(--border-hover);
+}
+
+.theme-card-active {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.theme-preview {
+  height: 40px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+}
+
+.theme-preview-light {
+  background: linear-gradient(135deg, #fafaf8, #f0efeb);
+  border: 1px solid #e2e1dc;
+}
+
+.theme-preview-dark {
+  background: linear-gradient(135deg, #08080c, #14141c);
+  border: 1px solid #1f1f2e;
+}
+
+.theme-preview-system {
+  background: linear-gradient(135deg, #fafaf8 50%, #08080c 50%);
+  border: 1px solid #2a2a3e;
+}
+
+/* ==================== Action Bar Grouping ==================== */
+
+.action-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.action-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 3px;
+}
+
+.action-group-primary {
+  flex-shrink: 0;
+}
+
+.action-group-view {
+  margin-left: auto;
+}
+
+.action-bar .search-box {
+  flex: 1 1 220px;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+}
+
+/* ==================== Overflow Menu ==================== */
+
+.overflow-menu {
+  position: relative;
+}
+
+.overflow-menu-trigger {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overflow-menu-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.overflow-menu-items {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  z-index: 100;
+}
+
+.overflow-menu-items button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.overflow-menu-items button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* ==================== Settings Footer ==================== */
+
+.settings-footer {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ==================== Onboarding Wizard Splash ==================== */
+
+.wizard-fullscreen {
+  background: rgba(8, 8, 12, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wizard-splash {
+  width: 560px;
+  max-width: 90vw;
+  padding: 40px 32px;
+  text-align: center;
+}
+
+.wizard-hero {
+  margin-bottom: 24px;
+}
+
+.wizard-hero-icon {
+  color: var(--accent);
+  filter: drop-shadow(0 0 24px var(--accent-glow, rgba(245, 158, 11, 0.45)));
+  margin-bottom: 12px;
+}
+
+.wizard-hero h2 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.wizard-hero p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.wizard-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.wizard-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.wizard-dot-active {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.45);
+}
+
+.wizard-dot-done {
+  background: var(--success);
+}
+
+.wizard-tool-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.wizard-tool-tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 12px;
+}
+
+.wizard-tool-tile-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+
+.wizard-tool-tile-name {
+  font-weight: 500;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.wizard-tool-tile-path {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wizard-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.wizard-nav-actions {
+  margin-top: 24px;
+}
+
+.btn-large {
+  padding: 10px 28px;
+  font-size: 14px;
+  min-width: 160px;
+}
+
+/* ==================== Skill Card Avatar Layout ==================== */
+
+/* Skill card header now leads with a SkillAvatar tile to its left. */
+.skill-card .skill-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.skill-card .skill-header-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.skill-card .skill-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.skill-card .skill-name-row .skill-name {
+  margin: 0;
+}
+
+.skill-card .skill-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ==================== Reduced Motion ==================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -7,6 +7,7 @@ import type { SkillDiff, SkillUpdate } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
 import { DiffFilesView, DiffViewControls } from "./DiffView";
+import { Icon } from "./Icon";
 
 export interface UpdateDiffEntry {
   update: SkillUpdate;
@@ -256,7 +257,7 @@ export function UpdatesModal({
                 return (
                   <div key={key} className="tool-diff-block">
                     <div className="tool-diff-block-header" onClick={() => toggleToolBlock(key)}>
-                      <span className="tool-diff-caret">{open ? "▾" : "▸"}</span>
+                      <Icon name={open ? "chevron-down" : "chevron-right"} size={14} className="tool-diff-caret" />
                       <span className="update-tool-name">{tool.tool ?? t("sourceLabel")}</span>
                       <code className="update-path" title={tool.sourcePath}>{tool.sourcePath}</code>
                     </div>

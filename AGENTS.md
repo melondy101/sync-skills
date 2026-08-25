@@ -29,6 +29,19 @@ Tauri v2 桌面应用（Rust + React 19 + TypeScript + SQLite），用于跨 AI 
 - 接手 / 5 分钟入门：`docs/HANDOFF.md`
 - 变更日志：`docs/CHANGELOG.md`
 - 用户文档：`README.md`（中 / 英 / 日）
+- UI 改进设计提案与执行计划：`docs/ui-improvement-proposals.md`、`docs/ui-improvement-plan.md`；执行用 tickets 在 `.scratch/ui-improvement-2026-08-23/issues/`
+
+## Agent skills
+
+Agent-facing scaffolding the engineering skills consume. Update these docs directly; re-run `/setup-matt-pocock-skills` only to switch trackers.
+
+### Issue tracker
+
+GitHub Issues on `huang-yi-dae/sync-skills`; `.scratch/<feature>/issues/` is a local working copy that mirrors GitHub issues (not a separate tracker). See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context repo — root-level `CONTEXT.md` and `docs/adr/`. Created lazily by `/domain-modeling`; not required to exist. See `docs/agents/domain.md`.
 
 ## 不要提交
 - `src-tauri/target/`、`node_modules/`、`dist/`、`.pnpm-store/`（均已 gitignore）

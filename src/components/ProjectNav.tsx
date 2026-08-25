@@ -6,6 +6,7 @@ import * as api from "../api";
 import type { Project } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { Icon } from "./Icon";
 
 /** Project sub-navigation with add/edit/delete dialogs. */
 export function ProjectNav({
@@ -108,15 +109,17 @@ export function ProjectNav({
               className="project-edit"
               onClick={() => handleEditProject(p)}
               title={t("editProject")}
+              aria-label={t("editProject")}
             >
-              ✎
+              <Icon name="pencil" size={14} />
             </button>
             <button
               className="project-delete"
               onClick={() => handleDeleteProject(p.id, p.name)}
               title={t("deleteProject")}
+              aria-label={t("deleteProject")}
             >
-              ×
+              <Icon name="x" size={14} />
             </button>
           </div>
         ))}

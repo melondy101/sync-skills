@@ -6,6 +6,7 @@ import * as api from "../api";
 import type { SyncLog } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { Icon } from "./Icon";
 
 export function LogsPanel({
   t,
@@ -81,7 +82,15 @@ export function LogsPanel({
                     </span>
                     {log.direction && (
                       <span className={`direction-badge dir-${log.direction}`}>
-                        {log.direction === "to_ssot" ? "→ SSOT" : "← SSOT"}
+                        {log.direction === "to_ssot" ? (
+                          <>
+                            <Icon name="arrow-right" size={12} /> SSOT
+                          </>
+                        ) : (
+                          <>
+                            <Icon name="arrow-left" size={12} /> SSOT
+                          </>
+                        )}
                       </span>
                     )}
                   </td>

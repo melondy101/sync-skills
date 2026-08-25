@@ -3,6 +3,7 @@
 
 import { useMemo } from "react";
 import type { Market, RemoteSkill } from "../types";
+import { Icon } from "./Icon";
 
 type Props = {
   t: (key: string) => string;
@@ -87,7 +88,7 @@ export default function MarketSourcesModal({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>{t("marketSourcesTitle")}</h3>
           <button className="btn btn-small btn-ghost" onClick={onClose} aria-label={t("close")}>
-            ✕
+            <Icon name="x" size={14} />
           </button>
         </div>
 

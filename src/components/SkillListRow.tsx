@@ -3,6 +3,7 @@
 
 import type { SkillView, Tool, InstallationInfo, Market } from "../types";
 import type { TranslateFn } from "../i18n";
+import { Icon } from "./Icon";
 
 interface SkillListRowProps {
   skill: SkillView;
@@ -42,8 +43,8 @@ export function SkillListRow({
       <tr className={`skill-list-main ${hasUpdate ? "skill-has-update" : ""}`}>
         <td className="col-name">
           <span className="list-skill-name">{skill.name}</span>
-          {hasUpdate && <span className="update-indicator" title={t("updateAvailable")}>●</span>}
-          {syncing && <span className="sync-spinner">⟳</span>}
+          {hasUpdate && <Icon name="circle" size={8} className="update-indicator" />}
+          {syncing && <Icon name="refresh-cw" size={14} className="sync-spinner" />}
           {skill.description && <span className="list-skill-desc">{skill.description}</span>}
           {sourceMarket && (
             <button

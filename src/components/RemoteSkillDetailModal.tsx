@@ -7,6 +7,7 @@ import type { RemoteSkill, RemoteSkillDetail } from "../types";
 import type { TranslateFn } from "../i18n";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { RemoteSkillFileTree } from "./RemoteSkillFileTree";
+import { Icon } from "./Icon";
 
 type Props = {
   t: TranslateFn;
@@ -116,7 +117,7 @@ export function RemoteSkillDetailModal({
             onClick={onClose}
             aria-label={t("close")}
           >
-            ✕
+            <Icon name="x" size={14} />
           </button>
         </div>
 

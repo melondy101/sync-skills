@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
+import "./ui-enhancements.css";
 import * as api from "./api";
 import type {
   Tool, Project, SkillView, ScanResult, SkillUpdate,
@@ -30,6 +31,8 @@ import SkillMarketPanel from "./components/SkillMarketPanel";
 import { ConfirmProvider } from "./components/ConfirmProvider";
 
 import { SkillListRow } from "./components/SkillListRow";
+import { Icon } from "./components/Icon";
+import { SkillAvatar } from "./components/SkillAvatar";
 
 type Tab = "global" | "projects" | "market";
 type Panel = "main" | "settings" | "logs";
@@ -440,7 +443,7 @@ function App() {
       {/* App header */}
       <header className="app-header">
         <div className="brand">
-          <span className="brand-icon">⬡</span>
+          <span className="brand-icon"><Icon name="hexagon" size={22} /></span>
           <span className="brand-name">Skill Manager</span>
         </div>
       </header>
@@ -505,19 +508,19 @@ function App() {
       {activeTab !== "market" && (
       <section className="section">
         <div className="action-bar">
-          <button className="btn btn-primary" onClick={handleScan} disabled={scanning}>
-            {scanning ? t("scanning") : t("scanAll")}
-          </button>
-          <button className="btn btn-secondary" onClick={handleCheckUpdates} disabled={checkingUpdates}>
-            {checkingUpdates ? t("checking") : t("checkUpdates")}
-            {updates.length > 0 && <span className="update-badge">{updates.length}</span>}
-          </button>
-          <button className="btn btn-secondary" onClick={handleSyncAll} disabled={scanning}>
-            {t("syncAllActive")}
-          </button>
-          <button className="btn btn-secondary" onClick={() => setLintTarget("all")}>
-            {t("healthCheck")}
-          </button>
+          <div className="action-group action-group-primary">
+            <button className="btn btn-primary" onClick={handleScan} disabled={scanning}>
+              {scanning ? t("scanning") : t("scanAll")}
+            </button>
+            <button className="btn btn-secondary" onClick={handleCheckUpdates} disabled={checkingUpdates}>
+              {checkingUpdates ? t("checking") : t("checkUpdates")}
+              {updates.length > 0 && <span className="update-badge">{updates.length}</span>}
+            </button>
+            <button className="btn btn-secondary" onClick={handleSyncAll} disabled={scanning}>
+              {t("syncAllActive")}
+            </button>
+          </div>
+
           <div className="search-box">
             <input
               type="text"
@@ -527,29 +530,48 @@ function App() {
               className="search-input"
             />
           </div>
-          <select
-            className="sort-select"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-          >
-            <option value="name">{t("sortName")}</option>
-            <option value="updated_at">{t("sortUpdated")}</option>
-            <option value="created_at">{t("sortCreated")}</option>
-          </select>
-          <button
-            className="btn btn-small sort-dir-btn"
-            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-            title={sortDir === "asc" ? t("ascending") : t("descending")}
-          >
-            {sortDir === "asc" ? "A\u2192Z" : "Z\u2192A"}
-          </button>
-          <button
-            className="btn btn-small view-toggle-btn"
-            onClick={() => setViewMode((v) => (v === "card" ? "list" : "card"))}
-            title={viewMode === "card" ? t("viewList") : t("viewCard")}
-          >
-            {viewMode === "card" ? "☰" : "▦"}
-          </button>
+
+          <div className="action-group action-group-view">
+            <select
+              className="sort-select"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            >
+              <option value="name">{t("sortName")}</option>
+              <option value="updated_at">{t("sortUpdated")}</option>
+              <option value="created_at">{t("sortCreated")}</option>
+            </select>
+            <button
+              className="btn btn-small sort-dir-btn"
+              onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+              title={sortDir === "asc" ? t("ascending") : t("descending")}
+            >
+              {sortDir === "asc" ? "A\u2192Z" : "Z\u2192A"}
+            </button>
+            <button
+              className="btn btn-small view-toggle-btn"
+              onClick={() => setViewMode((v) => (v === "card" ? "list" : "card"))}
+              title={viewMode === "card" ? t("viewList") : t("viewCard")}
+            >
+              {viewMode === "card" ? <Icon name="list" size={16} /> : <Icon name="grid-3x3" size={16} />}
+            </button>
+            <details className="overflow-menu">
+              <summary className="btn btn-small btn-ghost overflow-menu-trigger" aria-label={t("moreActions")}>
+                <Icon name="more-horizontal" size={16} />
+              </summary>
+              <div className="overflow-menu-items" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setLintTarget("all"); (document.activeElement as HTMLElement | null)?.blur?.(); }}>
+                  {t("healthCheck")}
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setActivePanel("logs"); (document.activeElement as HTMLElement | null)?.blur?.(); }}>
+                  {t("logs")}
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setActivePanel("settings"); (document.activeElement as HTMLElement | null)?.blur?.(); }}>
+                  {t("settings")}
+                </button>
+              </div>
+            </details>
+          </div>
         </div>
       </section>
       )}
@@ -632,12 +654,16 @@ function App() {
             {filteredSkills.map((skill) => (
               <div key={skill.id} className={`skill-card ${hasUpdate(skill) ? "skill-has-update" : ""}`}>
                 <div className="skill-header">
-                  <h3 className="skill-name">{skill.name}</h3>
-                  {hasUpdate(skill) && <span className="update-indicator" title={t("updateAvailable")}>●</span>}
-                  {syncing.has(skill.id) && <span className="sync-spinner">⟳</span>}
+                  <SkillAvatar name={skill.name} size={36} className="skill-card-avatar" />
+                  <div className="skill-header-text">
+                    <div className="skill-name-row">
+                      <h3 className="skill-name">{skill.name}</h3>
+                      {hasUpdate(skill) && <Icon name="circle" size={8} className="update-indicator" />}
+                      {syncing.has(skill.id) && <Icon name="refresh-cw" size={14} className="sync-spinner" />}
+                    </div>
+                    {skill.description && <p className="skill-desc">{skill.description}</p>}
+                  </div>
                 </div>
-
-                {skill.description && <p className="skill-desc">{skill.description}</p>}
 
                 {skill.source_market_id != null && marketsById[skill.source_market_id] && (
                   <button
@@ -662,27 +688,44 @@ function App() {
 
                 {/* Tool toggles */}
                 <div className="skill-tools">
-                  {tools.map((tool) => {
-                    const inst = getInstallStatus(skill, tool.id);
-                    const isActive = inst?.status === "active";
+                  {(() => {
+                    const allSynced = tools.length > 0 && tools.every((tool) => {
+                      const inst = getInstallStatus(skill, tool.id);
+                      return inst?.synced_at != null;
+                    });
                     return (
-                      <div key={tool.id} className="skill-tool-row">
-                        <label className="toggle-label">
-                          <input
-                            type="checkbox"
-                            checked={isActive}
-                            onChange={(e) => handleToggle(skill.id, tool.id, e.target.checked)}
+                      <>
+                        {allSynced && (
+                          <span
+                            className="synced-dot"
+                            title={t("allSynced")}
+                            aria-label={t("allSynced")}
                           />
-                          <span className="toggle-text">{tool.name}</span>
-                        </label>
-                        {inst?.synced_at && (
-                          <span className="sync-time" title={inst.synced_at}>
-                            {t("synced")}
-                          </span>
                         )}
-                      </div>
+                        {tools.map((tool) => {
+                          const inst = getInstallStatus(skill, tool.id);
+                          const isActive = inst?.status === "active";
+                          return (
+                            <div key={tool.id} className="skill-tool-row">
+                              <label className="toggle-label">
+                                <input
+                                  type="checkbox"
+                                  checked={isActive}
+                                  onChange={(e) => handleToggle(skill.id, tool.id, e.target.checked)}
+                                />
+                                <span className="toggle-text">{tool.name}</span>
+                              </label>
+                              {inst?.synced_at && (
+                                <span className="sync-time" title={inst.synced_at}>
+                                  {t("synced")}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </>
                     );
-                  })}
+                  })()}
                 </div>
 
                 {/* Action buttons */}

@@ -6,6 +6,7 @@ import * as api from "../api";
 import type { Tool, ToolTemplate } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { Icon } from "./Icon";
 
 function isAbsolutePath(p: string): boolean {
   return (
@@ -247,7 +248,13 @@ export function ToolsSection({
               <span className="tool-name">{tool.name}</span>
               <div className="tool-actions">
                 <button className="btn btn-small" onClick={() => startEdit(tool)}>{t("edit")}</button>
-                <button className="btn btn-small btn-danger" onClick={() => handleDeleteTool(tool.id, tool.name)}>×</button>
+                <button
+                  className="btn btn-small btn-danger"
+                  onClick={() => handleDeleteTool(tool.id, tool.name)}
+                  aria-label={t("deleteTool")}
+                >
+                  <Icon name="x" size={12} />
+                </button>
               </div>
             </div>
             {editingTool === tool.id ? (

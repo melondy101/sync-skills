@@ -137,6 +137,8 @@ export const translations: Record<Lang, Record<string, string>> = {
     noMatch: '未找到匹配的 Skill',
     updateAvailable: "有可用更新",
     synced: "已同步",
+    allSynced: "全部工具已同步",
+    moreActions: "更多操作",
     syncNow: "立即同步",
     syncingCard: "同步中...",
     checkUpdate: "检查更新",
@@ -229,6 +231,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     filterByMarket: "按市场筛选",
     branch: "分支",
     addMarket: "添加市场",
+    addMarketSources: "添加市场源",
     editMarket: "编辑市场",
     deleteMarket: "删除市场",
     syncMarketIndex: "同步索引",
@@ -373,6 +376,7 @@ export const translations: Record<Lang, Record<string, string>> = {
 
     // Onboarding wizard
     wizardTitle: "欢迎使用 Skill Manager",
+    wizardTagline: "一处管理，多处生效",
     wizardIntro: "三个简单步骤即可开始跨工具管理 Skills。",
     wizardStepTools: "第 1 步 · 添加工具",
     wizardToolsHint: "已自动检测本机安装的 AI 编码工具，可一键添加。",
@@ -552,6 +556,8 @@ export const translations: Record<Lang, Record<string, string>> = {
     noMatch: "No matching skills found for",
     updateAvailable: "Update available",
     synced: "synced",
+    allSynced: "All tools synced",
+    moreActions: "More actions",
     syncNow: "Sync Now",
     syncingCard: "Syncing...",
     checkUpdate: "Check Update",
@@ -643,6 +649,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     filterByMarket: "Filter by market",
     branch: "Branch",
     addMarket: "Add Market",
+    addMarketSources: "Add Market Sources",
     editMarket: "Edit Market",
     deleteMarket: "Delete Market",
     syncMarketIndex: "Sync Index",
@@ -787,6 +794,7 @@ export const translations: Record<Lang, Record<string, string>> = {
 
     // Onboarding wizard
     wizardTitle: "Welcome to Skill Manager",
+    wizardTagline: "Manage in one place, sync everywhere",
     wizardIntro: "Three quick steps to start managing skills across tools.",
     wizardStepTools: "Step 1 · Add tools",
     wizardToolsHint: "AI coding tools installed on this machine were detected automatically. Add them in one click.",
