@@ -177,18 +177,17 @@ fn validate_skill_name(skill_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Base directory of the SSOT store: `~/.agents/skill-manager/ssot/`.
+/// Base directory of the SSOT store: `~/.skill-manager/ssot/`.
 /// Deliberately kept OUTSIDE any `skills/` tree: tools like Codex CLI and
 /// OpenCode scan `~/.agents/skills/` as a shared skills directory, so an
 /// SSOT store located there would be double-loaded as duplicate skills.
 pub fn ssot_base() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
-    Ok(home.join(".agents").join("skill-manager").join("ssot"))
+    crate::app_paths::ssot_path()
 }
 
 /// Get the SSOT path for a skill.
-/// Global (project_id=0): `~/.agents/skill-manager/ssot/<skill-name>/`
-/// Project (project_id>0): `~/.agents/skill-manager/ssot/_p<project_id>/<skill-name>/`
+/// Global (project_id=0): `~/.skill-manager/ssot/<skill-name>/`
+/// Project (project_id>0): `~/.skill-manager/ssot/_p<project_id>/<skill-name>/`
 pub fn ssot_path(skill_name: &str, project_id: i64) -> Result<PathBuf, String> {
     validate_skill_name(skill_name)?;
     let base = ssot_base()?;
@@ -205,42 +204,6 @@ pub fn ensure_ssot_dir() -> Result<PathBuf, String> {
     fs::create_dir_all(&ssot_base)
         .map_err(|e| format!("Failed to create SSOT directory: {}", e))?;
     Ok(ssot_base)
-}
-
-/// One-time migration of the legacy SSOT store (`~/.agents/skills/local/`,
-/// used up to v0.1.4). Moves its contents to the new base so tools scanning
-/// `~/.agents/skills/` stop picking up SSOT copies as duplicate skills.
-/// Returns `Some((old_base, new_base))` when a move happened, so callers can
-/// rewrite stored source_path values in the database.
-pub fn migrate_legacy_ssot() -> Option<(PathBuf, PathBuf)> {
-    let home = dirs::home_dir()?;
-    let old = home.join(".agents").join("skills").join("local");
-    if !old.is_dir() {
-        return None;
-    }
-    let new = ssot_base().ok()?;
-    if let Some(parent) = new.parent() {
-        fs::create_dir_all(parent).ok()?;
-    }
-    if !new.exists() {
-        if fs::rename(&old, &new).is_err() {
-            // rename can fail across volumes or on locked files: copy instead
-            copy_directory(&old, &new).ok()?;
-            let _ = fs::remove_dir_all(&old);
-        }
-    } else {
-        // New store already exists (partial migration): move missing entries
-        for entry in fs::read_dir(&old).ok()?.flatten() {
-            let target = new.join(entry.file_name());
-            if !target.exists() {
-                let _ = fs::rename(entry.path(), &target);
-            }
-        }
-        // Only succeeds when everything was moved out
-        let _ = fs::remove_dir(&old);
-    }
-    log::info!("Migrated legacy SSOT store {:?} -> {:?}", old, new);
-    Some((old, new))
 }
 
 /// Resolve a name conflict: if a skill with the same name exists at the target,

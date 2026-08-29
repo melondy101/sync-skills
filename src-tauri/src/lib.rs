@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+mod app_paths;
 mod commands;
 mod db;
 mod diff;
@@ -38,19 +39,6 @@ pub fn run() {
     // Initialize database
     let db = Database::new().expect("Failed to initialize database");
     let db_state = Arc::new(db);
-
-    // One-time SSOT relocation: ~/.agents/skills/local -> ~/.agents/skill-manager/ssot.
-    // Tools scanning ~/.agents/skills/ (Codex CLI, OpenCode) were loading the old
-    // SSOT store as duplicate skills; move it out and fix stored source_paths.
-    if let Some((old, new)) = sync::migrate_legacy_ssot() {
-        let old_s = scanner::normalize_path(&old);
-        let new_s = scanner::normalize_path(&new);
-        match db_state.migrate_ssot_prefix(&old_s, &new_s) {
-            Ok(n) if n > 0 => log::info!("Rewrote {} skill source_path entries to new SSOT", n),
-            Ok(_) => {}
-            Err(e) => log::error!("SSOT source_path migration failed: {}", e),
-        }
-    }
 
     // Seed built-in markets so the market tab is populated on first run.
     if let Err(e) = crate::commands::market::seed_default_markets(db_state.as_ref()) {

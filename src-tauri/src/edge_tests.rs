@@ -6,6 +6,7 @@
 
 #![cfg(test)]
 
+use crate::app_paths;
 use crate::db::Database;
 use crate::diff;
 use crate::hash;
@@ -21,6 +22,36 @@ fn write_file(path: &Path, content: &str) {
         fs::create_dir_all(parent).unwrap();
     }
     fs::write(path, content).unwrap();
+}
+
+// ==================== app_paths::persistent data boundaries ====================
+
+#[test]
+fn app_data_paths_share_skill_manager_root() {
+    let home = Path::new("/home/tester");
+
+    assert_eq!(
+        app_paths::app_data_root_from(home),
+        home.join(".skill-manager")
+    );
+    assert_eq!(
+        app_paths::database_path_from(home),
+        home.join(".skill-manager").join("skill-manager.db")
+    );
+    assert_eq!(
+        app_paths::settings_path_from(home),
+        home.join(".skill-manager")
+            .join("config")
+            .join("settings.json")
+    );
+    assert_eq!(
+        app_paths::ssot_path_from(home),
+        home.join(".skill-manager").join("ssot")
+    );
+    assert_eq!(
+        app_paths::market_cache_path_from(home),
+        home.join(".skill-manager").join("cache").join("markets")
+    );
 }
 
 // ==================== hash::compute_id_hash ====================
@@ -369,7 +400,7 @@ fn symlink_or_copy_replaces_existing_dst() {
 fn ssot_path_global_vs_project_layout() {
     let g = sync::ssot_path("skill-a", 0).unwrap();
     let p = sync::ssot_path("skill-a", 42).unwrap();
-    assert!(g.ends_with(Path::new("skill-manager").join("ssot").join("skill-a")));
+    assert!(g.ends_with(Path::new(".skill-manager").join("ssot").join("skill-a")));
     assert!(p.ends_with(Path::new("ssot").join("_p42").join("skill-a")));
     // SSOT must live outside ~/.agents/skills/ — tools like Codex/OpenCode
     // scan that tree and would double-load SSOT copies as duplicate skills
@@ -607,6 +638,17 @@ fn db_seed_data_populates_preset_tools_and_global_project() {
     let tools = db.list_tools().unwrap();
     assert_eq!(tools.len(), 5, "expected 5 preset tools");
     assert!(tools.iter().any(|t| t.name == "Claude Code"));
+    let expected_global_paths = [
+        ("Claude Code", "~/.claude/skills/"),
+        ("Codex CLI", "~/.codex/skills/"),
+        ("OpenCode", "~/.opencode/skills/"),
+        ("Gemini CLI", "~/.gemini/skills/"),
+        ("Cline", "~/.cline/skills/"),
+    ];
+    for (name, expected_path) in expected_global_paths {
+        let tool = tools.iter().find(|tool| tool.name == name).unwrap();
+        assert_eq!(tool.global_path, expected_path);
+    }
     // Global project (id=0) must exist so project_id=0 FKs are valid
     assert_eq!(db.get_project_name(0).unwrap(), "Global");
 }
@@ -720,39 +762,6 @@ fn db_disabled_installation_paths_after_toggle_off() {
     assert_eq!(disabled[0].0, tool_id);
     assert!(!disabled[0].1.is_empty(), "disabled path must resolve to the tool's global_path");
     assert!(db.get_active_installation_paths(skill_id, 0).unwrap().is_empty());
-}
-
-#[test]
-fn db_migrate_ssot_prefix_rewrites_only_matching_paths() {
-    let db = Database::new_in_memory().unwrap();
-    let (id_old, _) = db
-        .upsert_skill("in-old-ssot", None, "C:\\home\\.agents\\skills\\local\\in-old-ssot", "h1", "c1", 0)
-        .unwrap();
-    let (id_other, _) = db
-        .upsert_skill("elsewhere", None, "C:\\dev\\elsewhere", "h2", "c2", 0)
-        .unwrap();
-    // Forward-slash variant must also be matched (mixed separators tolerated)
-    let (id_fwd, _) = db
-        .upsert_skill("fwd-slash", None, "C:/home/.agents/skills/local/fwd-slash", "h3", "c3", 0)
-        .unwrap();
-
-    let n = db
-        .migrate_ssot_prefix(
-            "C:\\home\\.agents\\skills\\local",
-            "C:\\home\\.agents\\skill-manager\\ssot",
-        )
-        .unwrap();
-    assert_eq!(n, 2);
-
-    assert_eq!(
-        db.get_skill_by_id(id_old).unwrap().source_path,
-        "C:\\home\\.agents\\skill-manager\\ssot\\in-old-ssot"
-    );
-    assert_eq!(
-        db.get_skill_by_id(id_fwd).unwrap().source_path,
-        "C:\\home\\.agents\\skill-manager\\ssot/fwd-slash"
-    );
-    assert_eq!(db.get_skill_by_id(id_other).unwrap().source_path, "C:\\dev\\elsewhere");
 }
 
 #[test]

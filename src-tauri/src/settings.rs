@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-/// Application settings, persisted as JSON at ~/.agents/settings.json
+/// Application settings, persisted as JSON at ~/.skill-manager/config/settings.json
 ///
 /// Per-field `#[serde(default = "...")]` attributes preserve legacy-tolerance
 /// for older settings.json payloads that omit any given field. Dropping them
@@ -82,8 +82,7 @@ impl Default for Settings {
 
 impl Settings {
     fn settings_path() -> Result<PathBuf, String> {
-        let home = dirs::home_dir().ok_or("Cannot find home directory")?;
-        Ok(home.join(".agents").join("settings.json"))
+        crate::app_paths::settings_path()
     }
 
     /// Load settings from disk, or return defaults. Older JSON files that

@@ -55,8 +55,7 @@ impl Database {
     }
 
     fn db_path() -> Result<PathBuf, String> {
-        let home = dirs::home_dir().ok_or("Cannot find home directory")?;
-        Ok(home.join(".agents").join("skill-manager.db"))
+        crate::app_paths::database_path()
     }
 
     /// Initialize database schema
@@ -1084,41 +1083,6 @@ impl Database {
         )
         .map_err(|e| format!("Failed to update skill source_path: {}", e))?;
         Ok(())
-    }
-
-    /// Rewrite skills.source_path entries after the SSOT store moved to a new
-    /// base directory. Prefix matching tolerates mixed path separators.
-    /// Returns the number of rewritten rows.
-    pub fn migrate_ssot_prefix(&self, old_prefix: &str, new_prefix: &str) -> Result<usize, String> {
-        let norm = |s: &str| s.replace('/', "\\");
-        let old_norm = norm(old_prefix);
-
-        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let rows: Vec<(i64, String)> = {
-            let mut stmt = conn
-                .prepare("SELECT id, source_path FROM skills")
-                .map_err(|e| format!("Failed to prepare query: {}", e))?;
-            let mapped = stmt
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-                .map_err(|e| format!("Failed to query skills: {}", e))?;
-            mapped.filter_map(|r| r.ok()).collect()
-        };
-
-        let mut migrated = 0usize;
-        for (id, source_path) in rows {
-            if !norm(&source_path).starts_with(&old_norm) {
-                continue;
-            }
-            // Same length regardless of separator style, so slicing is safe
-            let new_path = format!("{}{}", new_prefix, &source_path[old_prefix.len()..]);
-            conn.execute(
-                "UPDATE skills SET source_path = ?1, updated_at = datetime('now') WHERE id = ?2",
-                params![new_path, id],
-            )
-            .map_err(|e| format!("Failed to migrate source_path: {}", e))?;
-            migrated += 1;
-        }
-        Ok(migrated)
     }
 
     /// Get all active installation paths for a skill across ALL projects.
