@@ -24,6 +24,7 @@ Tauri v2 桌面应用（Rust + React 19 + TypeScript + SQLite），用于跨 AI 
 - 规划 / 设计：`doc/`（PRD、design-discussion、phase-3、phase4_design、market-ux-decisions）
 - 问题追踪与解决记录：`docs/testing-issues-triage.md`
 - 市场 UI 改造设计与执行手册：`docs/market-ui-redesign.md`、`docs/market-ui-impl-guide.md`
+- 市场侧栏改造(2026-08-26 后续优化):`docs/market-sidebar-redesign.md`;执行用 tickets 在 `.scratch/market-sidebar-redesign/issues/`,GitHub issues #22–#28
 - 当前进行中的设计 spec：`docs/spec-market-ux-polish.md`（Market UX 打磨 + Phase 4 范围，GitHub issues #4–#10）
 - UI 评审报告：`docs/ui-review-2026-08-08.md`
 - 接手 / 5 分钟入门：`docs/HANDOFF.md`

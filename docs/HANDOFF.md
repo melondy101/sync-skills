@@ -53,7 +53,8 @@ sync-skills/
 │   ├── types.ts             # TypeScript 类型定义
 │   ├── i18n.ts              # zh / en / ja 多语言字符串
 │   ├── components/
-│   │   ├── SkillMarketPanel.tsx   # 远程市场面板（最大组件）
+│   │   ├── SkillMarketPanel.tsx   # 远程市场面板（最大组件，侧栏布局 v0.2.0）
+│   │   ├── MarketSidebar.tsx     # 市场侧栏导航（可折叠，源过滤，T3 2026-08-26）
 │   │   ├── RemoteSkillDetailModal.tsx # 远程技能详情 Modal（T4）
 │   │   ├── RemoteSkillFileTree.tsx    # 详情 Modal 内 SSOT 文件树（T4）
 │   │   ├── MarketSourcesModal.tsx # 市场源管理弹窗
@@ -112,6 +113,7 @@ sync-skills/
 │   ├── testing-issues-triage.md
 │   ├── market-ui-redesign.md
 │   ├── market-ui-impl-guide.md
+│   ├── market-sidebar-redesign.md  # 侧栏改造(2026-08-26)· tickets 在 .scratch/market-sidebar-redesign/issues/
 │   ├── ui-review-2026-08-08.md
 │   ├── HANDOFF.md            # 本文件
 │   └── CHANGELOG.md          # 变更日志
@@ -168,7 +170,7 @@ sync-skills/
 | 冲突检测与裁决 | ✅ | `commands/conflicts.rs`, `ConflictSection.tsx` |
 | 差异预览（unified / 并排） | ✅ | `diff.rs`, `DiffView.tsx` |
 | 变更忽略 | ✅ | `db.rs` dismissed_updates 表 |
-| 远程市场（GitHub） | ✅ | `market.rs`, `commands/market.rs`, `SkillMarketPanel.tsx` |
+| 远程市场（GitHub） | ✅ | `market.rs`, `commands/market.rs`, `SkillMarketPanel.tsx`, `MarketSidebar.tsx` |
 | Market 详情 Modal（T4） | ✅ | `ops/remote_skill_detail.rs`, `commands/market.rs::get_remote_skill_detail`, `RemoteSkillDetailModal.tsx`, `RemoteSkillFileTree.tsx`, `useFocusTrap.ts` |
 | 应用内更新 | ✅ | `commands/updater.rs` |
 | 首次启动引导 | ✅ | `OnboardingWizard.tsx` |
