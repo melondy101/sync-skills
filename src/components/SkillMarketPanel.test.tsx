@@ -105,7 +105,7 @@ function makeT(key: string) {
     repoSyncFailed: "Index failed: {0}",
     lastSyncError: "Last sync failed: {0}",
     addMarketUrlPlaceholder: "https://github.com/owner/repo or owner/repo",
-    noSkillsIndexed: "No skills indexed yet for this market. Use “Sync Index”.",
+    noSkillsIndexed: 'No skills indexed yet for this market. Use "Sync Index".',
     noMatch: "No matching skills found",
     cancel: "cancel",
     deleteMarket: "Delete Market",
@@ -133,14 +133,36 @@ function makeT(key: string) {
     fileTreeLabel: "Skill files",
     installedTag: "Installed",
     hashClickToExpand: "Click to expand the full hash",
+    // T4 sidebar redesign
+    sidebarSources: "Sources",
+    sidebarAllSources: "All Sources",
+    sidebarFilterPlaceholder: "Filter sources…",
+    sidebarAddSource: "Add Source",
+    sidebarCollapse: "Collapse sidebar",
+    sidebarExpand: "Expand sidebar",
+    actionsToggle: "Actions",
+    actionsReindexAll: "Reindex All",
+    actionsSyncAll: "Sync All Installed",
+    actionsMarkAll: "Mark All Installed",
+    actionsUnmarkAll: "Unmark All Installed",
+    actionsManageSources: "Manage Sources",
+    filterLabel: "Filter:",
+    sourceHeaderSync: "Sync Index",
+    sourceHeaderDisable: "Disable",
+    sourceHeaderEnable: "Enable",
+    sourceHeaderDelete: "Delete",
+    sourceHeaderBranch: "branch: {0}",
+    sourceHeaderIndexed: "indexed {0}",
+    sourceHeaderSkills: "{0} skills",
+    emptyNoSkills: "No skills indexed for this source",
+    emptyNoMatch: "No skills match your filters",
+    cardSourceBadge: "{0}",
   };
   return map[key] ?? key;
 }
 
 describe("SkillMarketPanel", () => {
-  it("shows the redesigned market toolbar, chips, and empty state", async () => {
-    // Empty list_remote_skills for this test so the empty-state branch is
-    // exercised independently of the T4 mock data.
+  it("shows the redesigned sidebar, topbar, and empty state", async () => {
     vi.mocked(api.listRemoteSkills).mockResolvedValue([]);
 
     renderWithProviders(
@@ -158,16 +180,15 @@ describe("SkillMarketPanel", () => {
     );
 
     expect(screen.getByPlaceholderText("Search skills (name or description)…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sources" })).toBeInTheDocument();
+    expect(screen.getByText("All Sources")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check Updates" })).toBeInTheDocument();
-    expect(screen.getByText("Batch")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actions" })).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText("alice/alpha-market")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByText("bob/beta-market")).toBeInTheDocument());
 
     expect(screen.getByRole("button", { name: "Installed only" })).toBeInTheDocument();
-    expect(screen.getByText("No skills indexed yet for this market. Use “Sync Index”.")).toBeInTheDocument();
+    expect(screen.getByText("No skills indexed for this source")).toBeInTheDocument();
   });
 
   it("auto-syncs after adding a market so the user gets immediate feedback", async () => {
@@ -194,7 +215,7 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Sources" }));
+    await user.click(screen.getByText("Add Source"));
     await user.click(screen.getByRole("button", { name: "Add Market" }));
 
     const urlInput = screen.getByPlaceholderText("https://github.com/owner/repo or owner/repo");
@@ -230,7 +251,7 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Sources" }));
+    await user.click(screen.getByText("Add Source"));
     await user.click(screen.getByRole("button", { name: "Add Market" }));
     await user.type(screen.getByPlaceholderText("https://github.com/owner/repo or owner/repo"), "carol/empty");
     await user.click(screen.getByRole("button", { name: "Add" }));
@@ -262,15 +283,11 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Sources" }));
+    await user.click(screen.getByText("Manage Sources"));
     const syncButtons = screen.getAllByRole("button", { name: "Sync Index" });
     await user.click(syncButtons[0]);
 
     await waitFor(() => expect(toast).toHaveBeenCalledWith("error", expect.stringContaining("missing SKILL.md")));
-
-    // No assertion on the modal — it would require re-opening the Source modal
-    // to read the error indicator. The toast assertion is sufficient to lock in
-    // the new contract that errors are surfaced to the user.
   });
 
   it("check updates does a lightweight commit check first", async () => {
@@ -298,7 +315,7 @@ describe("SkillMarketPanel", () => {
     });
   });
 
-  it("filters skills by the selected market chip", async () => {
+  it("filters skills by the selected market in the sidebar", async () => {
     renderWithProviders(
       <SkillMarketPanel
         projects={[]}
@@ -321,7 +338,7 @@ describe("SkillMarketPanel", () => {
     await waitFor(() => expect(api.listRemoteSkills).toHaveBeenCalledWith(1));
   });
 
-  it("batch marks / unmarks all remote skills installed", async () => {
+  it("batch marks / unmarks all remote skills installed via actions drawer", async () => {
     renderWithProviders(
       <SkillMarketPanel
         projects={[]}
@@ -337,15 +354,16 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByText("Batch"));
-    await user.click(screen.getByRole("button", { name: "Mark all installed" }));
-    // New: confirmation dialog must appear before the destructive action runs.
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const markAllBtn = await screen.findByRole("button", { name: "Mark All Installed" });
+    await user.click(markAllBtn);
     const dialog1 = await screen.findByRole("alertdialog");
     await user.click(within(dialog1).getByRole("button", { name: "Mark all installed" }));
     await waitFor(() => expect(api.setAllRemoteSkillsInstalled).toHaveBeenCalledWith(0, null, true));
 
-    await user.click(screen.getByText("Batch"));
-    await user.click(screen.getByRole("button", { name: "Unmark all installed" }));
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const unmarkAllBtn = await screen.findByRole("button", { name: "Unmark All Installed" });
+    await user.click(unmarkAllBtn);
     const dialog2 = await screen.findByRole("alertdialog");
     await user.click(within(dialog2).getByRole("button", { name: "Unmark all installed" }));
     await waitFor(() => expect(api.setAllRemoteSkillsInstalled).toHaveBeenCalledWith(0, null, false));
@@ -367,12 +385,11 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByText("Batch"));
-    await user.click(screen.getByRole("button", { name: "Mark all installed" }));
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("button", { name: "Mark All Installed" }));
 
-    // Dialog opens. Cancel and assert the API was never invoked.
     await screen.findByRole("alertdialog");
-    await user.click(screen.getByRole("button", { name: "cancel" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "cancel" }));
 
     expect(api.setAllRemoteSkillsInstalled).not.toHaveBeenCalled();
   });
@@ -393,18 +410,15 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Sources" }));
+    await user.click(screen.getByRole("button", { name: "Manage Sources" }));
 
-    // Two non-builtin markets are rendered → two delete buttons. Click the first.
     const deleteButtons = screen.getAllByRole("button", { name: "Delete Market" });
     await user.click(deleteButtons[0]);
 
-    // Dialog appears; cancel path keeps the API silent.
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "cancel" }));
     expect(api.deleteMarket).not.toHaveBeenCalled();
 
-    // Re-open and confirm → API gets called.
     const deleteButtons2 = screen.getAllByRole("button", { name: "Delete Market" });
     await user.click(deleteButtons2[0]);
     const dialog2 = await screen.findByRole("alertdialog");
@@ -428,17 +442,17 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByText("Batch"));
-    await user.click(screen.getByRole("button", { name: "Sync All Active" }));
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const syncAllBtn = await screen.findByRole("button", { name: "Sync All Installed" });
+    await user.click(syncAllBtn);
 
-    // Cancel first → API silent.
     const dialog1 = await screen.findByRole("alertdialog");
     await user.click(within(dialog1).getByRole("button", { name: "cancel" }));
     expect(api.syncRemoteInstallationsToTools).not.toHaveBeenCalled();
 
-    // Re-open and confirm.
-    await user.click(screen.getByText("Batch"));
-    await user.click(screen.getByRole("button", { name: "Sync All Active" }));
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const syncAllBtn2 = await screen.findByRole("button", { name: "Sync All Installed" });
+    await user.click(syncAllBtn2);
     const dialog2 = await screen.findByRole("alertdialog");
     await user.click(within(dialog2).getByRole("button", { name: "Sync All Active" }));
     await waitFor(() => expect(api.syncRemoteInstallationsToTools).toHaveBeenCalled());
@@ -467,25 +481,22 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByText("Batch"));
-    await user.click(screen.getByRole("button", { name: "Sync All Active" }));
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const syncAllBtn = await screen.findByRole("button", { name: "Sync All Installed" });
+    await user.click(syncAllBtn);
     const dialog = await screen.findByRole("alertdialog");
     await user.click(within(dialog).getByRole("button", { name: "Sync All Active" }));
 
-    // Wait for the listener to be registered, then push a progress event.
     await waitFor(() => expect(listenCallbacks["market:sync-progress"]).toBeDefined());
     listenCallbacks["market:sync-progress"]?.({ payload: { completed: 1, total: 3, current: "alpha" } });
     await waitFor(() => {
       const dialog = screen.getByRole("alertdialog");
       expect(within(dialog).getByText("1 / 3")).toBeInTheDocument();
-      // The progress label contains 'alpha' but the chip 'alice/alpha-market'
-      // also matches. Scope to the progress-current span.
       const progressCurrent = dialog.querySelector(".progress-current");
       expect(progressCurrent).toBeTruthy();
       expect(progressCurrent?.textContent).toContain("alpha");
     });
 
-    // Complete the sync → dialog closes.
     resolveSync();
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
   });
@@ -506,7 +517,6 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    // The market filter chip click triggers loadRemoteSkills().
     const chip = await screen.findByText("alice/alpha-market");
     await user.click(chip);
 
@@ -518,17 +528,9 @@ describe("SkillMarketPanel", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Skill detail" });
     expect(dialog).toBeInTheDocument();
-
-    // Description section is rendered with the full description text.
     expect(within(dialog).getByText("Demonstrates the T4 detail Modal.")).toBeInTheDocument();
-
-    // File tree (references/spec.md, scripts/build.sh).
     expect(within(dialog).getByText("references/spec.md")).toBeInTheDocument();
     expect(within(dialog).getByText("scripts/build.sh")).toBeInTheDocument();
-
-    // Hash row: 6-char prefix of remote_content_hash + Copy button.
-    // (Both local and remote happen to share the same prefix in this fixture;
-    // assert via the dialog text content rather than a single `getByText`.)
     expect(within(dialog).getByRole("button", { name: "Copy full hash" })).toBeInTheDocument();
   });
 
@@ -548,7 +550,6 @@ describe("SkillMarketPanel", () => {
     );
 
     const user = userEvent.setup();
-    // Load skills by clicking the market chip.
     const chip = await screen.findByText("alice/alpha-market");
     await user.click(chip);
 
@@ -611,16 +612,12 @@ describe("SkillMarketPanel", () => {
     await user.click(card);
 
     const dialog = await screen.findByRole("dialog", { name: "Skill detail" });
-    // Local prefix is fedcba (from local_content_hash above).
     expect(within(dialog).getByText("fedcba")).toBeInTheDocument();
-    // Full hash NOT yet shown — only the 6-char prefix is rendered.
     expect(within(dialog).queryByText(/^fedcba0987654321/)).not.toBeInTheDocument();
 
-    // Click the prefix → expand.
     await user.click(within(dialog).getByText("fedcba"));
     expect(within(dialog).getByText(/^fedcba0987654321/)).toBeInTheDocument();
 
-    // Two Copy buttons: one for local, one for remote.
     expect(within(dialog).getAllByRole("button", { name: "Copy full hash" })).toHaveLength(2);
   });
 });

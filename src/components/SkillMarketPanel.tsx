@@ -10,6 +10,7 @@ import { RemoteSkillDetailModal } from './RemoteSkillDetailModal';
 import RemoteUpdatesModal from './RemoteUpdatesModal';
 import { useConfirm } from './ConfirmProvider';
 import { Icon } from "./Icon";
+import MarketSidebar from "./MarketSidebar";
 import type {
   Market,
   Project,
@@ -81,6 +82,10 @@ export default function SkillMarketPanel({
 
   // T4 detail Modal: the skill whose card was clicked (null = closed).
   const [detailSkill, setDetailSkill] = useState<RemoteSkill | null>(null);
+
+  // T4/T5: collapsible actions drawer + multi-select market filter
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedFilterMarkets, setSelectedFilterMarkets] = useState<Set<number>>(new Set());
 
   const { showConfirm, setProgress } = useConfirm();
 
@@ -457,12 +462,19 @@ export default function SkillMarketPanel({
   const visibleSkills = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return remoteSkills.filter((skill) => {
-      if (selectedMarketFilter !== "all" && String(skill.market_id) !== selectedMarketFilter) return false;
+      // Sidebar selection: single source
+      if (selectedMarketFilter !== "all" && String(skill.market_id) !== selectedMarketFilter)
+        return false;
+      // Multi-select filter chips (only active when sidebar = "all")
+      if (selectedMarketFilter === "all" && selectedFilterMarkets.size > 0) {
+        if (!selectedFilterMarkets.has(skill.market_id)) return false;
+      }
       if (installedOnly && !skill.is_installed) return false;
-      if (q && !skill.skill_name.toLowerCase().includes(q) && !(skill.description || "").toLowerCase().includes(q)) return false;
+      if (q && !skill.skill_name.toLowerCase().includes(q) && !(skill.description || "").toLowerCase().includes(q))
+        return false;
       return true;
     });
-  }, [remoteSkills, selectedMarketFilter, searchQuery, installedOnly]);
+  }, [remoteSkills, selectedMarketFilter, selectedFilterMarkets, searchQuery, installedOnly]);
 
   async function handleInstallConfirm(projectId: number, toolPath: string, remember: boolean) {
     if (!installTarget) return;
@@ -533,144 +545,235 @@ export default function SkillMarketPanel({
   const updateCount = (updates ?? []).length;
 
   return (
-    <section className="section">
-      {/* 工具栏 */}
-      <div className="market-toolbar">
-        <div className="search-box">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("marketSearchPlaceholder")}
-            className="search-input"
-            aria-label={t("marketSearchPlaceholder")}
-          />
-        </div>
-        <button className="btn btn-secondary" onClick={() => setShowSourcesModal(true)}>
-          {t("manageSources")}
-        </button>
-        <button className="btn btn-secondary" onClick={checkRemoteUpdates} disabled={remoteCheckLoading}>
-          {remoteCheckLoading ? t("checking") : t("checkRemoteUpdates")}
-          {updateCount > 0 && <span className="update-badge">{updateCount}</span>}
-        </button>
-        <details className="menu">
-          <summary>{t("batchMenu")}</summary>
-          <div className="menu-panel">
-            <button className="menu-item" onClick={scanAllRemoteRepositories} disabled={remoteScanLoading}>
-              {remoteScanLoading ? t("scanning") : t("reindexAllMarkets")}
+    <section className="market-page">
+      <div className="market-layout">
+        {/* ── Left Sidebar ── */}
+        <MarketSidebar
+          markets={markets}
+          remoteSkills={remoteSkills}
+          selectedMarketFilter={selectedMarketFilter}
+          onSelectFilter={(f) => {
+            setSelectedMarketFilter(f);
+            loadRemoteSkills(f === "all" ? undefined : Number(f));
+          }}
+          onAddSource={() => setShowSourcesModal(true)}
+          marketTitle={marketTitle}
+          t={t}
+        />
+
+        {/* ── Main Content ── */}
+        <div className="m-main">
+          {/* Top action bar */}
+          <div className="m-topbar">
+            <div className="m-search-box">
+              <Icon name="search" size={14} className="m-search-icon" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t("marketSearchPlaceholder")}
+                className="m-search-input"
+              />
+            </div>
+            <button
+              className="btn btn-secondary m-actions-btn"
+              onClick={() => setDrawerOpen((v) => !v)}
+            >
+              <Icon name="sliders-horizontal" size={14} />
+              {t("actionsToggle")}
+              <Icon name={drawerOpen ? "chevron-up" : "chevron-down"} size={12} />
             </button>
-            <button className="menu-item" onClick={requestSyncAllInstalledRemoteSkills} disabled={installLoading}>
-              {t("syncAllActive")}
-            </button>
-            <button className="menu-item" onClick={() => requestMarkAllRemoteSkillsInstalled(true)} disabled={installLoading}>
-              {t("markAllInstalled")}
-            </button>
-            <button className="menu-item" onClick={() => requestMarkAllRemoteSkillsInstalled(false)} disabled={installLoading}>
-              {t("unmarkAllInstalled")}
+            <button
+              className="btn btn-primary"
+              onClick={checkRemoteUpdates}
+              disabled={remoteCheckLoading}
+            >
+              <Icon name="refresh-cw" size={14} className={remoteCheckLoading ? "sync-spinner" : ""} />
+              {remoteCheckLoading ? t("checking") : t("checkRemoteUpdates")}
+              {updateCount > 0 && <span className="update-badge">{updateCount}</span>}
             </button>
           </div>
-        </details>
-      </div>
 
-      {/* 筛选 chips */}
-      <div className="market-chips">
-        <button
-          type="button"
-          className={`market-chip ${selectedMarketFilter === "all" ? "market-chip-active" : ""}`}
-          onClick={() => { setSelectedMarketFilter("all"); loadRemoteSkills(undefined); }}
-        >
-          {t("filterAll")}
-        </button>
-        {markets.filter((m) => m.enabled).map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            className={`market-chip ${String(selectedMarketFilter) === String(m.id) ? "market-chip-active" : ""}`}
-            onClick={() => { setSelectedMarketFilter(String(m.id)); loadRemoteSkills(m.id); }}
-          >
-            {marketTitle(m)}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={`market-chip ${installedOnly ? "market-chip-active" : ""}`}
-          onClick={() => setInstalledOnly((v) => !v)}
-        >
-          {t("filterInstalledOnly")}
-        </button>
-        <button
-          type="button"
-          className="market-chip market-chip-add"
-          onClick={() => setShowSourcesModal(true)}
-          aria-label={t("addMarketSources")}
-          title={t("addMarketSources")}
-        >
-          <Icon name="plus" size={12} />
-        </button>
-      </div>
+          {/* Collapsible actions drawer */}
+          <div className={`m-actions-drawer ${drawerOpen ? "open" : ""}`}>
+            <div className="m-actions-inner">
+              <button className="btn btn-secondary btn-small" onClick={scanAllRemoteRepositories} disabled={remoteScanLoading}>
+                <Icon name="scan" size={14} />
+                {remoteScanLoading ? t("scanning") : t("actionsReindexAll")}
+              </button>
+              <button className="btn btn-secondary btn-small" onClick={requestSyncAllInstalledRemoteSkills} disabled={installLoading}>
+                <Icon name="download" size={14} />
+                {t("actionsSyncAll")}
+              </button>
+              <button className="btn btn-secondary btn-small" onClick={() => requestMarkAllRemoteSkillsInstalled(true)} disabled={installLoading}>
+                <Icon name="check-circle" size={14} />
+                {t("actionsMarkAll")}
+              </button>
+              <button className="btn btn-secondary btn-small" onClick={() => requestMarkAllRemoteSkillsInstalled(false)} disabled={installLoading}>
+                <Icon name="x-circle" size={14} />
+                {t("actionsUnmarkAll")}
+              </button>
+              <button className="btn btn-secondary btn-small" onClick={() => setShowSourcesModal(true)}>
+                <Icon name="settings" size={14} />
+                {t("actionsManageSources")}
+              </button>
+            </div>
+          </div>
 
-      {/* 技能卡片网格 */}
-      {skillLoading ? (
-        <div className="skeleton-grid">
-          {[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className="skeleton-card" />)}
-        </div>
-      ) : visibleSkills.length === 0 ? (
-        <div className="empty-state">
-          <p>{searchQuery || installedOnly ? t("noMatch") : t("noSkillsIndexed")}</p>
-        </div>
-      ) : (
-        <div className="skill-grid">
-          {visibleSkills.map((skill) => {
-            const hasUpdate = updateKeys.has(`${skill.market_id}:${skill.skill_name}`);
-            const market = markets.find((m) => m.id === skill.market_id);
-            return (
-              <div
-                key={skill.id}
-                className={`skill-card ${hasUpdate ? "skill-has-update" : ""}`}
-                role="button"
-                tabIndex={0}
-                aria-label={t("openDetailAria").replace("{0}", skill.skill_name)}
-                onClick={() => setDetailSkill(skill)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setDetailSkill(skill);
-                  }
-                }}
+          {/* Filter bar (visible when sidebar = "all") */}
+          {selectedMarketFilter === "all" && (
+            <div className="m-filter-bar">
+              <span className="m-filter-label">
+                <Icon name="filter" size={12} />
+                {t("filterLabel")}
+              </span>
+              {markets.filter((m) => m.enabled).map((m) => {
+                const isOn = selectedFilterMarkets.has(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    className={`m-fchip ${isOn ? "on" : ""}`}
+                    onClick={() => {
+                      setSelectedFilterMarkets((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(m.id)) next.delete(m.id);
+                        else next.add(m.id);
+                        return next;
+                      });
+                    }}
+                  >
+                    {isOn && <Icon name="check" size={12} className="ck" />}
+                    {marketTitle(m).split("/")[0]}
+                  </button>
+                );
+              })}
+              <span className="m-filter-divider" />
+              <button
+                className={`m-fchip ${installedOnly ? "on" : ""}`}
+                onClick={() => setInstalledOnly((v) => !v)}
               >
-                <div className="skill-header">
-                  <h3 className="skill-name">{skill.skill_name}</h3>
+                {installedOnly && <Icon name="check" size={12} className="ck" />}
+                {t("filterInstalledOnly")}
+              </button>
+            </div>
+          )}
+
+          {/* Source header (visible when single source selected) */}
+          {selectedMarketFilter !== "all" && (() => {
+            const market = markets.find((m) => String(m.id) === selectedMarketFilter);
+            if (!market) return null;
+            const count = remoteSkills.filter((s) => s.market_id === market.id).length;
+            const initial = marketTitle(market).charAt(0).toUpperCase();
+            return (
+              <div className="m-source-header">
+                <div className="m-source-header-avatar">{initial}</div>
+                <div className="m-source-header-info">
+                  <h2>{marketTitle(market)}</h2>
+                  <p>
+                    <Icon name="git-branch" size={12} />
+                    {t("sourceHeaderBranch").replace("{0}", market.branch)} · {t("sourceHeaderSkills").replace("{0}", String(count))}
+                    {market.last_indexed_at && (
+                      <>
+                        {" · "}<Icon name="clock" size={12} />
+                        {t("sourceHeaderIndexed").replace("{0}", market.last_indexed_at)}
+                      </>
+                    )}
+                  </p>
                 </div>
-                <p className="market-card-desc">{skill.description || ""}</p>
-                <div className="market-card-meta">
-                  {market ? marketTitle(market) : ""}
-                </div>
-                <div className="market-card-footer" onClick={(e) => e.stopPropagation()}>
-                  {!skill.is_installed ? (
-                    <button className="btn btn-small btn-primary btn-press" onClick={() => setInstallTarget(skill)} disabled={installLoading}>
-                      {t("install")}
+                <div className="m-source-header-actions">
+                  <button className="btn btn-secondary btn-small" onClick={() => syncMarketIndex(market)} disabled={marketLoading || !market.enabled}>
+                    <Icon name="refresh-cw" size={14} />
+                    {t("sourceHeaderSync")}
+                  </button>
+                  <button className="btn btn-secondary btn-small" onClick={() => toggleMarket(market)} disabled={marketLoading}>
+                    <Icon name="power" size={14} />
+                    {market.enabled ? t("sourceHeaderDisable") : t("sourceHeaderEnable")}
+                  </button>
+                  {!BUILTIN_MARKET_IDS.has(String(market.id)) && (
+                    <button className="btn btn-danger btn-small" onClick={() => requestDeleteMarket(market)} disabled={marketLoading}>
+                      <Icon name="trash" size={14} />
+                      {t("sourceHeaderDelete")}
                     </button>
-                  ) : (
-                    <>
-                      {hasUpdate && (
-                        <button className="btn btn-small btn-primary btn-press" onClick={() => updateOne(skill)} disabled={installLoading}>
-                          {t("updateBtn")}
-                        </button>
-                      )}
-                      <span className="market-installed-tag">{t("installedTag")}</span>
-                      <button className="btn btn-small btn-secondary" onClick={() => syncRemoteSkillToTools(skill)} disabled={installLoading}>
-                        {t("syncBtn")}
-                      </button>
-                    </>
                   )}
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })()}
 
-      {/* 安装对话框 */}
+          {/* Skill grid */}
+          <div className="m-grid-wrap">
+            {skillLoading ? (
+              <div className="skeleton-grid">
+                {[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className="skeleton-card" />)}
+              </div>
+            ) : visibleSkills.length === 0 ? (
+              <div className="m-empty-state">
+                <Icon name="search" size={48} />
+                <p>{searchQuery || installedOnly || selectedFilterMarkets.size > 0
+                  ? t("emptyNoMatch")
+                  : t("emptyNoSkills")}</p>
+              </div>
+            ) : (
+              <div className="skill-grid">
+                {visibleSkills.map((skill) => {
+                  const hasUpdate = updateKeys.has(`${skill.market_id}:${skill.skill_name}`);
+                  const market = markets.find((m) => m.id === skill.market_id);
+                  return (
+                    <div
+                      key={skill.id}
+                      className={`skill-card ${hasUpdate ? "skill-has-update" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={t("openDetailAria").replace("{0}", skill.skill_name)}
+                      onClick={() => setDetailSkill(skill)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setDetailSkill(skill);
+                        }
+                      }}
+                    >
+                      <div className="skill-header">
+                        <h3 className="skill-name">{skill.skill_name}</h3>
+                        {selectedMarketFilter === "all" && market && (
+                          <span className="m-card-src-badge">
+                            {marketTitle(market).split("/")[0]}
+                          </span>
+                        )}
+                      </div>
+                      <p className="market-card-desc">{skill.description || ""}</p>
+                      <div className="market-card-footer" onClick={(e) => e.stopPropagation()}>
+                        {!skill.is_installed ? (
+                          <button className="btn btn-small btn-primary btn-press" onClick={() => setInstallTarget(skill)} disabled={installLoading}>
+                            {t("install")}
+                          </button>
+                        ) : (
+                          <>
+                            {hasUpdate && (
+                              <button className="btn btn-small btn-primary btn-press" onClick={() => updateOne(skill)} disabled={installLoading}>
+                                {t("updateBtn")}
+                              </button>
+                            )}
+                            <span className="market-installed-tag">
+                              <Icon name="check" size={12} />
+                              {t("installedTag")}
+                            </span>
+                            <button className="btn btn-small btn-secondary" onClick={() => syncRemoteSkillToTools(skill)} disabled={installLoading}>
+                              {t("syncBtn")}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Modals (unchanged) ── */}
       {installTarget && (() => {
         const installMarket = markets.find((m) => m.id === installTarget.market_id);
         return (
