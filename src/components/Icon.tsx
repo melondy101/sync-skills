@@ -40,6 +40,17 @@ export type IconName =
   | "trash"         // destructive delete (new)
   | "external-link" // open external (new)
   | "info"          // info circle (new);
+  | "panel-left-close" // sidebar collapse
+  | "panel-left-open"  // sidebar expand
+  | "layers"           // stacked layers
+  | "sliders-horizontal" // horizontal sliders
+  | "check-circle"     // success circle
+  | "x-circle"         // error circle
+  | "power"            // power button
+  | "clock"            // clock / timestamp
+  | "git-branch"       // branch info
+  | "chevron-up"       // upward chevron
+  | "filter";          // filter / funnel
 
 interface IconProps extends SVGAttributes<SVGSVGElement> {
   name: IconName;
@@ -182,6 +193,75 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
       <path d="M12 8h.01" />
     </>
   ),
+  "panel-left-close": (
+    <>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+      <path d="m14 9-3 3 3 3" />
+    </>
+  ),
+  "panel-left-open": (
+    <>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+      <path d="m10 9 3 3-3 3" />
+    </>
+  ),
+  layers: (
+    <>
+      <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84Z" />
+      <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
+      <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+    </>
+  ),
+  "sliders-horizontal": (
+    <>
+      <line x1="21" y1="4" x2="14" y2="4" />
+      <line x1="10" y1="4" x2="3" y2="4" />
+      <line x1="21" y1="12" x2="12" y2="12" />
+      <line x1="8" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="20" x2="16" y2="20" />
+      <line x1="12" y1="20" x2="3" y2="20" />
+      <circle cx="12" cy="4" r="2" />
+      <circle cx="10" cy="12" r="2" />
+      <circle cx="14" cy="20" r="2" />
+    </>
+  ),
+  "check-circle": (
+    <>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <path d="m9 11 3 3L22 4" />
+    </>
+  ),
+  "x-circle": (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m15 9-6 6" />
+      <path d="m9 9 6 6" />
+    </>
+  ),
+  power: (
+    <>
+      <path d="M12 2v10" />
+      <path d="M18.4 6.6a9 9 0 1 1-6.4 2.5" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </>
+  ),
+  "git-branch": (
+    <>
+      <path d="M6 3v12" />
+      <circle cx="18" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M18 9a9 9 0 0 1-9 9" />
+    </>
+  ),
+  "chevron-up": <path d="m18 15-6-6-6 6" />,
+  filter: <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />,
 };
 
 export function Icon({ name, size = 16, color, style, className, ...rest }: IconProps) {
