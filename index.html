@@ -10,7 +10,7 @@
     <script>
       try {
         var s = JSON.parse(require('fs').readFileSync(
-          require('os').homedir() + '/.agents/settings.json', 'utf8'));
+          require('os').homedir() + '/.skill-manager/config/settings.json', 'utf8'));
         var t = s.theme || 'light';
         if (t === 'system') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         document.documentElement.setAttribute('data-theme', t);

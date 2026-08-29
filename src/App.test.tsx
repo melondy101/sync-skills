@@ -29,7 +29,7 @@ function makeSkill(id: number, name: string): SkillView {
     id,
     name,
     description: `${name} description`,
-    source_path: `~/.agents/skill-manager/ssot/${name}/SKILL.md`,
+    source_path: `~/.skill-manager/ssot/${name}/SKILL.md`,
     source_market_id: null,
     content_hash: `hash-${id}`,
     core_hash: `core-${id}`,
