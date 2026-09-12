@@ -18,6 +18,7 @@ mod providers;
 mod scanner;
 mod settings;
 mod sync;
+mod watcher;
 
 use db::Database;
 use lock::LockManager;
@@ -95,6 +96,9 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // Start file-system watcher (T3 / M12) for auto-sync
+            watcher::start_watcher(app.handle().clone());
 
             Ok(())
         })

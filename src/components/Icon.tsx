@@ -26,6 +26,7 @@ export type IconName =
   | "chevron-down"  // expanded caret (was ▾)
   | "grid-3x3"      // card view (was ▦)
   | "list"          // list view (was ☰)
+  | "grid"          // grid view
   | "alert-triangle"// warning / conflict (was ⚠)
   | "check"         // success / confirmed (was ✓)
   | "arrow-right"   // direction / transition (was →)
@@ -103,6 +104,14 @@ const ICON_PATHS: Record<IconName, React.ReactNode> = {
     <>
       <path d="M3 12h.01" /><path d="M3 18h.01" /><path d="M3 6h.01" />
       <path d="M8 12h13" /><path d="M8 18h13" /><path d="M8 6h13" />
+    </>
+  ),
+  grid: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
     </>
   ),
   "alert-triangle": (

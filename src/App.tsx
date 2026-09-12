@@ -6,6 +6,7 @@
 // feature components together. All rendering details live in src/components/.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 import "./ui-enhancements.css";
 import * as api from "./api";
@@ -77,6 +78,23 @@ function App() {
     return () => clearTimeout(timer);
   }, [settings]);
 
+  // T3 / M12: listen for file-system watcher events from the backend.
+  // In full-auto mode, auto-trigger a scan + sync. In semi-auto mode,
+  // show a toast notification so the user knows a skill changed on disk.
+  useEffect(() => {
+    const unlisten = listen<{ skill_name: string; path: string }>("skill-file-changed", (event) => {
+      const { skill_name } = event.payload;
+      if (settings.sync_mode === "full-auto") {
+        addToast("info", `Auto-syncing "${skill_name}"`);
+        // Trigger a refresh scan; the sync cycle picks up changes.
+        api.scanSkills().catch(() => {});
+      } else if (settings.sync_mode === "semi-auto") {
+        addToast("info", `"${skill_name}" changed on disk — check for updates`);
+      }
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [settings.sync_mode, addToast]);
+
   // ==================== UI state ====================
   const [activeTab, setActiveTab] = useState<Tab>("global");
   const [activePanel, setActivePanel] = useState<Panel>("main");
@@ -87,7 +105,7 @@ function App() {
   const [checkingSingle, setCheckingSingle] = useState<number | null>(null);
   const [updates, setUpdates] = useState<SkillUpdate[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterMarket] = useState<number>(-1); // -1 = all markets / local only
+  const [filterMarket, setFilterMarket] = useState<number>(-1); // -1 = all markets / local only
   const [sortBy, setSortBy] = useState<"name" | "updated_at" | "created_at">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
@@ -548,6 +566,19 @@ function App() {
             >
               {sortDir === "asc" ? "A\u2192Z" : "Z\u2192A"}
             </button>
+            <select
+              className="market-filter-select"
+              value={filterMarket}
+              onChange={(e) => setFilterMarket(Number(e.target.value))}
+              title={t("filterByMarket")}
+            >
+              <option value={-1}>{t("allMarkets")}</option>
+              {Object.values(marketsById).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.owner}/{m.name}
+                </option>
+              ))}
+            </select>
             <button
               className="btn btn-small view-toggle-btn"
               onClick={() => setViewMode((v) => (v === "card" ? "list" : "card"))}

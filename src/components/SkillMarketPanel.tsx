@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as api from "../api";
 import InstallDialog from './InstallDialog';
@@ -51,6 +51,28 @@ export default function SkillMarketPanel({
   t,
   addToast,
 }: Props) {
+  // T5: global keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl/Cmd+F → focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      // Esc → close detail modal or clear search
+      if (e.key === "Escape") {
+        if (detailSkill) {
+          setDetailSkill(null);
+        } else if (searchQuery) {
+          setSearchQuery("");
+          searchRef.current?.blur();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [detailSkill, searchQuery]);
+
   const [markets, setMarkets] = useState<Market[]>([]);
   const [marketTitles, setMarketTitles] = useState<Record<number, string>>({});
   const [marketLoading, setMarketLoading] = useState(false);
@@ -86,6 +108,13 @@ export default function SkillMarketPanel({
   // T4/T5: collapsible actions drawer + multi-select market filter
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedFilterMarkets, setSelectedFilterMarkets] = useState<Set<number>>(new Set());
+
+  // T5: view toggle (card/list) + multi-field sort
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const [marketSortBy, setMarketSortBy] = useState<"name" | "market" | "updated">("name");
+
+  // T5: keyboard shortcuts — ref for search input focus
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const { showConfirm, setProgress } = useConfirm();
 
@@ -461,7 +490,7 @@ export default function SkillMarketPanel({
 
   const visibleSkills = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return remoteSkills.filter((skill) => {
+    let filtered = remoteSkills.filter((skill) => {
       // Sidebar selection: single source
       if (selectedMarketFilter !== "all" && String(skill.market_id) !== selectedMarketFilter)
         return false;
@@ -474,7 +503,19 @@ export default function SkillMarketPanel({
         return false;
       return true;
     });
-  }, [remoteSkills, selectedMarketFilter, selectedFilterMarkets, searchQuery, installedOnly]);
+    // T5: multi-field sort
+    filtered.sort((a, b) => {
+      switch (marketSortBy) {
+        case "market":
+          return (a.market_id - b.market_id) || a.skill_name.localeCompare(b.skill_name);
+        case "updated":
+          return (b.updated_at || "").localeCompare(a.updated_at || "");
+        default: // "name"
+          return a.skill_name.localeCompare(b.skill_name);
+      }
+    });
+    return filtered;
+  }, [remoteSkills, selectedMarketFilter, selectedFilterMarkets, searchQuery, installedOnly, marketSortBy]);
 
   async function handleInstallConfirm(projectId: number, toolPath: string, remember: boolean) {
     if (!installTarget) return;
@@ -568,6 +609,7 @@ export default function SkillMarketPanel({
             <div className="m-search-box">
               <Icon name="search" size={14} className="m-search-icon" />
               <input
+                ref={searchRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -575,6 +617,24 @@ export default function SkillMarketPanel({
                 className="m-search-input"
               />
             </div>
+            {/* T5: sort + view toggle */}
+            <select
+              className="market-sort-select"
+              value={marketSortBy}
+              onChange={(e) => setMarketSortBy(e.target.value as typeof marketSortBy)}
+              title={t("sortBy")}
+            >
+              <option value="name">{t("sortName")}</option>
+              <option value="market">{t("sortMarket")}</option>
+              <option value="updated">{t("sortUpdated")}</option>
+            </select>
+            <button
+              className="btn btn-small view-toggle-btn"
+              onClick={() => setViewMode((v) => (v === "card" ? "list" : "card"))}
+              title={viewMode === "card" ? t("listView") : t("cardView")}
+            >
+              <Icon name={viewMode === "card" ? "list" : "grid"} size={14} />
+            </button>
             <button
               className="btn btn-secondary m-actions-btn"
               onClick={() => setDrawerOpen((v) => !v)}
@@ -712,6 +772,66 @@ export default function SkillMarketPanel({
                 <p>{searchQuery || installedOnly || selectedFilterMarkets.size > 0
                   ? t("emptyNoMatch")
                   : t("emptyNoSkills")}</p>
+              </div>
+            ) : (
+              viewMode === "list" ? (
+              <div className="skill-list-view">
+                {visibleSkills.map((skill) => {
+                  const hasUpdate = updateKeys.has(`${skill.market_id}:${skill.skill_name}`);
+                  const market = markets.find((m) => m.id === skill.market_id);
+                  return (
+                    <div
+                      key={skill.id}
+                      className={`skill-list-row ${hasUpdate ? "skill-has-update" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={t("openDetailAria").replace("{0}", skill.skill_name)}
+                      onClick={() => setDetailSkill(skill)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setDetailSkill(skill);
+                        }
+                      }}
+                    >
+                      <div className="skill-list-cell skill-list-name">
+                        <h3 className="skill-name">{skill.skill_name}</h3>
+                        {selectedMarketFilter === "all" && market && (
+                          <span className="m-card-src-badge">{marketTitle(market).split("/")[0]}</span>
+                        )}
+                      </div>
+                      <p className="skill-list-cell skill-list-desc">{skill.description || ""}</p>
+                      <div className="skill-list-cell skill-list-status">
+                        {skill.is_installed ? (
+                          <span className="market-installed-tag">
+                            <Icon name="check" size={12} />
+                            {t("installedTag")}
+                          </span>
+                        ) : (
+                          <span className="market-not-installed-tag">{t("notInstalled")}</span>
+                        )}
+                      </div>
+                      <div className="skill-list-cell skill-list-actions" onClick={(e) => e.stopPropagation()}>
+                        {!skill.is_installed ? (
+                          <button className="btn btn-small btn-primary btn-press" onClick={() => setInstallTarget(skill)} disabled={installLoading}>
+                            {t("install")}
+                          </button>
+                        ) : (
+                          <>
+                            {hasUpdate && (
+                              <button className="btn btn-small btn-primary btn-press" onClick={() => updateOne(skill)} disabled={installLoading}>
+                                {t("updateBtn")}
+                              </button>
+                            )}
+                            <button className="btn btn-small btn-secondary" onClick={() => syncRemoteSkillToTools(skill)} disabled={installLoading}>
+                              {t("syncBtn")}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="skill-grid">

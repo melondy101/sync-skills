@@ -394,10 +394,13 @@ pub fn check_single_skill(db: &Database, locks: &LockManager, skill_id: i64, pro
         None => return Ok(Vec::new()),
     };
     let ssot = sync::ssot_path(&skill.name, project_id)?;
+    let ssot_skill_md = ssot.join("SKILL.md");
 
-    // Compute SSOT hash (None if SSOT doesn't exist yet)
-    let ssot_hash = if ssot.exists() {
-        hash::compute_content_hash(&ssot).ok()
+    // Compute SSOT core_hash (SKILL.md only — auxiliary file changes won't
+    // trigger false "update available" notifications). Falls back to None
+    // when SSOT doesn't exist yet.
+    let ssot_hash = if ssot_skill_md.exists() {
+        hash::compute_core_hash(&ssot_skill_md).ok()
     } else {
         None
     };
@@ -409,18 +412,17 @@ pub fn check_single_skill(db: &Database, locks: &LockManager, skill_id: i64, pro
         for (tool_id, install_path) in &installations {
             // install_path is the tool's skills ROOT (e.g. ~/.claude/skills/);
             // expand ~ and join the skill name, mirroring do_sync_skill's targeting.
-            // Hashing the root directly would compare ALL skills against one SSOT
-            // and flag a phantom update forever.
             let expanded = match scanner::expand_path(install_path) {
                 Ok(p) => p,
                 Err(_) => continue,
             };
             let skill_dir = expanded.join(&skill.name);
-            if !skill_dir.exists() {
+            let skill_md = skill_dir.join("SKILL.md");
+            if !skill_md.exists() {
                 continue;
             }
 
-            if let Ok(install_hash) = hash::compute_content_hash(&skill_dir) {
+            if let Ok(install_hash) = hash::compute_core_hash(&skill_md) {
                 match &ssot_hash {
                     Some(sh) if *sh == install_hash => continue, // in sync
                     _ => {
@@ -447,8 +449,9 @@ pub fn check_single_skill(db: &Database, locks: &LockManager, skill_id: i64, pro
 
     // Also check source_path against SSOT (backward compat)
     let source = PathBuf::from(&skill.source_path);
-    if source.exists() {
-        if let Ok(source_hash) = hash::compute_content_hash(&source) {
+    let source_skill_md = source.join("SKILL.md");
+    if source_skill_md.exists() {
+        if let Ok(source_hash) = hash::compute_core_hash(&source_skill_md) {
             match &ssot_hash {
                 Some(sh) if *sh == source_hash => {} // in sync
                 _ => {
@@ -470,11 +473,15 @@ pub fn check_single_skill(db: &Database, locks: &LockManager, skill_id: i64, pro
         }
     }
 
-    // Auto-refresh DB content_hash from SSOT if everything is in sync
+    // Auto-refresh DB hashes from SSOT if everything is in sync
     if updates.is_empty() {
         if let Some(sh) = &ssot_hash {
-            if sh != &skill.content_hash {
-                let _ = db.update_content_hash(skill_id, sh);
+            if sh != &skill.core_hash {
+                // Refresh both hashes: core_hash for update detection,
+                // content_hash gets recomputed alongside it
+                if let Ok(content_hash) = hash::compute_content_hash(&ssot) {
+                    let _ = db.update_skill_hashes(skill_id, &content_hash, sh);
+                }
             }
         }
     }

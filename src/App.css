@@ -715,6 +715,24 @@ body::before {
   border-color: var(--accent-dim);
 }
 
+.market-filter-select {
+  padding: 7px 10px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  max-width: 160px;
+}
+
+.market-filter-select:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
 .sort-dir-btn {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -2463,6 +2481,82 @@ body::before {
   color: var(--text);
 }
 .m-search-input::placeholder { color: var(--text-muted); }
+
+/* T5: Market sort dropdown */
+.market-sort-select {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.market-sort-select:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+/* T5: Market list view */
+.skill-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+}
+.skill-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+  border: 1px solid transparent;
+}
+.skill-list-row:hover {
+  background: var(--accent-alpha);
+  border-color: var(--border);
+}
+.skill-list-row.skill-has-update {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-alpha);
+}
+.skill-list-name {
+  flex: 0 0 220px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.skill-list-name .skill-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.skill-list-desc {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+.skill-list-status {
+  flex: 0 0 100px;
+  text-align: center;
+}
+.skill-list-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
 
 .m-actions-btn {
   display: flex;
