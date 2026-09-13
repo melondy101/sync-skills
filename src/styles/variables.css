@@ -1,0 +1,149 @@
+/* Copyright (c) 2026 Skill Manager Contributors
+   SPDX-License-Identifier: MIT */
+
+/* ── Design tokens & theme variables ────────────────
+   Split from App.css for maintainability.
+   Imported via App.css @import. */
+
+:root {
+  /* Light theme — clean warm white */
+  --bg: #fafaf8;
+  --bg-elevated: #f0efeb;
+  --surface: #ffffff;
+  --surface-hover: #f7f6f3;
+  --card: #ffffff;
+  --card-hover: #f7f6f3;
+
+  /* Warm amber accent + teal secondary */
+  --accent: #a56a14;
+  --accent-dim: #8f5a0f;
+  --accent-glow: rgba(196, 127, 30, 0.1);
+  --accent-glow-strong: rgba(196, 127, 30, 0.22);
+  --teal: #1a9e8f;
+  --teal-dim: rgba(26, 158, 143, 0.1);
+
+  /* Status colors */
+  --success: #1a9e6e;
+  --success-dim: rgba(26, 158, 110, 0.1);
+  --error: #dc3545;
+  --error-dim: rgba(220, 53, 69, 0.08);
+  --info: #3b7dd8;
+  --info-dim: rgba(59, 125, 216, 0.1);
+
+  /* Text hierarchy */
+  --text: #1a1a2e;
+  --text-secondary: #555566;
+  --text-muted: #6f6f80;
+  --text-on-accent: #ffffff;
+
+  /* Borders and inputs */
+  --border: #e2e1dc;
+  --border-hover: #cccbc5;
+  --input-bg: #ffffff;
+  --input-border: #d4d3ce;
+
+  /* Typography */
+  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+
+  /* Font size scale (five-step ladder) */
+  --fs-caption: 11px;
+  --fs-meta: 12px;
+  --fs-body: 13px;
+  --fs-title: 14px;
+  --fs-heading: 16px;
+
+  /* Spacing */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Shared non-variable colors */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.12);
+  --overlay-bg: rgba(0, 0, 0, 0.3);
+  --noise-opacity: 0.015;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  --bg: #08080c;
+  --bg-elevated: #0f0f14;
+  --surface: #14141c;
+  --surface-hover: #1a1a26;
+  --card: #181824;
+  --card-hover: #1e1e2e;
+
+  --accent: #e8a045;
+  --accent-dim: #c48530;
+  --accent-glow: rgba(232, 160, 69, 0.12);
+  --accent-glow-strong: rgba(232, 160, 69, 0.25);
+  --teal: #3dd8c5;
+  --teal-dim: rgba(61, 216, 197, 0.12);
+
+  --success: #34d399;
+  --success-dim: rgba(52, 211, 153, 0.1);
+  --error: #f87171;
+  --error-dim: rgba(248, 113, 113, 0.1);
+  --info: #60a5fa;
+  --info-dim: rgba(96, 165, 250, 0.1);
+
+  --text: #e2e2ea;
+  --text-secondary: #8e8ea0;
+  --text-muted: #7a7a8e;
+  --text-on-accent: #08080c;
+
+  --border: #1f1f2e;
+  --border-hover: #2a2a3e;
+  --input-bg: #0c0c12;
+  --input-border: #252536;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.4);
+  --overlay-bg: rgba(0, 0, 0, 0.65);
+  --noise-opacity: 0.025;
+}
+
+/* System theme — follows OS preference */
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --bg: #08080c;
+    --bg-elevated: #0f0f14;
+    --surface: #14141c;
+    --surface-hover: #1a1a26;
+    --card: #181824;
+    --card-hover: #1e1e2e;
+
+    --accent: #e8a045;
+    --accent-dim: #c48530;
+    --accent-glow: rgba(232, 160, 69, 0.12);
+    --accent-glow-strong: rgba(232, 160, 69, 0.25);
+    --teal: #3dd8c5;
+    --teal-dim: rgba(61, 216, 197, 0.12);
+
+    --success: #34d399;
+    --success-dim: rgba(52, 211, 153, 0.1);
+    --error: #f87171;
+    --error-dim: rgba(248, 113, 113, 0.1);
+    --info: #60a5fa;
+    --info-dim: rgba(96, 165, 250, 0.1);
+
+    --text: #e2e2ea;
+    --text-secondary: #8e8ea0;
+    --text-muted: #7a7a8e;
+    --text-on-accent: #08080c;
+
+    --border: #1f1f2e;
+    --border-hover: #2a2a3e;
+    --input-bg: #0c0c12;
+    --input-border: #252536;
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.4);
+    --overlay-bg: rgba(0, 0, 0, 0.65);
+    --noise-opacity: 0.025;
+  }
+}

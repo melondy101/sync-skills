@@ -76,7 +76,7 @@ export function SkillEditorModal({
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal editor-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal editor-modal" role="dialog" aria-modal="true" aria-label={t("editSkillTitle")} onClick={(e) => e.stopPropagation()}>
         <div className="editor-header">
           <h3>{t("editorTitle")} — {skillName}</h3>
           {dirty && <Icon name="circle" size={8} className="editor-dirty-dot" />}

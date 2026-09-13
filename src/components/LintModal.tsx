@@ -77,7 +77,7 @@ export function LintModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal lint-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal lint-modal" role="dialog" aria-modal="true" aria-label={t("lintTitle")} onClick={(e) => e.stopPropagation()}>
         <h3>{skill ? `${t("lintTitle")} — ${skill.name}` : t("lintTitle")}</h3>
 
         {error ? (

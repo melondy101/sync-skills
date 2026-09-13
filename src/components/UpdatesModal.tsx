@@ -173,7 +173,7 @@ export function UpdatesModal({
 
   return (
     <div className="modal-overlay" onClick={handleOverlayClose}>
-      <div className={`modal updates-modal${diffMaximized ? " maximized" : ""}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal updates-modal${diffMaximized ? " maximized" : ""}`} role="dialog" aria-modal="true" aria-label={t("updatesTitle")} onClick={(e) => e.stopPropagation()}>
         {selectedUpdateDiff ? (
           <>
             <div className="diff-header">

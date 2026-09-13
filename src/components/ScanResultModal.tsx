@@ -15,7 +15,7 @@ export function ScanResultModal({
 }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal scan-result-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal scan-result-modal" role="dialog" aria-modal="true" aria-label={t("scanResults")} onClick={(e) => e.stopPropagation()}>
         <h3>{t("scanResults")}</h3>
         <div className="scan-summary">
           <span className="scan-summary-item">

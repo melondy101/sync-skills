@@ -43,7 +43,7 @@ function App() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [skills, setSkills] = useState<SkillView[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [settings, setSettings] = useState<Settings>({ sync_mode: "semi-auto", prefer_symlink: false, theme: "light", language: "zh", close_action: "tray", use_system_proxy: true, use_proxy: false, proxy_url: null, view_market_diff_before_update: true, auto_sync_on_file_change: false }); // TODO: wire real defaults in settings loader
+  const [settings, setSettings] = useState<Settings | null>(null);
 
   // Settings update with coupling: when the user changes `sync_mode`, mirror
   // it onto `auto_sync_on_file_change` so the two UI controls stay in sync
@@ -170,6 +170,19 @@ function App() {
     try {
       setSettings(await api.getSettings());
     } catch (e) {
+      // Fall back to hardcoded defaults when backend loader fails
+      setSettings({
+        sync_mode: "semi-auto",
+        prefer_symlink: false,
+        theme: "light",
+        language: "zh",
+        close_action: "tray",
+        use_system_proxy: true,
+        use_proxy: false,
+        proxy_url: null,
+        view_market_diff_before_update: true,
+        auto_sync_on_file_change: false,
+      });
       addToast("error", `${t("failedLoadSettings")}: ${e}`);
     }
   }
@@ -452,6 +465,18 @@ function App() {
       <LogsPanel t={t} addToast={addToast} onBack={() => setActivePanel("main")} />
     </main>
   );
+
+  // Show loading spinner until settings are loaded from the backend
+  if (!settings) {
+    return (
+      <main className="container">
+        <div className="loading-screen">
+          <Icon name="hexagon" size={48} />
+          <p>Loading…</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="container">
