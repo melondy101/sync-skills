@@ -1133,18 +1133,6 @@ impl Database {
         Ok(paths)
     }
 
-    /// Update only content_hash (leave core_hash untouched).
-    pub fn update_content_hash(&self, skill_id: i64, content_hash: &str) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
-        conn.execute(
-            "UPDATE skills SET content_hash = ?1, updated_at = datetime('now')
-             WHERE id = ?2",
-            params![content_hash, skill_id],
-        )
-        .map_err(|e| format!("Failed to update content hash: {}", e))?;
-        Ok(())
-    }
-
     /// Insert a sync log entry (for sync operations with direction)
     pub fn insert_sync_log(
         &self,
