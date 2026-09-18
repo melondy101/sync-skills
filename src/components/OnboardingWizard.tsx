@@ -1,11 +1,12 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import type { ScanResult, ToolTemplate } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Icon } from "./Icon";
 
 /**
@@ -32,6 +33,10 @@ export function OnboardingWizard({
   const [addedCount, setAddedCount] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Escape is the same action as the visible "skip" button.
+  useFocusTrap(dialogRef, { onEscape: onClose });
 
   useEffect(() => {
     api.discoverTools()
@@ -77,7 +82,15 @@ export function OnboardingWizard({
 
   return (
     <div className="modal-overlay wizard-fullscreen">
-      <div className="modal wizard-splash" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal wizard-splash"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("wizardTitle")}
+        onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <div className="wizard-hero">
           <Icon name="hexagon" size={56} className="wizard-hero-icon" />
           <h2>Skill Manager</h2>

@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Project, RemoteSkill, Tool } from "../types";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 type Props = {
   skill: RemoteSkill;
@@ -39,13 +40,7 @@ export default function InstallDialog({ skill, marketTitle, projects, tools, t, 
     }
   }, [tools, toolPath]);
 
-  // Esc 关闭 + 打开时聚焦
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    ref.current?.focus();
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useFocusTrap(ref, { onEscape: onClose });
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>

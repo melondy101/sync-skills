@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { Market, RemoteSkill } from "../types";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Icon } from "./Icon";
 
 type Props = {
@@ -74,6 +75,7 @@ export default function MarketSourcesModal({
   builtinLabels,
   onClose,
 }: Props) {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const skillsByMarket = useMemo(() => {
     const counts = new Map<number, number>();
     for (const skill of skillCounts) {
@@ -82,9 +84,18 @@ export default function MarketSourcesModal({
     return counts;
   }, [skillCounts]);
 
+  useFocusTrap(dialogRef, { onEscape: onClose });
+
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal modal-wide" role="dialog" aria-modal="true" aria-label={t("marketSourcesTitle")}>
+      <div
+        className="modal modal-wide"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("marketSourcesTitle")}
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>{t("marketSourcesTitle")}</h3>
           <button className="btn btn-small btn-ghost" onClick={onClose} aria-label={t("close")}>

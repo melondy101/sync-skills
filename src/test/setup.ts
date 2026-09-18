@@ -6,7 +6,15 @@
 
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
+
+// `listen` reaches for the Tauri IPC context, which does not exist under jsdom,
+// and the resulting rejection is reported as an unhandled error that fails the
+// run. Tests only care that components subscribe, so hand back a no-op
+// unsubscribe.
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
+}));
 
 // Node 25 ships an experimental `localStorage` global without the full
 // Storage API, and it shadows jsdom's implementation inside vitest. Install a

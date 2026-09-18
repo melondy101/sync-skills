@@ -1,7 +1,9 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { useRef } from "react";
 import type { RemoteSkillUpdate } from "../types";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Icon } from "./Icon";
 
 type Props = {
@@ -14,9 +16,19 @@ type Props = {
 };
 
 export default function RemoteUpdatesModal({ t, updates, marketTitles, loading, onUpdateOne, onClose }: Props) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, { onEscape: onClose });
+
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={t("updatesAvailableTitle")}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("updatesAvailableTitle")}
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h3 style={{ margin: 0 }}>
             {t("updatesAvailableTitle")}（{updates.length}）

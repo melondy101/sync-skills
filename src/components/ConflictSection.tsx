@@ -1,11 +1,12 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import * as api from "../api";
 import type { ConflictView, SkillDiff } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { DiffFilesView, DiffViewControls } from "./DiffView";
 import { Icon } from "./Icon";
 
@@ -28,6 +29,14 @@ export function ConflictSection({
   const [loadingConflictDiff, setLoadingConflictDiff] = useState<number | null>(null);
   const [conflictMaximized, setConflictMaximized] = useState(false);
   const [diffSideBySide, setDiffSideBySide] = useState(true);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  function closeConflictDiff() {
+    setConflictDiff(null);
+    setConflictMaximized(false);
+  }
+
+  useFocusTrap(dialogRef, { active: conflictDiff !== null, onEscape: closeConflictDiff });
 
   if (conflicts.length === 0) return null;
 
@@ -102,10 +111,18 @@ export function ConflictSection({
 
       {/* Conflict Diff Modal */}
       {conflictDiff && (
-        <div className="modal-overlay" onClick={() => { setConflictDiff(null); setConflictMaximized(false); }}>
-          <div className={`modal updates-modal${conflictMaximized ? " maximized" : ""}`} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={closeConflictDiff}>
+          <div
+            className={`modal updates-modal${conflictMaximized ? " maximized" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${t("comparingVersions")}: ${conflictDiff.toolName}`}
+            onClick={(e) => e.stopPropagation()}
+            ref={dialogRef}
+            tabIndex={-1}
+          >
             <div className="diff-header">
-              <button className="btn btn-small" onClick={() => setConflictDiff(null)}>&larr; {t("back")}</button>
+              <button className="btn btn-small" onClick={closeConflictDiff}>&larr; {t("back")}</button>
               <h3 className="diff-title">{t("comparingVersions")}: {conflictDiff.toolName}</h3>
               <DiffViewControls
                 t={t}
@@ -125,7 +142,7 @@ export function ConflictSection({
             </div>
             <DiffFilesView diff={conflictDiff.diff} sideBySide={diffSideBySide} noChangesLabel={t("noChanges")} />
             <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => { setConflictDiff(null); setConflictMaximized(false); }}>{t("close")}</button>
+              <button className="btn btn-secondary" onClick={closeConflictDiff}>{t("close")}</button>
             </div>
           </div>
         </div>

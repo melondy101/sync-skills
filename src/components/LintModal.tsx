@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import type { SkillLint } from "../types";
 import type { TranslateFn } from "../i18n";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Icon } from "./Icon";
 
 /**
@@ -34,6 +35,9 @@ export function LintModal({
   const [results, setResults] = useState<SkillLint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fixing, setFixing] = useState<number | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(dialogRef, { onEscape: onClose });
 
   useEffect(() => {
     const load = skill
@@ -77,7 +81,15 @@ export function LintModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal lint-modal" role="dialog" aria-modal="true" aria-label={t("lintTitle")} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal lint-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("lintTitle")}
+        onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <h3>{skill ? `${t("lintTitle")} — ${skill.name}` : t("lintTitle")}</h3>
 
         {error ? (

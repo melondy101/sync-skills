@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 export type ConfirmVariant = "primary" | "danger";
 
@@ -50,14 +51,7 @@ export default function ConfirmDialog({
   const isProgress = progress != null && progress.total > 0;
   const percent = isProgress ? Math.min(100, Math.round((progress!.completed / progress!.total) * 100)) : 0;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    ref.current?.focus();
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  useFocusTrap(ref, { onEscape: onCancel });
 
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}>

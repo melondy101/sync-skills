@@ -1,11 +1,12 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import * as api from "../api";
 import type { SkillDiff, SkillUpdate } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { DiffFilesView, DiffViewControls } from "./DiffView";
 import { Icon } from "./Icon";
 
@@ -37,6 +38,7 @@ export function UpdatesModal({
 }) {
   const [selectedUpdateDiff, setSelectedUpdateDiff] = useState<UpdateDiffEntry | null>(initialDiff ?? null);
   const [loadingDiff, setLoadingDiff] = useState<number | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   // P2-1/2/3: diff UX state
   const [diffMaximized, setDiffMaximized] = useState(false);
   const [diffSideBySide, setDiffSideBySide] = useState(true);
@@ -171,9 +173,19 @@ export function UpdatesModal({
     onClose();
   }
 
+  useFocusTrap(dialogRef, { onEscape: handleOverlayClose });
+
   return (
     <div className="modal-overlay" onClick={handleOverlayClose}>
-      <div className={`modal updates-modal${diffMaximized ? " maximized" : ""}`} role="dialog" aria-modal="true" aria-label={t("updatesTitle")} onClick={(e) => e.stopPropagation()}>
+      <div
+        className={`modal updates-modal${diffMaximized ? " maximized" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("updatesTitle")}
+        onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         {selectedUpdateDiff ? (
           <>
             <div className="diff-header">

@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Icon } from "./Icon";
 
 /**
@@ -34,6 +35,7 @@ export function SkillEditorModal({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const dirty = content !== originalContent;
 
@@ -52,6 +54,9 @@ export function SkillEditorModal({
     if (dirty && !confirm(t("editorUnsaved"))) return;
     onClose();
   }
+
+  // Escape goes through handleClose so unsaved edits still get the confirm.
+  useFocusTrap(dialogRef, { onEscape: handleClose });
 
   async function handleSave() {
     setSaving(true);
@@ -76,7 +81,15 @@ export function SkillEditorModal({
 
   return (
     <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal editor-modal" role="dialog" aria-modal="true" aria-label={t("editSkillTitle")} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal editor-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("editSkillTitle")}
+        onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <div className="editor-header">
           <h3>{t("editorTitle")} — {skillName}</h3>
           {dirty && <Icon name="circle" size={8} className="editor-dirty-dot" />}

@@ -1,8 +1,10 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { useRef } from "react";
 import type { ScanResult } from "../types";
 import type { TranslateFn } from "../i18n";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 
 export function ScanResultModal({
   t,
@@ -13,9 +15,20 @@ export function ScanResultModal({
   result: ScanResult;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, { onEscape: onClose });
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal scan-result-modal" role="dialog" aria-modal="true" aria-label={t("scanResults")} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal scan-result-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("scanResults")}
+        onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <h3>{t("scanResults")}</h3>
         <div className="scan-summary">
           <span className="scan-summary-item">

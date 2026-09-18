@@ -1,11 +1,12 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import * as api from "../api";
 import type { Project } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Icon } from "./Icon";
 
 /** Project sub-navigation with add/edit/delete dialogs. */
@@ -30,6 +31,17 @@ export function ProjectNav({
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editProjectName, setEditProjectName] = useState("");
   const [editProjectPath, setEditProjectPath] = useState("");
+  const addDialogRef = useRef<HTMLDivElement>(null);
+  const editDialogRef = useRef<HTMLDivElement>(null);
+
+  useFocusTrap(addDialogRef, {
+    active: showAddProject,
+    onEscape: () => setShowAddProject(false),
+  });
+  useFocusTrap(editDialogRef, {
+    active: editingProject !== null,
+    onEscape: () => setEditingProject(null),
+  });
 
   async function handleAddProject() {
     if (!newProjectName.trim() || !newProjectPath.trim()) {
@@ -134,7 +146,15 @@ export function ProjectNav({
       {/* Add project dialog */}
       {showAddProject && (
         <div className="modal-overlay" onClick={() => setShowAddProject(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("addProjectTitle")}
+            onClick={(e) => e.stopPropagation()}
+            ref={addDialogRef}
+            tabIndex={-1}
+          >
             <h3>{t("addProjectTitle")}</h3>
             <div className="form-group">
               <label>{t("nameLabel")}</label>
@@ -167,7 +187,15 @@ export function ProjectNav({
       {/* Edit project dialog */}
       {editingProject && (
         <div className="modal-overlay" onClick={() => setEditingProject(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("editProjectTitle")}
+            onClick={(e) => e.stopPropagation()}
+            ref={editDialogRef}
+            tabIndex={-1}
+          >
             <h3>{t("editProjectTitle")}</h3>
             <div className="form-group">
               <label>{t("nameLabel")}</label>
