@@ -14,6 +14,7 @@ mod http;
 mod lint;
 mod lock;
 mod market;
+mod mcp;
 mod models;
 mod ops;
 mod providers;
@@ -31,6 +32,12 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 
 pub(crate) type DbState = Arc<Database>;
 pub(crate) type LockState = Arc<LockManager>;
+
+/// Entry point for the standalone `skill-manager-mcp` binary: read-only MCP
+/// tools over stdio, serving the same SQLite index the GUI writes to.
+pub fn run_mcp_stdio_server() -> Result<(), String> {
+    mcp::serve_stdio()
+}
 
 // ==================== Application Entry ====================
 
