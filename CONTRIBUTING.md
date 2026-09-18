@@ -40,7 +40,7 @@ cd src-tauri && cargo test       # Rust 单元测试
 
 - 所有后端调用统一走 [src/api.ts](src/api.ts) 的封装，组件内**禁止**直接 `invoke`（由 `pnpm lint` 强制检查，规则见 [eslint.config.js](eslint.config.js)）。
 - 类型定义集中在 [src/types.ts](src/types.ts)，与 Rust 侧结构体字段保持 snake_case 对齐。
-- 用户可见文案一律通过 [src/i18n.ts](src/i18n.ts) 的 key 引用，新增文案需同时提供 zh / en 两种语言。
+- 用户可见文案一律通过 [src/i18n/](src/i18n/) 的 key 引用，新增文案需同时提供 zh / en 两种语言。
 - 组件放在 `src/components/`，复用逻辑放在 `src/hooks/`；组件只关注展示与交互，业务规则放在后端。
 
 ### 后端（Rust + Tauri v2）

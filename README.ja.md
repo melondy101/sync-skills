@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.18-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-0.2.1-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/Tauri-v2-orange?style=flat-square&logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Rust-2021-brown?style=flat-square&logo=rust" alt="rust">
   <img src="https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react" alt="react">
@@ -44,9 +44,11 @@ Skill Manager はデスクトップ GUI を提供し、すべての Skill を一
 - **変更の却下** — 特定のツールの変更を永続的に無視。内容が再度変更されるまで再通知しない
 - **プロジェクト別管理** — プロジェクトごとに独立した Skill セットを構成、編集対応
 - **差分検出** — LCS diff ビュー（並べて表示 / 統合の 2 モード）を内蔵し、ファイル単位の変更を正確に表示
-- **Skill マーケット** — GitHub リポジトリからスキルを閲覧・検索・ワンクリックインストール。マーケットソース管理と一括操作に対応
+- **Skill マーケット** — GitHub / GitLab リポジトリからスキルを閲覧・検索・ワンクリックインストール。マーケットソース管理と一括操作に対応
+- **ファイル監視** — SSOT ツリーを監視し、ディスク変更時に自動同期（full-auto）または通知（semi-auto）
 - **アプリ内アップデート** — 新バージョンの検知・ダウンロード・インストールをワンクリックで実行
 - **オンボーディングとヘルスチェック** — 初回起動ウィザード、Lint による自動修復付きヘルスチェック、SKILL.md 内蔵エディタ
+- **キーボードショートカット** — 検索 / 移動 / 同期 / ソース管理をグローバルに、`?` で早見表を表示
 - **テーマ切替と多言語** — ライト / ダーク / システム追従、中文 / English / 日本語
 - **アクティビティログ** — すべての操作の完全な監査記録
 
@@ -112,8 +114,8 @@ pnpm tauri dev
 2. バージョンタグを push：
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
 
 3. CI（`.github/workflows/release.yml`）が Windows / macOS / Linux の 3 ランナーで
@@ -123,7 +125,7 @@ pnpm tauri dev
 
 > 現在インストーラーにはコード署名されていないため、Windows / macOS で SmartScreen / Gatekeeper の警告が出ます。
 
-**注意**：現在の `main` ブランチは `v0.1.18` タグから複数コミット先行しており、Market タブの再設計、アプリ内アップデート、オンボーディングウィザード、ヘルスチェックなどの未リリース変更を含みます。パッケージバージョンは次回リリース時に一括で更新されます。詳細は [docs/CHANGELOG.md](docs/CHANGELOG.md) を参照してください。
+**注意**：README のバージョンバッジは最新の公開タグを示します。`main` 上の未公開コミットは [docs/CHANGELOG.md](docs/CHANGELOG.md) の Unreleased 節を参照してください。
 
 ## 開発
 
@@ -133,7 +135,7 @@ sync-skills/
 │   ├── App.tsx             # メインコンポーネント & ルーティング
 │   ├── App.css             # スタイル（CSS 変数テーマシステム）
 │   ├── api.ts              # Tauri IPC ラッパー
-│   ├── i18n.ts             # 多言語テキスト
+│   ├── i18n/               # 多言語テキスト
 │   ├── types.ts            # TypeScript 型定義
 │   ├── main.tsx            # エントリーポイント
 │   ├── components/         # UI コンポーネント
@@ -141,7 +143,7 @@ sync-skills/
 ├── src-tauri/src/          # Rust バックエンド
 │   ├── lib.rs              # エントリ & コマンド登録
 │   ├── commands/           # Tauri コマンド層
-│   ├── ops.rs              # ドメインロジック
+│   ├── ops/                # ドメインロジック
 │   ├── sync.rs             # ファイル同期
 │   ├── scanner.rs          # ディレクトリスキャン
 │   ├── diff.rs             # LCS 差分アルゴリズム
@@ -149,6 +151,8 @@ sync-skills/
 │   ├── lock.rs             # LockManager
 │   ├── lint.rs             # SKILL.md ヘルスチェック
 │   ├── market.rs           # リモートマーケット
+│   ├── mcp.rs              # 外部向け MCP stdio サーバー（読み取り専用）
+│   ├── watcher.rs          # スキルディレクトリのファイル監視
 │   └── ...
 ├── doc/                    # 計画ドキュメント（PRD、設計、フェーズ計画）
 ├── docs/                   # 問題トリアージ、UI レビュー、マーケット改造ドキュメント
@@ -167,9 +171,11 @@ sync-skills/
 | v0.2.0 | ✅ 完了 | 自動検出、ソート/フィルター、差分検出、diff ビュー |
 | v0.3.0 | ✅ 完了 | テーマ切替、多言語対応、ハッシュ安定性修正 |
 | v0.4.0 | ✅ 完了 | 名前をアイデンティティとして、コンフリクト検出/解決、タイムスタンプ、プロジェクト編集、リバース同期、変更却下 |
-| v0.5.0 | ✅ 完了 | LockManager 統合、core_hash 変更検出；ファイルウォッチャーは依然計画中 |
-| v0.6.0 | ✅ 進行中 | アプリ内アップデート、オンボーディングウィザード、ヘルスチェック/Lint、内蔵エディタ、一括操作（Market の sync-all / mark-all）実装済み；リストパフォーマンス、キーボードショートカット等は引き続き改善中 |
-| v0.7.0 | 構想中 | MCP 統合：MCP サーバー設定の管理とツール間同期、Agent 向け MCP インターフェースの提供 |
+| v0.5.0 | ✅ 完了 | LockManager 統合、core_hash 変更検出 |
+| v0.6.0 | ✅ 完了 | アプリ内アップデート、オンボーディングウィザード、ヘルスチェック/Lint、内蔵エディタ、Market の一括操作、ファイルウォッチャーによる自動同期、GitLab マーケットソース、全ダイアログのフォーカストラップ/アクセシビリティ統一、グローバルキーボードショートカットと `?` 早見表、Market リストの描画性能 |
+| v0.7.0 | 🟡 進行中 | MCP 統合：最初のスライス実装済み —— `skill-manager-mcp` 読み取り専用 stdio サーバー（GUI と同じ SQLite インデックス上の 9 ツール）；MCP サーバー設定の管理とツール間同期はこれから |
+
+> 上のバージョン番号はロードマップ上のステージ名で、公開されているパッケージバージョン（最新タグは `v0.2.1`）とは独立しています。
 
 ## ライセンス
 

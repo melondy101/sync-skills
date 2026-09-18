@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.18-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-0.2.1-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/Tauri-v2-orange?style=flat-square&logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Rust-2021-brown?style=flat-square&logo=rust" alt="rust">
   <img src="https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react" alt="react">
@@ -44,9 +44,11 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
 - **Change Dismissal** — Persistently ignore specific tool changes until content changes again
 - **Project-level Management** — Configure independent skill sets per project, with edit support
 - **Diff Detection** — Built-in LCS diff view (side-by-side / unified) showing precise file-level changes
-- **Skill Market** — Browse, search, and one-click install skills from GitHub repos with built-in market source management
+- **Skill Market** — Browse, search, and one-click install skills from GitHub / GitLab repos with built-in market source management
+- **File Watching** — Monitors the SSOT tree and auto-syncs on disk changes (full-auto) or notifies (semi-auto)
 - **App Self-update** — One-click detection, download, and install of new versions
 - **Onboarding & Health Check** — First-run wizard, built-in Lint checks with auto-fix, and an in-app SKILL.md editor
+- **Keyboard Shortcuts** — Global search / navigation / sync / source management, with a `?` cheat sheet
 - **Theme & i18n** — Light / Dark / Follow System, 中文 / English / 日本語
 - **Activity Logs** — Complete audit trail of all operations
 
@@ -112,8 +114,8 @@ Installers for all platforms are built automatically via GitHub Actions — no l
 2. Push a version tag:
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
 
 3. CI (`.github/workflows/release.yml`) builds `.msi` / `.nsis.exe` (Windows),
@@ -123,7 +125,7 @@ Installers for all platforms are built automatically via GitHub Actions — no l
 
 > Installers are currently unsigned, so Windows / macOS will show SmartScreen / Gatekeeper warnings.
 
-**Note**: The current `main` branch is several commits ahead of the `v0.1.18` tag and includes unreleased changes such as the redesigned Market tab, in-app updates, onboarding wizard, health checks, and more. The package version will be bumped in the next release. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+**Note**: The version badge tracks the latest published tag; unreleased commits on `main` are listed in the Unreleased section of [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ## Development
 
@@ -133,7 +135,7 @@ sync-skills/
 │   ├── App.tsx             # Main component & routing
 │   ├── App.css             # Styles (CSS variable theme system)
 │   ├── api.ts              # Tauri IPC wrappers
-│   ├── i18n.ts             # Localization strings
+│   ├── i18n/               # Localization strings
 │   ├── types.ts            # TypeScript type definitions
 │   ├── main.tsx            # Entry point
 │   ├── components/         # UI components
@@ -141,7 +143,7 @@ sync-skills/
 ├── src-tauri/src/          # Rust backend
 │   ├── lib.rs              # Entry point & command registration
 │   ├── commands/           # Tauri command layer
-│   ├── ops.rs              # Domain logic
+│   ├── ops/                # Domain logic
 │   ├── sync.rs             # File sync
 │   ├── scanner.rs          # Directory scanning
 │   ├── diff.rs             # LCS diff algorithm
@@ -149,6 +151,8 @@ sync-skills/
 │   ├── lock.rs             # LockManager
 │   ├── lint.rs             # SKILL.md health checks
 │   ├── market.rs           # Remote marketplace
+│   ├── mcp.rs              # Outbound MCP stdio server (read-only tools)
+│   ├── watcher.rs          # Skill directory file watcher
 │   └── ...
 ├── doc/                    # Planning docs (PRD, design, phase plan)
 ├── docs/                   # Issue triage, UI reviews, market redesign docs
@@ -167,9 +171,11 @@ The full pre-commit checklist (type check / lint / unit tests, 6 commands across
 | v0.2.0 | ✅ Done | Auto-discovery, sorting/filtering, diff detection, diff view |
 | v0.3.0 | ✅ Done | Theme switching, i18n, hash stability fixes |
 | v0.4.0 | ✅ Done | Name-as-identity, conflict detection/resolution, timestamps, project edit, reverse sync, change dismissal |
-| v0.5.0 | ✅ Done | LockManager integration, core_hash change detection; file watcher still planned |
-| v0.6.0 | ✅ In progress | In-app update, onboarding wizard, health check / Lint, built-in editor, batch operations (sync-all / mark-all in Market) landed; list performance & keyboard shortcuts still iterating |
-| v0.7.0 | Proposed | MCP integration: MCP server config management & cross-tool sync, expose an MCP interface for agents |
+| v0.5.0 | ✅ Done | LockManager integration, core_hash change detection |
+| v0.6.0 | ✅ Done | In-app update, onboarding wizard, health check / Lint, built-in editor, Market batch operations, file-watcher auto-sync, GitLab market sources, dialog-wide focus trap & a11y, global keyboard shortcuts with a `?` cheat sheet, Market list render performance |
+| v0.7.0 | 🟡 In progress | MCP integration: first slice landed — `skill-manager-mcp`, a read-only stdio server (9 tools over the same SQLite index the GUI writes); MCP server config management & cross-tool sync still ahead |
+
+> The versions above are roadmap stage labels and are independent of the published package version (latest tag: `v0.2.1`).
 
 ## License
 

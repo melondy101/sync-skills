@@ -13,7 +13,7 @@
 **许可证**：AGPL-3.0-only  
 **上游仓库**：`github.com/huang-yi-dae/sync-skills`  
 
-当前 `main` 分支已超出 `v0.1.18` 标签若干提交，包含未发布的远程市场 UI 改造、应用内更新、引导、健康检查等能力。下次发版时统一 bump 版本号。详见 [CHANGELOG.md](CHANGELOG.md)。
+最新发布标签为 `v0.2.1`；`main` 在其之上还有未发布的提交（MarketProvider 抽象层与 GitLab 适配、全站 modal 焦点 trap 统一、全局快捷键、市场卡片重渲染优化）。发版走 `git tag vX.Y.Z && git push origin vX.Y.Z`，由 `.github/workflows/release.yml` 出包。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
@@ -51,10 +51,15 @@ sync-skills/
 │   ├── App.css              # 手写 CSS 变量主题系统，不要引入新框架
 │   ├── api.ts               # 所有 Tauri IPC 调用的统一封装
 │   ├── types.ts             # TypeScript 类型定义
-│   ├── i18n.ts              # zh / en / ja 多语言字符串
+│   ├── i18n/
+│   │   ├── index.ts          # makeT(lang) 查表 + TranslateFn 类型
+│   │   ├── zh.ts             # 中文字符串
+│   │   └── en.ts             # 英文字符串（缺 key 时的兜底）
 │   ├── components/
 │   │   ├── SkillMarketPanel.tsx   # 远程市场面板（最大组件，侧栏布局 v0.2.0）
 │   │   ├── MarketSidebar.tsx     # 市场侧栏导航（可折叠，源过滤，T3 2026-08-26）
+│   │   ├── MarketSkillEntry.tsx  # 市场卡片 / 列表行（React.memo，重渲染敏感）
+│   │   ├── ShortcutsModal.tsx    # `?` 快捷键速查表（与 MARKET_HOTKEYS 同源）
 │   │   ├── RemoteSkillDetailModal.tsx # 远程技能详情 Modal（T4）
 │   │   ├── RemoteSkillFileTree.tsx    # 详情 Modal 内 SSOT 文件树（T4）
 │   │   ├── MarketSourcesModal.tsx # 市场源管理弹窗
@@ -75,9 +80,10 @@ sync-skills/
 │   └── hooks/
 │       ├── useTheme.ts
 │       ├── useToasts.ts
-│       └── useFocusTrap.ts          # Modal 焦点 trap（T4 详情 Modal 复用，可推广到其他 modal）
+│       ├── useFocusTrap.ts          # 全站 modal 焦点 trap：模块级 LIFO 栈 + 单一 window 监听
+│       └── useHotkeys.ts            # 全局快捷键，modal 打开时自动让位（openDialogCount）
 ├── src-tauri/src/
-│   ├── lib.rs                # Tauri 入口，注册所有 command
+│   ├── lib.rs                # Tauri 入口，注册所有 command + 启动 watcher
 │   ├── commands/             # 薄命令层，每个域一个文件
 │   │   ├── market.rs         # 远程市场（最大命令文件，~1000 行）
 │   │   ├── syncing.rs        # 同步相关命令
@@ -90,20 +96,26 @@ sync-skills/
 │   │   ├── tools.rs          # 工具路径注册
 │   │   └── updater.rs        # 应用内更新
 │   ├── ops/                  # 核心领域逻辑（按子域拆分）
-│   │   ├── mod.rs            # 聚合 re-export
+│   │   ├── mod.rs            # 聚合 re-export + 同步/更新检测编排
+│   │   ├── market.rs         # 市场索引 upsert 与哈希比对
 │   │   └── remote_skill_detail.rs # 远程技能详情域逻辑（T4）
-│   ├── sync.rs               # 文件复制/替换/SSOT 路径
+│   ├── sync.rs               # 文件复制/替换/SSOT 路径（按域隔离）
 │   ├── scanner.rs            # 目录递归扫描 + front matter 解析
 │   ├── diff.rs               # LCS diff 算法（阈值 5000 行）
 │   ├── db.rs                 # SQLite 数据访问（~1900 行，含迁移）
+│   ├── fs.rs                 # 可移植叶子模块：原子写 / 复制 / 删除（无 crate:: 依赖）
+│   ├── http.rs               # 共享 reqwest 客户端工厂（要求开启 system-proxy feature）
 │   ├── lock.rs               # LockManager（per-skill 锁）
 │   ├── lint.rs               # SKILL.md 健康检查
 │   ├── market.rs             # 远程市场领域逻辑
 │   ├── models.rs             # Rust 数据结构
 │   ├── settings.rs           # 设置读写
-│   ├── providers.rs          # 远程技能 provider 抽象（GitHub）
+│   ├── providers.rs          # MarketProvider trait + GitHub / GitLab 适配器
+│   ├── watcher.rs            # notify 文件监听 → `skill-file-changed` 事件
 │   ├── discovery.rs          # 工具自动发现
-│   └── hash.rs               # content_hash / core_hash / id_hash
+│   ├── hash.rs               # content_hash / core_hash / id_hash
+│   ├── mcp.rs                # 对外 MCP server：JSON-RPC 2.0 / stdio，9 个只读工具
+│   └── bin/skill-manager-mcp.rs # 该 server 的独立可执行入口（GUI 进程不占用其 stdio）
 ├── doc/
 │   ├── PRD.md                # 产品需求文档（当前最权威的规格说明）
 │   ├── design-discussion.md  # 设计决策记录（含实现状态）
@@ -136,7 +148,9 @@ sync-skills/
 | **前端不直接 invoke** | 所有 Tauri 调用必须走 `src/api.ts` | eslint 会报错 |
 | **只改 Rust 标准库做文件操作** | 不用 shell 命令 | 跨平台不一致 |
 | **所有源码文件带 SPDX 头** | `pnpm lint` 强制检查 | CI 失败 |
-| **i18n 必须同步更新 zh + en** | 新增文案需同时提供两种语言 | 不一致 |
+| **i18n 必须同步更新 zh + en** | 新增文案需同时提供两种语言（`src/i18n/`） | 不一致 |
+| **浮层统一走 `useFocusTrap`** | 新 modal 必须带 `role` / `aria-modal` / `aria-label` / `tabIndex={-1}` 并接入该 hook | 焦点逃逸、Esc 串扰 |
+| **市场卡片 props 保持引用稳定** | `MarketSkillEntry.tsx` 用 `React.memo`；行内闭包 / 每渲染新建对象都会失效 | 大列表每次键入全量重渲染 |
 
 ### 4.2 代码风格
 
@@ -164,41 +178,43 @@ sync-skills/
 | Skill 扫描（递归 + front matter） | ✅ | `scanner.rs`, `commands/scan.rs` |
 | SSOT 同步 + 反向同步 | ✅ | `sync.rs`, `ops/`, `commands/syncing.rs` |
 | 名字即身份（name-as-identity） | ✅ | `db.rs`（UNIQUE(name, project_id)） |
-| core_hash（仅 SKILL.md） | ✅ | `hash.rs`, 用于冲突检测 |
+| core_hash（仅 SKILL.md） | ✅ | `hash.rs`, 用于冲突检测与更新检测（`ops/mod.rs::check_single_skill`） |
 | content_hash（全目录） | ✅ | `hash.rs`, 用于 diff 展示 |
 | LockManager | ✅ | `lock.rs`, `ops/` 多处使用 |
 | 冲突检测与裁决 | ✅ | `commands/conflicts.rs`, `ConflictSection.tsx` |
 | 差异预览（unified / 并排） | ✅ | `diff.rs`, `DiffView.tsx` |
 | 变更忽略 | ✅ | `db.rs` dismissed_updates 表 |
-| 远程市场（GitHub） | ✅ | `market.rs`, `commands/market.rs`, `SkillMarketPanel.tsx`, `MarketSidebar.tsx` |
+| 远程市场（GitHub + GitLab） | ✅ | `market.rs`, `providers.rs`, `commands/market.rs`, `SkillMarketPanel.tsx`, `MarketSidebar.tsx` |
 | Market 详情 Modal（T4） | ✅ | `ops/remote_skill_detail.rs`, `commands/market.rs::get_remote_skill_detail`, `RemoteSkillDetailModal.tsx`, `RemoteSkillFileTree.tsx`, `useFocusTrap.ts` |
+| Modal 无障碍统一（13 个浮层） | ✅ | `useFocusTrap.ts`（模块级 LIFO 栈 + 单一 window 监听），各 `*Modal.tsx` |
+| 文件系统监听（full-auto 自动同步） | ✅ | `watcher.rs`（`notify = "8"`），`lib.rs::start_watcher`，事件 `skill-file-changed` |
+| 全局快捷键 + `?` 速查表 | ✅ | `hooks/useHotkeys.ts`, `components/ShortcutsModal.tsx`, `SkillMarketPanel.tsx::MARKET_HOTKEYS` |
 | 应用内更新 | ✅ | `commands/updater.rs` |
 | 首次启动引导 | ✅ | `OnboardingWizard.tsx` |
 | Skill 健康检查 / Lint | ✅ | `lint.rs`, `LintModal.tsx` |
 | 内置 SKILL.md 编辑器 | ✅ | `SkillEditorModal.tsx` |
-| 主题切换 + 多语言 | ✅ | `App.css`, `i18n.ts` |
+| 主题切换 + 多语言 | ✅ | `App.css`, `src/i18n/`（`index.ts` + `zh.ts` + `en.ts`） |
 | 活动日志 | ✅ | `LogsPanel.tsx`, `commands/logs.rs` |
 
 ### 5.2 部分完成 / 待办
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| core_hash 用于更新检测 | ⏳ 部分 | 冲突检测已用，`check_single_skill` 仍用 content_hash |
-| 时间戳驱动同步 UI | ⏳ 部分 | 时间戳已展示，未驱动按钮状态 |
-| 文件系统监听 | ⏳ 计划中 | 无 watcher/inotify，full-auto 仍需手动扫描 |
-| MCP 集成 | ⏳ 规划中 | v0.7.0 |
-| 除 GitHub 外的平台适配 | ⏳ 规划中 | GitLab 等 |
+| 时间戳驱动同步 UI | ⏳ 部分 | 时间戳已展示并用于排序，未驱动按钮状态 |
+| MCP 集成 | ⏳ 进行中 | v0.7.0 第一片：只读 stdio server（`mcp.rs`）；配置管控与跨工具同步尚未开工 |
+| GitLab 自建实例 | ⏳ 规划中 | `providers.rs::provider_for_reference` 目前只把 `gitlab.com` 路由到 GitLab 适配器 |
+| Bitbucket / Azure DevOps 适配 | ⏳ 规划中 | `MarketProvider` 已有 GitHub + GitLab 两个真实适配器，新增只需实现该 trait |
 
 ### 5.3 已知坑与注意事项
 
 | 问题 | 说明 | 规避方案 |
 |------|------|---------|
-| Cargo.toml 版本 0.1.13 | 与 package.json/tauri.conf.json 的 0.1.18 不一致 | 发版时统一 bump，平时不动 |
-| `src/api.ts` 有残留接口 | `getRemoteSkillDiff` 已删除实现，前端封装已清理 | 如需远程 diff，重新设计后端接口 |
-| Windows 链接器错误 | `cargo check` 偶发 `link.exe error 1224` | 杀毒软件干扰，重试一次即可 |
+| Windows 链接器错误 | `cargo check` 偶发 `link.exe error 1224` / `LNK1105` | 杀毒软件或残留进程占用，重试一次即可 |
+| 本机双 Rust 工具链 | PATH 上的旧 cargo 会引发 E0514 | 用 `rustup run stable cargo …` |
 | 远程市场 ZIP 解析 | 部分仓库 layout 判断可能不准 | 用户可手动切换 layout（subdir/root） |
 | 数据库并发 | `Mutex<Connection>` 是全局锁 | 当前数据量下可接受，如需性能再优化 |
-| Market Modal 无障碍统一 | 仍有 6+ 个其他 modal 未加 `role="dialog"` / focus trap / Esc 关闭（T4 详情 Modal 已合规；ui-review #3 收口未完成） | 复用 `useFocusTrap` 逐 modal 改造 |
+| GitLab tree 分页上限 | `providers.rs` 每页 100、最多 10 页，超出会静默截断 | 单目录 >1000 条 listing 的市场需提高 `TREE_MAX_PAGES` |
+| 市场卡片重渲染 | 卡片 props 必须引用稳定，否则 `React.memo` 失效 | `t` 在 `App.tsx` 已 memo；新增回调走 `skillActions`，不要传行内闭包 |
 
 ---
 
@@ -223,7 +239,7 @@ sync-skills/
 
 - 页面级组件放在 `src/components/`
 - 全局状态放在 `App.tsx`，局部状态用 `useState`/`useMemo`
-- 文案必须走 `i18n.ts`，新增 key 必须同时更新 zh + en
+- 文案必须走 `src/i18n/`，新增 key 必须同时更新 zh + en
 - 样式写在 `App.css`，复用现有 CSS 变量，不引入新依赖
 
 ### 6.4 调试技巧

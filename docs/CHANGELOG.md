@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- MarketProvider 抽象层：`providers.rs` 定义 `MarketProvider` trait，市场扫描/索引/安装统一走 provider 分发，不再把 GitHub 语义硬编码进 `ops/market.rs`
+- GitLab 适配器：支持 `gitlab.com` 与自建实例（按 `base_url` 解析），tree API 分页游标 + 单层失败降级
+- 对外 MCP stdio server（v0.7.0 第一片）：`src-tauri/src/mcp.rs` + 独立二进制 `skill-manager-mcp`，JSON-RPC 2.0 over stdin/stdout，暴露 9 个只读工具（`list_skills` / `get_skill` / `list_tools` / `list_projects` / `list_markets` / `list_market_skills` / `list_conflicts` / `get_sync_logs` / `get_stats`）读取与 GUI 相同的 SQLite 索引；协议派发是纯 line-in / line-out 函数，17 个单元测试无需进程即可覆盖全部契约
+- 全局快捷键层：`hooks/useHotkeys.ts` 注册 Tab 切换、搜索聚焦、`?` 速查表（`ShortcutsModal.tsx`）等键位，市场卡片的 roving focus 复用同一选择器
+- 市场卡片可访问性与键盘路径：13 个浮层统一走 `useFocusTrap`
+
+### Changed
+- `useFocusTrap` 改为模块级 LIFO 栈 + 单一 `window` 监听，叠加弹窗的 Esc 不再互相穿透
+- i18n 目录化（`src/i18n/` index + zh + en）收尾修复：清理拆分遗留的错误 label 与类型漂移
+- 市场卡片/列表行（`MarketSkillEntry.tsx`）与 `t`、source badge、动作回调全部保持引用稳定；搜索输入不再触发可见卡片的重渲染（同一技能集下按键：12 次渲染 → 0 次，`SkillMarketPanel.test.tsx` 有断言）
+- `docs/HANDOFF.md`、`README.md`（中/英/日）、`CONTRIBUTING.md` 的目录树、版本徽章与路线图状态同步到当前代码
+
+### Removed
+- `db.rs` 中无任何调用方的 `update_content_hash`（哈希写入统一走 `update_skill_hashes`）
+
 ## [0.2.1] - 2026-08-29
 
 ### Added

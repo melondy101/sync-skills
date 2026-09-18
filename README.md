@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.18-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-0.2.1-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/Tauri-v2-orange?style=flat-square&logo=tauri" alt="tauri">
   <img src="https://img.shields.io/badge/Rust-2021-brown?style=flat-square&logo=rust" alt="rust">
   <img src="https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react" alt="react">
@@ -44,9 +44,11 @@ Skill Manager 提供一个桌面 GUI，让你在一个地方管理所有 Skill�
 - **变更忽略** — 持久化忽略特定工具的变更，hash 匹配则不再提示
 - **项目级管理** — 为不同项目配置独立的 Skill 集合，支持编辑
 - **差异检测** — 内置 LCS diff 视图（并排 / 统一两种模式），精确展示文件级变更
-- **Skill 市场** — 从 GitHub 仓库浏览、搜索、一键安装 Skill，内置市场源管理与批量操作
+- **Skill 市场** — 从 GitHub / GitLab 仓库浏览、搜索、一键安装 Skill，内置市场源管理与批量操作
+- **文件监听** — 监听 SSOT 目录，磁盘变更后自动同步（full-auto）或提示（semi-auto）
 - **应用内更新** — 一键检测并下载安装新版本
 - **引导与健康检查** — 首次启动引导向导、内置 Lint 检查与自动修复、SKILL.md 内置编辑器
+- **键盘快捷键** — 全局搜索 / 导航 / 同步 / 源管理，`?` 随时查看速查表
 - **主题与多语言** — 亮色 / 暗色 / 跟随系统，中文 / English / 日本語
 - **活动日志** — 完整的操作审计记录
 
@@ -112,8 +114,8 @@ pnpm tauri dev
 2. 打版本标签并推送：
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
    ```
 
 3. CI（`.github/workflows/release.yml`）在 Windows / macOS / Linux 三个 runner 上分别构建
@@ -123,7 +125,7 @@ pnpm tauri dev
 
 > 当前安装包未做代码签名，Windows / macOS 会提示 SmartScreen / Gatekeeper 警告。
 
-**注意**：当前 `main` 已超出 `v0.1.18` 标签若干提交，包含市场 UI 改造、应用内更新、引导向导、健康检查等未发布变更；正式版本号将在下次发版时统一 bump。详见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
+**注意**：README 的 version 徽章跟随最新已发布标签；`main` 上的未发布提交见 [docs/CHANGELOG.md](docs/CHANGELOG.md) 的 Unreleased 段落。
 
 ## 开发
 
@@ -133,7 +135,7 @@ sync-skills/
 │   ├── App.tsx             # 主组件与路由
 │   ├── App.css             # 样式（CSS 变量主题系统）
 │   ├── api.ts              # Tauri IPC 封装
-│   ├── i18n.ts             # 多语言文本
+│   ├── i18n/               # 多语言文本
 │   ├── types.ts            # TypeScript 类型定义
 │   ├── main.tsx            # 入口
 │   ├── components/         # UI 组件
@@ -141,7 +143,7 @@ sync-skills/
 ├── src-tauri/src/          # Rust 后端
 │   ├── lib.rs              # 入口与命令注册
 │   ├── commands/           # Tauri 命令薄层
-│   ├── ops.rs              # 领域逻辑
+│   ├── ops/                # 领域逻辑
 │   ├── sync.rs             # 文件同步
 │   ├── scanner.rs          # 目录扫描
 │   ├── diff.rs             # LCS 差异算法
@@ -149,6 +151,8 @@ sync-skills/
 │   ├── lock.rs             # LockManager
 │   ├── lint.rs             # SKILL.md 健康检查
 │   ├── market.rs           # 远程市场
+│   ├── mcp.rs              # 对外 MCP stdio server（只读工具）
+│   ├── watcher.rs          # 技能目录文件监听
 │   └── ...
 ├── doc/                    # 规划文档（PRD、设计、阶段计划）
 ├── docs/                   # 问题追踪、UI 评审、市场改造文档
@@ -167,9 +171,11 @@ sync-skills/
 | v0.2.0 | ✅ 已完成 | 自动发现、排序筛选、差异检测、diff 视图 |
 | v0.3.0 | ✅ 已完成 | 主题切换、多语言支持、哈希稳定性修复 |
 | v0.4.0 | ✅ 已完成 | 名字即身份、冲突检测/裁决、时间戳、项目编辑、反向同步、变更忽略 |
-| v0.5.0 | ✅ 已完成 | LockManager 接入、core_hash 变更检测；文件监听仍计划中 |
-| v0.6.0 | ✅ 进行中 | 应用内更新、引导优化（Onboarding Wizard）、健康检查/Lint、内置编辑器、批量操作（市场一键同步 / 批量标记）已落地；列表性能优化、快捷键等仍在迭代 |
-| v0.7.0 | 规划中 | MCP 集成：MCP Server 配置管控与跨工具同步、对外提供 MCP 接口供 Agent 调用 |
+| v0.5.0 | ✅ 已完成 | LockManager 接入、core_hash 变更检测 |
+| v0.6.0 | ✅ 已完成 | 应用内更新、引导向导、健康检查/Lint、内置编辑器、市场批量操作、文件系统监听自动同步、GitLab 市场源、全站 Modal 无障碍统一、全局快捷键与 `?` 速查表、市场列表渲染优化 |
+| v0.7.0 | 🟡 进行中 | MCP 集成：第一片已落地 —— `skill-manager-mcp` 只读 stdio server（9 个工具，与 GUI 共用 SQLite 索引）；MCP Server 配置管控与跨工具同步待跟进 |
+
+> 表中版本号是路线图阶段标号，与已发布的包版本相互独立（当前最新标签为 `v0.2.1`）。
 
 ## 许可证
 
