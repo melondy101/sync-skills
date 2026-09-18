@@ -80,7 +80,9 @@ function App() {
     });
   }, []);
 
-  const t = makeT(settings.language as Lang);
+  // `t` is threaded into most of the tree; a fresh closure per render would make
+  // every memoized child re-render even when the language is unchanged.
+  const t = useMemo(() => makeT(settings.language as Lang), [settings.language]);
   useTheme(settings.theme);
   const { toasts, addToast } = useToasts();
 

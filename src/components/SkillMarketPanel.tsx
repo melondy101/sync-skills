@@ -11,6 +11,7 @@ import RemoteUpdatesModal from './RemoteUpdatesModal';
 import { useConfirm } from './ConfirmProvider';
 import { useHotkeys, type Hotkey } from "../hooks/useHotkeys";
 import { Icon } from "./Icon";
+import { MarketSkillCard, MarketSkillRow } from "./MarketSkillEntry";
 import MarketSidebar from "./MarketSidebar";
 import { ShortcutsModal } from "./ShortcutsModal";
 import type {
@@ -41,6 +42,20 @@ const BUILTIN_MARKET_IDS = new Set([
   "andrej-karpathy-skill",
   "khazix-skills",
 ]);
+
+const BUILTIN_LABELS: Record<string, string> = {
+  "anthropic-skills": "Anthropic Skills",
+  "superpowers-skills": "Superpowers Skills",
+  "mattpocock-skills": "Matt Pocock Skills",
+  "andrej-karpathy-skill": "Andrej Karpathy Skill",
+  "khazix-skills": "Khazix Skills",
+};
+
+// Module scope (not a closure over state) so its identity is stable and memoized
+// children keyed on it do not re-render.
+function marketTitle(m: Market): string {
+  return BUILTIN_LABELS[String(m.id)] ?? `${m.owner}/${m.name}`;
+}
 
 // Single source for both the bindings and the "?" cheat sheet. `keys: []` marks
 // a row as documentation only — cards already activate on Enter/Space natively.
@@ -501,18 +516,6 @@ export default function SkillMarketPanel({
     });
   }
 
-  const BUILTIN_LABELS: Record<string, string> = {
-    "anthropic-skills": "Anthropic Skills",
-    "superpowers-skills": "Superpowers Skills",
-    "mattpocock-skills": "Matt Pocock Skills",
-    "andrej-karpathy-skill": "Andrej Karpathy Skill",
-    "khazix-skills": "Khazix Skills",
-  };
-
-  function marketTitle(m: Market): string {
-    return BUILTIN_LABELS[String(m.id)] ?? `${m.owner}/${m.name}`;
-  }
-
   const updateKeys = useMemo(
     () => new Set((updates ?? []).map((u) => `${u.market_id}:${u.skill_name}`)),
     [updates],
@@ -546,6 +549,34 @@ export default function SkillMarketPanel({
     });
     return filtered;
   }, [remoteSkills, selectedMarketFilter, selectedFilterMarkets, searchQuery, installedOnly, marketSortBy]);
+
+  // One lookup per rendered skill instead of a `markets.find()` scan; null when a
+  // single market is selected, since that view shows no source badge.
+  const badgesByMarket = useMemo(
+    () =>
+      selectedMarketFilter === "all"
+        ? new Map(markets.map((m) => [m.id, marketTitle(m).split("/")[0]]))
+        : null,
+    [markets, selectedMarketFilter],
+  );
+
+  // The card handlers have to keep their identity or memoizing the cards is
+  // pointless, but their bodies close over install state, `t` and App's props.
+  // Reading them through a ref decouples the two.
+  const skillRunRef = useRef({ update: updateOne, sync: syncRemoteSkillToTools });
+  useEffect(() => {
+    skillRunRef.current = { update: updateOne, sync: syncRemoteSkillToTools };
+  });
+
+  const skillActions = useMemo(
+    () => ({
+      onOpen: (skill: RemoteSkill) => setDetailSkill(skill),
+      onInstall: (skill: RemoteSkill) => setInstallTarget(skill),
+      onUpdate: (skill: RemoteSkill) => void skillRunRef.current.update(skill),
+      onSync: (skill: RemoteSkill) => void skillRunRef.current.sync(skill),
+    }),
+    [],
+  );
 
   async function handleInstallConfirm(projectId: number, toolPath: string, remember: boolean) {
     if (!installTarget) return;
@@ -814,117 +845,31 @@ export default function SkillMarketPanel({
             ) : (
               viewMode === "list" ? (
               <div className="skill-list-view">
-                {visibleSkills.map((skill) => {
-                  const hasUpdate = updateKeys.has(`${skill.market_id}:${skill.skill_name}`);
-                  const market = markets.find((m) => m.id === skill.market_id);
-                  return (
-                    <div
-                      key={skill.id}
-                      className={`skill-list-row ${hasUpdate ? "skill-has-update" : ""}`}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={t("openDetailAria").replace("{0}", skill.skill_name)}
-                      onClick={() => setDetailSkill(skill)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setDetailSkill(skill);
-                        }
-                      }}
-                    >
-                      <div className="skill-list-cell skill-list-name">
-                        <h3 className="skill-name">{skill.skill_name}</h3>
-                        {selectedMarketFilter === "all" && market && (
-                          <span className="m-card-src-badge">{marketTitle(market).split("/")[0]}</span>
-                        )}
-                      </div>
-                      <p className="skill-list-cell skill-list-desc">{skill.description || ""}</p>
-                      <div className="skill-list-cell skill-list-status">
-                        {skill.is_installed ? (
-                          <span className="market-installed-tag">
-                            <Icon name="check" size={12} />
-                            {t("installedTag")}
-                          </span>
-                        ) : (
-                          <span className="market-not-installed-tag">{t("notInstalled")}</span>
-                        )}
-                      </div>
-                      <div className="skill-list-cell skill-list-actions" onClick={(e) => e.stopPropagation()}>
-                        {!skill.is_installed ? (
-                          <button className="btn btn-small btn-primary btn-press" onClick={() => setInstallTarget(skill)} disabled={installLoading}>
-                            {t("install")}
-                          </button>
-                        ) : (
-                          <>
-                            {hasUpdate && (
-                              <button className="btn btn-small btn-primary btn-press" onClick={() => updateOne(skill)} disabled={installLoading}>
-                                {t("updateBtn")}
-                              </button>
-                            )}
-                            <button className="btn btn-small btn-secondary" onClick={() => syncRemoteSkillToTools(skill)} disabled={installLoading}>
-                              {t("syncBtn")}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                {visibleSkills.map((skill) => (
+                  <MarketSkillRow
+                    key={skill.id}
+                    skill={skill}
+                    hasUpdate={updateKeys.has(`${skill.market_id}:${skill.skill_name}`)}
+                    sourceBadge={badgesByMarket?.get(skill.market_id) ?? ""}
+                    busy={installLoading}
+                    t={t}
+                    {...skillActions}
+                  />
+                ))}
               </div>
             ) : (
               <div className="skill-grid">
-                {visibleSkills.map((skill) => {
-                  const hasUpdate = updateKeys.has(`${skill.market_id}:${skill.skill_name}`);
-                  const market = markets.find((m) => m.id === skill.market_id);
-                  return (
-                    <div
-                      key={skill.id}
-                      className={`skill-card ${hasUpdate ? "skill-has-update" : ""}`}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={t("openDetailAria").replace("{0}", skill.skill_name)}
-                      onClick={() => setDetailSkill(skill)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setDetailSkill(skill);
-                        }
-                      }}
-                    >
-                      <div className="skill-header">
-                        <h3 className="skill-name">{skill.skill_name}</h3>
-                        {selectedMarketFilter === "all" && market && (
-                          <span className="m-card-src-badge">
-                            {marketTitle(market).split("/")[0]}
-                          </span>
-                        )}
-                      </div>
-                      <p className="market-card-desc">{skill.description || ""}</p>
-                      <div className="market-card-footer" onClick={(e) => e.stopPropagation()}>
-                        {!skill.is_installed ? (
-                          <button className="btn btn-small btn-primary btn-press" onClick={() => setInstallTarget(skill)} disabled={installLoading}>
-                            {t("install")}
-                          </button>
-                        ) : (
-                          <>
-                            {hasUpdate && (
-                              <button className="btn btn-small btn-primary btn-press" onClick={() => updateOne(skill)} disabled={installLoading}>
-                                {t("updateBtn")}
-                              </button>
-                            )}
-                            <span className="market-installed-tag">
-                              <Icon name="check" size={12} />
-                              {t("installedTag")}
-                            </span>
-                            <button className="btn btn-small btn-secondary" onClick={() => syncRemoteSkillToTools(skill)} disabled={installLoading}>
-                              {t("syncBtn")}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                {visibleSkills.map((skill) => (
+                  <MarketSkillCard
+                    key={skill.id}
+                    skill={skill}
+                    hasUpdate={updateKeys.has(`${skill.market_id}:${skill.skill_name}`)}
+                    sourceBadge={badgesByMarket?.get(skill.market_id) ?? ""}
+                    busy={installLoading}
+                    t={t}
+                    {...skillActions}
+                  />
+                ))}
               </div>
             )
             )}

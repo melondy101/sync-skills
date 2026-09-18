@@ -82,7 +82,6 @@ beforeEach(() => {
   vi.mocked(api.syncRemoteInstallationsToTools).mockResolvedValue({ skill_id: 0, skill_name: "", synced_to: 0, errors: [] });
   vi.mocked(api.getRemoteSkillDetail).mockResolvedValue(detailPayload);
 });
-
 function makeT(key: string) {
   const map: Record<string, string> = {
     shortcutsTitle: "Keyboard shortcuts",
@@ -660,8 +659,53 @@ describe("SkillMarketPanel", () => {
     await user.keyboard("/");
     expect(document.activeElement).toBe(search);
   });
+
+  it("does not re-render visible cards when a keystroke leaves the same skill set", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.listRemoteSkills).mockResolvedValue(
+      ["alpha", "beta", "gamma"].map((name, index) => ({
+        ...remoteSkills[0],
+        id: 10 + index,
+        skill_name: `demo-${name}`,
+      })),
+    );
+    const translated = vi.fn(makeT);
+    // openDetailAria is only ever asked for by a card body, so counting it counts renders.
+    const cardRenders = () =>
+      translated.mock.calls.filter(([key]) => key === "openDetailAria").length;
+
+    renderWithProviders(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={translated}
+        addToast={toast}
+      />,
+    );
+
+    // The grid only loads skills for a selected source, so start there.
+    await user.click(await screen.findByText("alice/alpha-market"));
+    await screen.findByRole("button", { name: "Open detail for demo-alpha" });
+    expect(screen.getAllByRole("button", { name: /^Open detail for demo-/ })).toHaveLength(3);
+
+    translated.mockClear();
+    await user.type(
+      screen.getByPlaceholderText("Search skills (name or description)…"),
+      "demo",
+    );
+
+    // Same three cards, but the parent re-derived its list four times.
+    expect(screen.getAllByRole("button", { name: /^Open detail for demo-/ })).toHaveLength(3);
+    expect(cardRenders()).toBe(0);
+
+    // Unrelated panel state must not reach the cards either.
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    expect(cardRenders()).toBe(0);
+  });
 });
-
-
-
-
