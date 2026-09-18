@@ -6,9 +6,11 @@ mod commands;
 mod db;
 mod diff;
 mod discovery;
+mod fs;
 #[cfg(test)]
 mod edge_tests;
 mod hash;
+mod http;
 mod lint;
 mod lock;
 mod market;

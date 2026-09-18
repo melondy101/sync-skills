@@ -4,12 +4,13 @@
 //! Core domain operations shared by multiple commands.
 //! These functions are pure logic over Database/LockManager — no Tauri types.
 
+pub mod market;
 pub mod remote_skill_detail;
 
 use crate::db::Database;
 use crate::lock::LockManager;
 use crate::models::{self, ScanDetail, ScanResult, SkillUpdate, SyncResult};
-use crate::{hash, scanner, sync};
+use crate::{fs, hash, scanner, sync};
 use std::path::PathBuf;
 
 /// Core scan logic: scan a list of (tool_id, path) pairs, upsert to DB.
@@ -236,11 +237,11 @@ pub fn do_sync_skill(
     let to_ssot_result = if source == ssot_target {
         Ok("noop".to_string())
     } else if prefer_symlink {
-        sync::symlink_or_copy(&source, &ssot_target)
+        fs::symlink_or_copy(&source, &ssot_target)
     } else if ssot_target.exists() {
-        sync::replace_directory(&source, &ssot_target).map(|_| "replace".to_string())
+        fs::replace_directory(&source, &ssot_target).map(|_| "replace".to_string())
     } else {
-        sync::copy_directory(&source, &ssot_target).map(|_| "copy".to_string())
+        fs::copy_directory(&source, &ssot_target).map(|_| "copy".to_string())
     };
 
     match &to_ssot_result {
@@ -285,11 +286,11 @@ pub fn do_sync_skill(
         let target_dir = expanded.join(&skill.name);
 
         let result = if prefer_symlink {
-            sync::symlink_or_copy(&ssot_target, &target_dir)
+            fs::symlink_or_copy(&ssot_target, &target_dir)
         } else if target_dir.exists() {
-            sync::replace_directory(&ssot_target, &target_dir).map(|_| "replace".to_string())
+            fs::replace_directory(&ssot_target, &target_dir).map(|_| "replace".to_string())
         } else {
-            sync::copy_directory(&ssot_target, &target_dir).map(|_| "copy".to_string())
+            fs::copy_directory(&ssot_target, &target_dir).map(|_| "copy".to_string())
         };
 
         match result {
@@ -333,7 +334,7 @@ pub fn do_sync_skill(
             Err(_) => continue,
         };
         let target_dir = expanded.join(&skill.name);
-        match sync::remove_installed_skill(&target_dir) {
+        match fs::remove_tree_or_link(&target_dir) {
             Ok(true) => {
                 log::info!("Removed {} from disabled tool {}", skill.name, tool_id);
                 let _ = db.insert_action_log(

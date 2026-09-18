@@ -307,12 +307,12 @@ fn normalize_path_strips_verbatim_prefix_and_unifies_slashes() {
     assert_eq!(scanner::normalize_path(&p), r"C:\Users\test\dir");
 }
 
-// ==================== sync::copy_directory / replace_directory ====================
+// ==================== crate::fs::copy_directory / replace_directory ====================
 
 #[test]
 fn copy_directory_nonexistent_src_is_err() {
     let dir = tempdir().unwrap();
-    let err = sync::copy_directory(&dir.path().join("missing"), &dir.path().join("dst"));
+    let err = crate::fs::copy_directory(&dir.path().join("missing"), &dir.path().join("dst"));
     assert!(err.is_err());
 }
 
@@ -321,7 +321,7 @@ fn copy_directory_src_is_file_is_err() {
     let dir = tempdir().unwrap();
     let f = dir.path().join("f.txt");
     write_file(&f, "x");
-    assert!(sync::copy_directory(&f, &dir.path().join("dst")).is_err());
+    assert!(crate::fs::copy_directory(&f, &dir.path().join("dst")).is_err());
 }
 
 #[test]
@@ -330,7 +330,7 @@ fn copy_directory_empty_src_creates_empty_dst() {
     let src = dir.path().join("src");
     fs::create_dir(&src).unwrap();
     let dst = dir.path().join("dst");
-    sync::copy_directory(&src, &dst).unwrap();
+    crate::fs::copy_directory(&src, &dst).unwrap();
     assert!(dst.is_dir());
     assert_eq!(fs::read_dir(&dst).unwrap().count(), 0);
 }
@@ -342,7 +342,7 @@ fn copy_directory_skips_hidden_files() {
     write_file(&src.join("visible.md"), "v");
     write_file(&src.join(".secret"), "s");
     let dst = dir.path().join("dst");
-    sync::copy_directory(&src, &dst).unwrap();
+    crate::fs::copy_directory(&src, &dst).unwrap();
     assert!(dst.join("visible.md").exists());
     assert!(!dst.join(".secret").exists());
 }
@@ -356,7 +356,7 @@ fn replace_directory_removes_stale_files() {
     write_file(&src.join("keep.md"), "new");
     write_file(&dst.join("keep.md"), "old");
     write_file(&dst.join("stale.md"), "should disappear");
-    sync::replace_directory(&src, &dst).unwrap();
+    crate::fs::replace_directory(&src, &dst).unwrap();
     assert_eq!(fs::read_to_string(dst.join("keep.md")).unwrap(), "new");
     assert!(!dst.join("stale.md").exists());
 }
@@ -367,16 +367,16 @@ fn replace_directory_creates_missing_parents() {
     let src = dir.path().join("src");
     write_file(&src.join("a.md"), "a");
     let dst = dir.path().join("x").join("y").join("z");
-    sync::replace_directory(&src, &dst).unwrap();
+    crate::fs::replace_directory(&src, &dst).unwrap();
     assert!(dst.join("a.md").exists());
 }
 
-// ==================== sync::symlink_or_copy ====================
+// ==================== crate::fs::symlink_or_copy ====================
 
 #[test]
 fn symlink_or_copy_missing_target_is_err() {
     let dir = tempdir().unwrap();
-    let r = sync::symlink_or_copy(&dir.path().join("missing"), &dir.path().join("link"));
+    let r = crate::fs::symlink_or_copy(&dir.path().join("missing"), &dir.path().join("link"));
     assert!(r.is_err());
 }
 
@@ -387,7 +387,7 @@ fn symlink_or_copy_replaces_existing_dst() {
     write_file(&target.join("new.md"), "new");
     let link = dir.path().join("link");
     write_file(&link.join("old.md"), "old");
-    let method = sync::symlink_or_copy(&target, &link).unwrap();
+    let method = crate::fs::symlink_or_copy(&target, &link).unwrap();
     // Windows without dev-mode falls back to copy; both outcomes acceptable
     assert!(method == "symlink" || method == "copy");
     assert!(link.join("new.md").exists());
@@ -618,7 +618,7 @@ fn scan_then_copy_preserves_core_hash_but_content_hash_gains_marker() {
     write_file(&src.join("ref.txt"), "ref");
 
     let dst = dir.path().join("ssot").join("demo");
-    sync::copy_directory(&src, &dst).unwrap();
+    crate::fs::copy_directory(&src, &dst).unwrap();
     sync::create_local_marker(&dst).unwrap();
 
     let src_core = hash::compute_core_hash(&src.join("SKILL.md")).unwrap();
@@ -772,11 +772,11 @@ fn sync_remove_installed_skill_dir_and_missing() {
     write_file(&skill_dir.join("sub/extra.txt"), "x");
 
     // Existing directory: removed recursively
-    assert!(sync::remove_installed_skill(&skill_dir).unwrap());
+    assert!(crate::fs::remove_tree_or_link(&skill_dir).unwrap());
     assert!(!skill_dir.exists());
 
     // Already gone: no-op, not an error
-    assert!(!sync::remove_installed_skill(&skill_dir).unwrap());
+    assert!(!crate::fs::remove_tree_or_link(&skill_dir).unwrap());
 }
 
 // ==================== lock::LockManager ====================
@@ -898,7 +898,7 @@ fn sync_invariant_same_name_different_domains_do_not_overwrite() {
 name: shared
 ---
 GLOBAL body");
-    sync::replace_directory(&global_src, &global_dst).unwrap();
+    crate::fs::replace_directory(&global_src, &global_dst).unwrap();
 
     // Now sync the same-named skill in the project domain.
     let project_src = sandbox.path().join("src-project");
@@ -906,7 +906,7 @@ GLOBAL body");
 name: shared
 ---
 PROJECT body");
-    sync::replace_directory(&project_src, &project_dst).unwrap();
+    crate::fs::replace_directory(&project_src, &project_dst).unwrap();
 
     // Neither write may have disturbed the other domain's content.
     assert_eq!(

@@ -76,60 +76,6 @@ fn pick_asset(assets: &[serde_json::Value]) -> Option<(String, String, u64)> {
     None
 }
 
-fn proxy_from_settings() -> Option<reqwest::Proxy> {
-    let settings = crate::settings::Settings::load();
-    #[cfg(windows)]
-    if settings.use_system_proxy {
-        return http_system_proxy();
-    }
-    if !settings.use_proxy {
-        return None;
-    }
-    let mut url = settings.proxy_url.filter(|url| !url.trim().is_empty())?;
-    if !url.contains("://") {
-        url = format!("http://{}", url);
-    }
-    reqwest::Proxy::all(url).ok()
-}
-
-#[cfg(windows)]
-pub(crate) fn http_system_proxy() -> Option<reqwest::Proxy> {
-    static CACHED: std::sync::OnceLock<Option<reqwest::Proxy>> = std::sync::OnceLock::new();
-    CACHED.get_or_init(|| {
-        let key = match winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
-            .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
-        {
-            Ok(key) => key,
-            Err(_) => return None,
-        };
-
-        let enabled: u32 = match key.get_value("ProxyEnable") {
-            Ok(value) => value,
-            Err(_) => return None,
-        };
-        if enabled == 0 {
-            return None;
-        }
-
-        let server: String = match key.get_value("ProxyServer") {
-            Ok(value) => value,
-            Err(_) => return None,
-        };
-        let server = server.trim();
-        if server.is_empty() {
-            return None;
-        }
-
-        let url = if server.contains("://") {
-            server.to_string()
-        } else {
-            format!("http://{}", server)
-        };
-        reqwest::Proxy::all(url).ok()
-    })
-    .clone()
-}
-
 fn tls_proxy_hint() -> Option<&'static str> {
     let settings = crate::settings::Settings::load();
     if !settings.use_proxy {
@@ -146,27 +92,32 @@ fn tls_proxy_hint() -> Option<&'static str> {
 }
 
 fn http_client() -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder()
-        .user_agent("skill-manager")
-        .connect_timeout(std::time::Duration::from_secs(10));
-    if let Some(proxy) = proxy_from_settings() {
-        builder = builder.proxy(proxy);
-    }
-    builder.build().map_err(|e| e.to_string())
+    let settings = crate::settings::Settings::load();
+    let proxy = crate::http::resolve_proxy(
+        settings.use_system_proxy,
+        settings.use_proxy,
+        settings.proxy_url.as_deref(),
+    );
+    crate::http::build_client(
+        crate::http::HttpConfig::new("skill-manager", std::time::Duration::from_secs(10)).with_proxy(proxy),
+    )
 }
 
 /// Fallback when api.github.com is unreachable (offline, or a proxy/firewall
 /// that blocks the API host but not github.com): probe the release page
 /// redirect, which yields the latest tag but no asset metadata.
 async fn check_via_release_page(current: &str) -> Result<AppUpdateInfo, String> {
-    let mut builder = reqwest::Client::builder()
-        .user_agent("skill-manager")
-        .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(std::time::Duration::from_secs(10));
-    if let Some(proxy) = proxy_from_settings() {
-        builder = builder.proxy(proxy);
-    }
-    let client = builder.build().map_err(|e| e.to_string())?;
+    let settings = crate::settings::Settings::load();
+    let proxy = crate::http::resolve_proxy(
+        settings.use_system_proxy,
+        settings.use_proxy,
+        settings.proxy_url.as_deref(),
+    );
+    let client = crate::http::build_client(
+        crate::http::HttpConfig::new("skill-manager", std::time::Duration::from_secs(10))
+            .with_redirects(crate::http::RedirectPolicy::None)
+            .with_proxy(proxy),
+    )?;
     let resp = client
         .get(format!("{}/latest", RELEASES_PAGE))
         .timeout(std::time::Duration::from_secs(20))

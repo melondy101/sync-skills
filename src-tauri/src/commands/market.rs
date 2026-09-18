@@ -1,16 +1,24 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+//! Thin Tauri command glue for the remote market domain.
+//!
+//! Provider-specific remote knowledge (URL shapes, REST responses, raw download
+//! paths, layout probing) lives behind the [`MarketProvider`](crate::providers::MarketProvider)
+//! seam in `crate::providers`; indexing orchestration (the SQLite transaction
+//! that persists discovered skills) lives in [`crate::ops::market`]. Adding a
+//! new marketplace means writing one provider adapter — nothing here changes.
+
 use crate::db::Database;
 use crate::DbState;
 
 use crate::models::{Market, MarketCommitUpdate, MarketSyncResult, MarketTemplate, RemoteInstallation, RemoteSkill, RemoteSkillUpdate, SyncResult};
+use crate::fs::{copy_directory, replace_directory, symlink_or_copy};
+use crate::providers::provider_for;
 use crate::settings::Settings;
-use crate::sync::{copy_directory, replace_directory, ssot_path, symlink_or_copy};
-use rusqlite::params;
 use serde::Serialize;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, State};
 
 #[derive(Clone, Serialize)]
@@ -90,10 +98,8 @@ fn layout_for_template(template: &MarketTemplate) -> &'static str {
 /// (provider, owner, name, branch), so repeated runs never create duplicates.
 pub fn seed_default_markets(db: &Database) -> Result<(), String> {
     for template in default_templates() {
-        let remote_url = format!(
-            "https://github.com/{}/{}/tree/{}",
-            template.owner, template.name, template.branch
-        );
+        let remote_url = provider_for(&template.provider)?
+            .display_url(&template.owner, &template.name, &template.branch);
         db.upsert_market(
             &template.provider,
             &template.owner,
@@ -106,290 +112,6 @@ pub fn seed_default_markets(db: &Database) -> Result<(), String> {
     Ok(())
 }
 
-fn github_api_url(owner: &str, repo: &str, branch: &str, path: &str) -> String {
-    format!(
-        "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
-        owner,
-        repo,
-        path.trim_start_matches('/'),
-        branch
-    )
-}
-
-fn github_http_client() -> Result<reqwest::Client, String> {
-    let settings = Settings::load();
-    let mut builder = reqwest::Client::builder()
-        .user_agent("skill-manager")
-        .connect_timeout(std::time::Duration::from_secs(15));
-
-    if let Some(proxy) = http_proxy_from_settings(&settings) {
-        builder = builder.proxy(proxy);
-    }
-    builder.build().map_err(|e| e.to_string())
-}
-
-fn http_proxy_from_settings(settings: &Settings) -> Option<reqwest::Proxy> {
-    #[cfg(windows)]
-    if settings.use_system_proxy {
-        return crate::commands::updater::http_system_proxy();
-    }
-    if !settings.use_proxy {
-        return None;
-    }
-    let url = settings.proxy_url.as_ref()?.trim();
-    if url.is_empty() {
-        return None;
-    }
-    let normalized = if url.contains("://") {
-        url.to_string()
-    } else {
-        format!("http://{}", url)
-    };
-    reqwest::Proxy::all(normalized).ok()
-}
-
-async fn fetch_github_bytes(url: &str) -> Result<Vec<u8>, String> {
-    let client = github_http_client()?;
-    let response = client
-        .get(url)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| format!("Network error: {}", e))?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("HTTP {} ({})", status.as_u16(), describe_github_status(status.as_u16())));
-    }
-    response.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string())
-}
-
-fn describe_github_status(status: u16) -> &'static str {
-    match status {
-        404 => "not found or private",
-        403 => "rate-limited or private",
-        401 => "unauthorized",
-        429 => "rate-limited",
-        500..=599 => "server error",
-        _ => "request failed",
-    }
-}
-
-async fn fetch_github_json<T: serde::de::DeserializeOwned>(url: &str) -> Result<T, String> {
-    let bytes = fetch_github_bytes(url).await?;
-    serde_json::from_slice(&bytes).map_err(|e| e.to_string())
-}
-
-#[allow(dead_code)] // Kept for future use: write a SKILL.md + aux files into SSOT.
-fn write_skill_directory(ssot_dir: &Path, bytes: Vec<u8>) -> Result<(), String> {
-    fs::create_dir_all(ssot_dir).map_err(|e| format!("Failed to create SSOT directory: {}", e))?;
-    fs::write(ssot_dir.join("SKILL.md"), bytes).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// Result of probing a single skill entry inside a remote market.
-#[allow(dead_code)] // `skill_md_repo_path` is reserved for future mirror-mode cloning.
-struct RemoteSkillProbe {
-    skill_name: String,
-    /// Human-facing remote URL (e.g. GitHub web URL).
-    remote_url: String,
-    /// Path of the skill's SKILL.md inside the repo (e.g. "/" or "/foo").
-    /// Empty when the repo itself is the skill.
-    skill_md_repo_path: String,
-    /// SSOT path on disk where this skill will live.
-    ssot_path: String,
-    remote_content_hash: String,
-    remote_core_hash: String,
-    description: Option<String>,
-}
-
-async fn probe_github_skill_md(
-    owner: &str,
-    repo: &str,
-    branch: &str,
-    skill_name: &str,
-    repo_subpath: &str,
-) -> Result<(String, String, Option<String>), String> {
-    // We need both the bytes (for hashing + saving) and the parsed front matter
-    // (for description). fetch_github_bytes once, then derive everything from it.
-    let raw_url = format!(
-        "https://raw.githubusercontent.com/{}/{}/{}/SKILL.md",
-        owner,
-        repo,
-        branch.trim_start_matches('/'),
-    );
-    let bytes = fetch_github_bytes(&raw_url).await?;
-
-    // Write into a temp dir so hash functions (which expect a directory) work.
-    let tmp_dir = std::env::temp_dir().join(format!("skill-probe-{}", skill_name));
-    fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
-    let md_path = tmp_dir.join("SKILL.md");
-    fs::write(&md_path, &bytes).map_err(|e| e.to_string())?;
-    // Capture the relative path used for this probe so we can attribute errors.
-    let _ = repo_subpath;
-
-    let content_hash = crate::hash::compute_content_hash(&tmp_dir).unwrap_or_default();
-    let core_hash = crate::hash::compute_core_hash(&md_path).unwrap_or_default();
-    let content_str = String::from_utf8_lossy(&bytes).to_string();
-    let description = crate::scanner::parse_front_matter(&content_str, &tmp_dir)
-        .ok()
-        .and_then(|(_, desc)| desc);
-    Ok((content_hash, core_hash, description))
-}
-
-async fn discover_github_skills(market: &Market) -> Result<Vec<RemoteSkillProbe>, Vec<String>> {
-    let owner = market.owner.clone();
-    let repo = market.name.clone();
-    let branch = market.branch.clone();
-    let root_url = github_api_url(&owner, &repo, &branch, "/");
-    let contents: Vec<serde_json::Value> = match fetch_github_json(&root_url).await {
-        Ok(v) => v,
-        Err(e) => return Err(vec![format!("root listing: {}", e)]),
-    };
-
-    let mut probes = Vec::new();
-    let mut errors = Vec::new();
-
-    match market.layout.as_str() {
-        "root" => {
-            // The whole repo is one skill. Skill name defaults to the repo
-            // name (matches directory-style identity), but the YAML front matter
-            // can override it via `name:` once we download SKILL.md.
-            let skill_name = repo.clone();
-            let remote_url = format!("https://github.com/{}/{}/tree/{}", owner, repo, branch);
-            let ssot = match ssot_path(&skill_name, 0) {
-                Ok(p) => p,
-                Err(e) => {
-                    errors.push(format!("{}: ssot path error: {}", skill_name, e));
-                    return Err(errors);
-                }
-            };
-            match probe_github_skill_md(&owner, &repo, &branch, &skill_name, "/").await {
-                Ok((content_hash, core_hash, description)) => probes.push(RemoteSkillProbe {
-                    skill_name,
-                    remote_url,
-                    skill_md_repo_path: "/SKILL.md".to_string(),
-                    ssot_path: ssot.to_string_lossy().to_string(),
-                    remote_content_hash: content_hash,
-                    remote_core_hash: core_hash,
-                    description,
-                }),
-                Err(e) => errors.push(format!("{}: {}", skill_name, e)),
-            }
-        }
-        _ => {
-            // Default layout: each subdirectory of the repo root is a skill.
-            // Iterate the root entries; for every directory, look for SKILL.md.
-            for entry in contents {
-                let entry_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                let entry_name = entry.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                if entry_type != "dir" || entry_name.is_empty() {
-                    continue;
-                }
-                let skill_name = entry_name.to_string();
-                let remote_url = format!(
-                    "https://github.com/{}/{}/tree/{}/{}",
-                    owner, repo, branch, skill_name
-                );
-                let ssot = match ssot_path(&skill_name, 0) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        errors.push(format!("{}: ssot path error: {}", skill_name, e));
-                        continue;
-                    }
-                };
-                let subpath = format!("/{}", skill_name);
-                match probe_github_skill_md(&owner, &repo, &branch, &skill_name, &subpath).await {
-                    Ok((content_hash, core_hash, description)) => probes.push(RemoteSkillProbe {
-                        skill_name,
-                        remote_url,
-                        skill_md_repo_path: format!("{}/SKILL.md", subpath),
-                        ssot_path: ssot.to_string_lossy().to_string(),
-                        remote_content_hash: content_hash,
-                        remote_core_hash: core_hash,
-                        description,
-                    }),
-                    Err(e) => errors.push(format!("{}: {}", skill_name, e)),
-                }
-            }
-        }
-    }
-
-    if probes.is_empty() && !errors.is_empty() {
-        Err(errors)
-    } else {
-        Ok(probes)
-    }
-}
-
-async fn scan_github_market(db: &Database, market: &Market) -> Result<MarketSyncResult, String> {
-    let probes = match discover_github_skills(market).await {
-        Ok(p) => p,
-        Err(errs) => {
-            return Ok(MarketSyncResult {
-                market_id: market.id,
-                skills_found: 0,
-                skills_new: 0,
-                skills_updated: 0,
-                errors: errs,
-            });
-        }
-    };
-
-    let skills_found = probes.len();
-    let mut skills_new = 0usize;
-    let mut skills_updated = 0usize;
-
-    let conn = db.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
-    conn.execute_batch("BEGIN").ok();
-
-    for probe in probes {
-        let existing: Option<(i64, String, String)> = conn
-            .query_row(
-                "SELECT id, remote_content_hash, remote_core_hash FROM remote_skills WHERE market_id = ?1 AND skill_name = ?2",
-                params![market.id, probe.skill_name],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )
-            .ok();
-
-        match existing {
-            Some((id, old_content_hash, old_core_hash)) => {
-                if old_content_hash != probe.remote_content_hash || old_core_hash != probe.remote_core_hash {
-                    skills_updated += 1;
-                }
-                conn.execute(
-                    "UPDATE remote_skills SET remote_url = ?1, ssot_path = ?2, remote_content_hash = ?3, remote_core_hash = ?4, description = ?5, updated_at = datetime('now') WHERE id = ?6",
-                    params![probe.remote_url, probe.ssot_path, probe.remote_content_hash, probe.remote_core_hash, probe.description, id],
-                ).map_err(|e| format!("Failed to update remote skill: {}", e))?;
-            }
-            None => {
-                skills_new += 1;
-                let id = crate::hash::compute_id_hash(&format!("{}:{}", market.id, probe.skill_name));
-                conn.execute(
-                    "INSERT INTO remote_skills (id, market_id, skill_name, description, remote_url, ssot_path, remote_content_hash, remote_core_hash) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    params![id, market.id, probe.skill_name, probe.description, probe.remote_url, probe.ssot_path, probe.remote_content_hash, probe.remote_core_hash],
-                ).map_err(|e| format!("Failed to insert remote skill: {}", e))?;
-            }
-        }
-    }
-
-    let now = chrono::Utc::now().to_rfc3339();
-    conn.execute(
-        "UPDATE markets SET last_indexed_at = ?1, updated_at = ?2 WHERE id = ?3",
-        params![now, now, market.id],
-    ).map_err(|e| format!("Failed to update market: {}", e))?;
-
-    conn.execute_batch("COMMIT").ok();
-
-    Ok(MarketSyncResult {
-        market_id: market.id,
-        skills_found,
-        skills_new,
-        skills_updated,
-        errors: Vec::new(),
-    })
-}
-
-
 #[tauri::command]
 pub async fn scan_all_remote_repositories(db: State<'_, DbState>) -> Result<Vec<MarketSyncResult>, String> {
     let markets = db.list_markets()?
@@ -399,7 +121,7 @@ pub async fn scan_all_remote_repositories(db: State<'_, DbState>) -> Result<Vec<
 
     let mut results = Vec::new();
     for market in markets {
-        match scan_github_market(&db, &market).await {
+        match crate::ops::market::scan_market(&db, &market).await {
             Ok(result) => results.push(result),
             Err(error) => results.push(MarketSyncResult {
                 market_id: market.id,
@@ -430,7 +152,7 @@ pub fn list_market_templates(db: State<'_, DbState>) -> Result<Vec<MarketTemplat
 
 #[tauri::command]
 pub fn add_market(db: State<'_, DbState>, provider: String, owner: String, name: String, branch: String) -> Result<Market, String> {
-    let remote_url = format!("https://github.com/{}/{}/tree/{}", owner, name, branch);
+    let remote_url = provider_for(&provider)?.display_url(&owner, &name, &branch);
     let market = db.upsert_market(&provider, &owner, &name, &branch, &remote_url, "subdir")?;
     Ok(market)
 }
@@ -449,7 +171,7 @@ pub fn update_market(
     // stored layout; "root" / "subdir" force the value (validated server-side).
     layout: Option<String>,
 ) -> Result<Market, String> {
-    let remote_url = format!("https://github.com/{}/{}/tree/{}", owner, name, branch);
+    let remote_url = provider_for(&provider)?.display_url(&owner, &name, &branch);
     db.update_market(id, enabled, None, None, None)?;
     let current_layout = db.get_market(id)?.map(|m| m.layout).unwrap_or_else(|| "subdir".to_string());
     let next_layout = match layout.as_deref() {
@@ -467,103 +189,6 @@ pub fn update_market(
     db.get_market(id).map(|m| m.unwrap())
 }
 
-/// Parse a GitHub market reference from a free-form URL or `owner/repo` string.
-/// Returns (owner, name, optional_branch).
-fn parse_github_market_input(raw: &str) -> Result<(String, String, Option<String>), String> {
-    let trimmed = raw.trim();
-    let without_scheme = trimmed
-        .trim_start_matches("https://")
-        .trim_start_matches("http://")
-        .trim_start_matches("github.com/")
-        .trim_end_matches('/');
-    // Drop any path/branch suffix after owner/repo (e.g. /tree/main, /blob/..., .git)
-    let path_part = without_scheme.split('/').collect::<Vec<&str>>();
-    let (owner, name) = match &path_part[..] {
-        [owner, name, ..] => (owner.to_string(), name.trim_end_matches(".git").to_string()),
-        [single] => {
-            // `owner/repo` without slashes already handled; this is a bare token
-            if let Some((o, n)) = single.split_once('/') {
-                (o.to_string(), n.trim_end_matches(".git").to_string())
-            } else {
-                return Err(format!("无法解析市场地址: {}", raw));
-            }
-        }
-        _ => return Err(format!("无法解析市场地址: {}", raw)),
-    };
-    if owner.is_empty() || name.is_empty() {
-        return Err(format!("无法解析市场地址: {}", raw));
-    }
-    Ok((owner, name, None))
-}
-
-/// Detect the layout of a GitHub market repo by probing the raw SKILL.md URL.
-/// Returns:
-///   - `Some("root")` when `{branch}/SKILL.md` exists at the repo root
-///   - `Some("subdir")` when the repo root has no SKILL.md but at least one
-///     subdirectory appears to contain one (we verify the root listing has
-///     ≥1 directory entry; probing every subdirectory would be expensive, so
-///     if even one entry is a directory, we trust the user picked a skill
-///     repo)
-///   - `None` when the repo is empty / unreachable in a way that prevents
-///     layout determination; callers fall back to "subdir"
-async fn detect_github_layout(owner: &str, repo: &str, branch: &str) -> Option<&'static str> {
-    let root_raw = format!(
-        "https://raw.githubusercontent.com/{}/{}/{}/SKILL.md",
-        owner,
-        repo,
-        branch.trim_start_matches('/'),
-    );
-    if fetch_github_bytes(&root_raw).await.is_ok() {
-        return Some("root");
-    }
-    let root_url = github_api_url(owner, repo, branch, "/");
-    if let Ok(contents) = fetch_github_json::<Vec<serde_json::Value>>(&root_url).await {
-        let has_dir = contents
-            .iter()
-            .any(|entry| entry.get("type").and_then(|v| v.as_str()) == Some("dir"));
-        if has_dir {
-            return Some("subdir");
-        }
-    }
-    None
-}
-
-/// Resolve the default branch for a GitHub repo. Verifies the repo is reachable
-/// (404/403/etc. surface as errors instead of silently falling back to "main"),
-/// prefers the repo's declared `default_branch`, and only falls back to the
-/// main/master probe when the repo metadata is unavailable.
-async fn resolve_github_branch(owner: &str, repo: &str) -> Result<String, String> {
-    let repo_url = format!("https://api.github.com/repos/{}/{}", owner, repo);
-    match fetch_github_bytes(&repo_url).await {
-        Ok(bytes) => {
-            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                if let Some(default_branch) = json.get("default_branch").and_then(|v| v.as_str()) {
-                    if !default_branch.is_empty() {
-                        return Ok(default_branch.to_string());
-                    }
-                }
-            }
-            // Repo metadata is reachable but no default_branch — fall through
-            // to main/master probe so non-standard repos still work.
-        }
-        Err(e) => {
-            // If we can't read the repo info, branches/main and branches/master
-            // will also fail (the same access controls apply). Skip the extra
-            // round-trips and surface the cause immediately.
-            return Err(format!("Cannot access {}/{}: {}", owner, repo, e));
-        }
-    }
-    let main_url = format!("https://api.github.com/repos/{}/{}/branches/main", owner, repo);
-    if fetch_github_bytes(&main_url).await.is_ok() {
-        return Ok("main".to_string());
-    }
-    let master_url = format!("https://api.github.com/repos/{}/{}/branches/master", owner, repo);
-    if fetch_github_bytes(&master_url).await.is_ok() {
-        return Ok("master".to_string());
-    }
-    Err(format!("Cannot find default branch for {}/{}", owner, repo))
-}
-
 #[tauri::command]
 pub async fn add_market_by_url(
     db: State<'_, DbState>,
@@ -572,26 +197,27 @@ pub async fn add_market_by_url(
     // `"root"`, `"subdir"`, or `"auto"` (probe SKILL.md locations and pick).
     layout: Option<String>,
 ) -> Result<Market, String> {
-    let (owner, name, branch_hint) = parse_github_market_input(&url)?;
+    let provider = provider_for("github")?;
+    let (owner, name, branch_hint) = provider.parse_reference(&url)?;
     let resolved_branch = match (branch, branch_hint) {
         (Some(b), _) => b,
         (None, Some(b)) => b,
-        (None, None) => resolve_github_branch(&owner, &name).await?,
+        (None, None) => provider.resolve_branch(&owner, &name).await?,
     };
-    let remote_url = format!("https://github.com/{}/{}/tree/{}", owner, name, resolved_branch);
+    let remote_url = provider.display_url(&owner, &name, &resolved_branch);
 
-    // Resolve the layout: explicit user choice wins; "auto" probes the repo
-    // (cheap raw HEAD on root + a root listing); anything unknown falls back
-    // to "subdir" so a fresh row is still scannable.
+    // Resolve the layout: explicit user choice wins; "auto" lets the provider
+    // probe the repo; anything unknown falls back to "subdir" so a fresh row is
+    // still scannable.
     let chosen_layout: String = match layout.as_deref() {
         Some("root") | Some("subdir") => layout.unwrap(),
-        _ => match detect_github_layout(&owner, &name, &resolved_branch).await {
+        _ => match provider.detect_layout(&owner, &name, &resolved_branch).await {
             Some(l) => l.to_string(),
             None => "subdir".to_string(),
         },
     };
 
-    let market = db.upsert_market("github", &owner, &name, &resolved_branch, &remote_url, &chosen_layout)?;
+    let market = db.upsert_market(provider.kind(), &owner, &name, &resolved_branch, &remote_url, &chosen_layout)?;
     Ok(market)
 }
 
@@ -600,22 +226,13 @@ pub fn delete_market(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     db.delete_market(id)
 }
 
-/// Fetch the latest commit SHA for a branch (used for cheap update checks).
-async fn latest_commit_sha(owner: &str, repo: &str, branch: &str) -> Option<String> {
-    let url = format!(
-        "https://api.github.com/repos/{}/{}/commits?sha={}&per_page=1",
-        owner, repo, branch
-    );
-    let bytes = fetch_github_bytes(&url).await.ok()?;
-    let commits: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    commits.get(0)?.get("sha")?.as_str().map(|s| s.to_string())
-}
-
 #[tauri::command]
 pub async fn sync_market_index(db: State<'_, DbState>, market_id: i64) -> Result<MarketSyncResult, String> {
     let market = db.get_market(market_id)?.ok_or_else(|| format!("market {market_id} not found"))?;
-    let result = scan_github_market(&db, &market).await?;
-    let commit_sha = latest_commit_sha(&market.owner, &market.name, &market.branch).await;
+    let result = crate::ops::market::scan_market(&db, &market).await?;
+    let commit_sha = provider_for(&market.provider)?
+        .latest_commit_sha(&market.owner, &market.name, &market.branch)
+        .await;
     db.update_market(
         market_id,
         market.enabled,
@@ -634,7 +251,7 @@ pub async fn sync_all_market_indices(db: State<'_, DbState>) -> Result<Vec<Marke
         if !market.enabled {
             continue;
         }
-        match scan_github_market(&db, &market).await {
+        match crate::ops::market::scan_market(&db, &market).await {
             Ok(result) => results.push(result),
             Err(e) => results.push(MarketSyncResult {
                 market_id: market.id,
@@ -661,7 +278,10 @@ pub async fn check_market_commits(db: State<'_, DbState>) -> Result<Vec<MarketCo
 
     let mut updates = Vec::new();
     for market in markets {
-        let new_sha = match latest_commit_sha(&market.owner, &market.name, &market.branch).await {
+        let new_sha = match provider_for(&market.provider)?
+            .latest_commit_sha(&market.owner, &market.name, &market.branch)
+            .await
+        {
             Some(sha) => sha,
             None => continue, // remote unreachable — skip silently
         };
@@ -694,28 +314,17 @@ pub async fn download_remote_skill_to_ssot(db: State<'_, DbState>, remote_skill_
         .find(|s| s.id == remote_skill_id)
         .ok_or_else(|| format!("remote skill {remote_skill_id} not found"))?;
 
-    // Look up the parent market so we know the GitHub coordinates + layout.
+    // Look up the parent market so the provider knows the coordinates + layout.
     let market = db.get_market(skill.market_id)?
         .ok_or_else(|| format!("market {} not found", skill.market_id))?;
 
     let ssot = PathBuf::from(&skill.ssot_path);
     fs::create_dir_all(&ssot).map_err(|e| e.to_string())?;
 
-    // Build the SKILL.md raw URL based on the market's layout.
-    // root  → raw.githubusercontent.com/{owner}/{repo}/{branch}/SKILL.md
-    // subdir→ raw.githubusercontent.com/{owner}/{repo}/{branch}/{skill_name}/SKILL.md
-    let raw_url = match market.layout.as_str() {
-        "root" => format!(
-            "https://raw.githubusercontent.com/{}/{}/{}/SKILL.md",
-            market.owner, market.name, market.branch
-        ),
-        _ => format!(
-            "https://raw.githubusercontent.com/{}/{}/{}/{}/SKILL.md",
-            market.owner, market.name, market.branch, skill.skill_name
-        ),
-    };
-
-    let bytes = match fetch_github_bytes(&raw_url).await {
+    let bytes = match provider_for(&market.provider)?
+        .fetch_skill_md(&market, &skill.skill_name)
+        .await
+    {
         Ok(b) => b,
         Err(error) => {
             return Ok(SyncResult {

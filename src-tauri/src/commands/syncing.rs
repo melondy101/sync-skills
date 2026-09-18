@@ -4,7 +4,7 @@
 use crate::diff::{self, SkillDiff};
 use crate::models::{SkillUpdate, SyncResult};
 use crate::settings::Settings;
-use crate::{ops, sync, DbState, LockState};
+use crate::{fs, ops, sync, DbState, LockState};
 use std::path::PathBuf;
 use tauri::State;
 
@@ -29,7 +29,7 @@ pub fn toggle_skill(
                     }
                     if let Ok(expanded) = crate::scanner::expand_path(target_path) {
                         let target_dir = expanded.join(&skill.name);
-                        let _ = sync::remove_installed_skill(&target_dir);
+                        let _ = fs::remove_tree_or_link(&target_dir);
                     }
                 }
             }
@@ -202,9 +202,9 @@ pub async fn reverse_sync_skill(
             }
             let target = PathBuf::from(install_path);
             let result = if target.exists() {
-                sync::replace_directory(&ssot, &target)
+                fs::replace_directory(&ssot, &target)
             } else {
-                sync::copy_directory(&ssot, &target)
+                fs::copy_directory(&ssot, &target)
             };
 
             match result {

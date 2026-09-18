@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::models::{ConflictView, SyncResult};
-use crate::{sync, DbState, LockState};
+use crate::{fs, sync, DbState, LockState};
 use std::path::PathBuf;
 use tauri::State;
 
@@ -50,9 +50,9 @@ pub async fn resolve_conflict(
         let ssot_target = sync::ssot_path(&skill.name, pid)?;
 
         if ssot_target.exists() {
-            sync::replace_directory(&source, &ssot_target)?;
+            fs::replace_directory(&source, &ssot_target)?;
         } else {
-            sync::copy_directory(&source, &ssot_target)?;
+            fs::copy_directory(&source, &ssot_target)?;
         }
         let _ = sync::create_local_marker(&ssot_target);
 
@@ -72,9 +72,9 @@ pub async fn resolve_conflict(
             let target_dir = expanded.join(&skill.name);
 
             let result = if target_dir.exists() {
-                sync::replace_directory(&ssot_target, &target_dir).map(|_| "replace".to_string())
+                fs::replace_directory(&ssot_target, &target_dir).map(|_| "replace".to_string())
             } else {
-                sync::copy_directory(&ssot_target, &target_dir).map(|_| "copy".to_string())
+                fs::copy_directory(&ssot_target, &target_dir).map(|_| "copy".to_string())
             };
 
             match result {
