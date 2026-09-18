@@ -11,12 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - MarketProvider 抽象层：`providers.rs` 定义 `MarketProvider` trait，市场扫描/索引/安装统一走 provider 分发，不再把 GitHub 语义硬编码进 `ops/market.rs`
-- GitLab 适配器：支持 `gitlab.com` 与自建实例（按 `base_url` 解析），tree API 分页游标 + 单层失败降级
+- GitLab 适配器：`providers.rs::GitlabProvider` 走 gitlab.com REST v4（tree API 分页游标 + 单层失败降级），URL 解析接受 https / http / SSH 与子组路径；自建实例（非 `gitlab.com` 主机）仍按 GitHub 处理，属待办
 - 对外 MCP stdio server（v0.7.0 第一片）：`src-tauri/src/mcp.rs` + 独立二进制 `skill-manager-mcp`，JSON-RPC 2.0 over stdin/stdout，暴露 9 个只读工具（`list_skills` / `get_skill` / `list_tools` / `list_projects` / `list_markets` / `list_market_skills` / `list_conflicts` / `get_sync_logs` / `get_stats`）读取与 GUI 相同的 SQLite 索引；协议派发是纯 line-in / line-out 函数，17 个单元测试无需进程即可覆盖全部契约
 - 全局快捷键层：`hooks/useHotkeys.ts` 注册 Tab 切换、搜索聚焦、`?` 速查表（`ShortcutsModal.tsx`）等键位，市场卡片的 roving focus 复用同一选择器
 - 市场卡片可访问性与键盘路径：13 个浮层统一走 `useFocusTrap`
 
 ### Changed
+- 持久化数据根统一按代码实际路径记载为 `~/.skill-manager/`（数据库 `skill-manager.db`、SSOT `ssot/`）：`AGENTS.md`、README ×3 的架构图与功能条目、`docs/HANDOFF.md`、`watcher.rs` 文档注释此前仍写作旧的 `~/.agents/skill-manager/`。工具共享的 `~/.agents/skills/` 未变，两者必须继续区分（SSOT 必须落在任何工具扫描的 `skills/` 树之外）
 - `useFocusTrap` 改为模块级 LIFO 栈 + 单一 `window` 监听，叠加弹窗的 Esc 不再互相穿透
 - i18n 目录化（`src/i18n/` index + zh + en）收尾修复：清理拆分遗留的错误 label 与类型漂移
 - 市场卡片/列表行（`MarketSkillEntry.tsx`）与 `t`、source badge、动作回调全部保持引用稳定；搜索输入不再触发可见卡片的重渲染（同一技能集下按键：12 次渲染 → 0 次，`SkillMarketPanel.test.tsx` 有断言）

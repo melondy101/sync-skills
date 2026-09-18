@@ -3,7 +3,7 @@
 
 //! File-system watcher for SSOT SKILL.md changes.
 //!
-//! Phase 4 / M12: monitors `~/.agents/skill-manager/ssot/` recursively and
+//! Phase 4 / M12: monitors `~/.skill-manager/ssot/` recursively and
 //! emits a `skill-file-changed` event to the frontend when any SKILL.md is
 //! created, modified, or deleted. The frontend decides whether to auto-sync
 //! based on the user's sync mode (full-auto vs semi-auto).

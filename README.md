@@ -38,7 +38,7 @@ Skill Manager 提供一个桌面 GUI，让你在一个地方管理所有 Skill�
 
 - **工具管理** — 注册 AI 编码工具路径，支持 13+ 已知工具自动发现
 - **Skill 扫描** — 递归扫描目录，识别所有包含 `SKILL.md` 的技能目录
-- **SSOT 同步** — 以 `~/.agents/skill-manager/ssot/` 为中心，hub-and-spoke 模型分发到各工具
+- **SSOT 同步** — 以 `~/.skill-manager/ssot/` 为中心，hub-and-spoke 模型分发到各工具
 - **反向同步** — 从 SSOT 推送到指定工具目录，覆盖本地更改
 - **冲突管理** — 检测不同工具间的版本冲突，支持 diff 预览和裁决
 - **变更忽略** — 持久化忽略特定工具的变更，hash 匹配则不再提示
@@ -62,9 +62,8 @@ Skill Manager 提供一个桌面 GUI，让你在一个地方管理所有 Skill�
        │                    │                    │
        │     Skill Manager (Tauri Desktop)      │
        │         ┌──────────────────┐           │
-       └────────►│  ~/.agents/      │◄──────────┘
-                 │  skill-manager/  │
-                 │  ssot/ (SSOT Hub)│
+       └────────►│ ~/.skill-manager/│◄──────────┘
+                 │ ssot/ (SSOT Hub) │
                  └────────┬─────────┘
                           │
                  ┌────────┴─────────┐

@@ -37,8 +37,8 @@ cd src-tauri && cargo clippy --all-targets -- -D warnings
 cd src-tauri && cargo test
 ```
 
-数据库文件位置：`~/.agents/skill-manager.db`  
-SSOT 位置：`~/.agents/skill-manager/ssot/`  
+数据库文件位置：`~/.skill-manager/skill-manager.db`  
+SSOT 位置：`~/.skill-manager/ssot/`  
 
 ---
 
@@ -143,7 +143,7 @@ sync-skills/
 | 规则 | 说明 | 违反后果 |
 |------|------|---------|
 | **名字即身份** | 同名 Skill 跨工具合并为一条记录，多份安装 | 数据不一致，UI 显示异常 |
-| **SSOT 域隔离** | 全局：`~/.agents/skill-manager/ssot/<name>/`；项目：`_p<project_id>/<name>/` | 同名 Skill 互相覆盖 |
+| **SSOT 域隔离** | 全局：`~/.skill-manager/ssot/<name>/`；项目：`_p<project_id>/<name>/` | 同名 Skill 互相覆盖 |
 | **SSOT 必须在 skills/ 之外** | Codex/OpenCode 会扫 `~/.agents/skills/`，放里面会被重复识别 | 重复扫描，假阳性 |
 | **前端不直接 invoke** | 所有 Tauri 调用必须走 `src/api.ts` | eslint 会报错 |
 | **只改 Rust 标准库做文件操作** | 不用 shell 命令 | 跨平台不一致 |
@@ -201,7 +201,7 @@ sync-skills/
 | 功能 | 状态 | 说明 |
 |------|------|------|
 | 时间戳驱动同步 UI | ⏳ 部分 | 时间戳已展示并用于排序，未驱动按钮状态 |
-| MCP 集成 | ⏳ 进行中 | v0.7.0 第一片：只读 stdio server（`mcp.rs`）；配置管控与跨工具同步尚未开工 |
+| MCP 集成 | ⏳ 进行中 | v0.7.0 第一片：`cd src-tauri && cargo run --bin skill-manager-mcp`（或直接把构建出的二进制配进 MCP 客户端）即起只读 stdio server，9 个工具见 `mcp.rs::catalog()`；配置管控与跨工具同步尚未开工 |
 | GitLab 自建实例 | ⏳ 规划中 | `providers.rs::provider_for_reference` 目前只把 `gitlab.com` 路由到 GitLab 适配器 |
 | Bitbucket / Azure DevOps 适配 | ⏳ 规划中 | `MarketProvider` 已有 GitHub + GitLab 两个真实适配器，新增只需实现该 trait |
 
@@ -246,8 +246,8 @@ sync-skills/
 
 - **前端**：浏览器 DevTools（Tauri dev 模式下可用）
 - **后端**：`println!` / `log::info!` / `log::error!`，输出在终端
-- **数据库**：直接打开 `~/.agents/skill-manager.db` 用 SQLite 工具查看
-- **SSOT**：查看 `~/.agents/skill-manager/ssot/` 目录结构
+- **数据库**：直接打开 `~/.skill-manager/skill-manager.db` 用 SQLite 工具查看
+- **SSOT**：查看 `~/.skill-manager/ssot/` 目录结构
 
 ---
 

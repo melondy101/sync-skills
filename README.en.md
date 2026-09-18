@@ -38,7 +38,7 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
 
 - **Tool Management** — Register AI coding tool paths with auto-discovery for 13+ known tools
 - **Skill Scanning** — Recursively scan directories to discover all `SKILL.md`-based skill directories
-- **SSOT Sync** — Hub-and-spoke model centered on `~/.agents/skill-manager/ssot/`, distributing to all tools
+- **SSOT Sync** — Hub-and-spoke model centered on `~/.skill-manager/ssot/`, distributing to all tools
 - **Reverse Sync** — Push SSOT content to a specific tool directory, overwriting local changes
 - **Conflict Management** — Detect version conflicts between tools with diff preview and resolution
 - **Change Dismissal** — Persistently ignore specific tool changes until content changes again
@@ -62,9 +62,8 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
        │                    │                    │
        │     Skill Manager (Tauri Desktop)      │
        │         ┌──────────────────┐           │
-       └────────►│  ~/.agents/      │◄──────────┘
-                 │  skill-manager/  │
-                 │  ssot/ (SSOT Hub)│
+       └────────►│ ~/.skill-manager/│◄──────────┘
+                 │ ssot/ (SSOT Hub) │
                  └────────┬─────────┘
                           │
                  ┌────────┴─────────┐
