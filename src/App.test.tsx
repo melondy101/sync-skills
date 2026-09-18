@@ -154,7 +154,7 @@ describe("App orchestration", () => {
     await renderApp();
     vi.mocked(api.listSkills).mockClear();
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Sync Now" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Sync" })[0]);
 
     await waitFor(() => {
       expect(api.syncSkill).toHaveBeenCalledWith(1, 0);
@@ -168,7 +168,7 @@ describe("App orchestration", () => {
     await renderApp();
     vi.mocked(api.listSkills).mockClear();
 
-    fireEvent.change(screen.getByPlaceholderText("Search skills..."), {
+    fireEvent.change(screen.getByPlaceholderText(/Search by name/), {
       target: { value: "beta" },
     });
 

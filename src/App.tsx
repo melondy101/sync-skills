@@ -38,12 +38,28 @@ import { SkillAvatar } from "./components/SkillAvatar";
 type Tab = "global" | "projects" | "market";
 type Panel = "main" | "settings" | "logs";
 
+// Mirrors `Settings::default()` in src-tauri/src/settings.rs. Used as the
+// initial state so `settings` is never null (it is read during the first
+// render) and as the fallback when the backend loader fails.
+const DEFAULT_SETTINGS: Settings = {
+  sync_mode: "semi-auto",
+  prefer_symlink: false,
+  theme: "light",
+  language: "zh",
+  close_action: "exit",
+  use_system_proxy: true,
+  use_proxy: false,
+  proxy_url: null,
+  view_market_diff_before_update: true,
+  auto_sync_on_file_change: false,
+};
+
 function App() {
   // ==================== Shared data ====================
   const [tools, setTools] = useState<Tool[]>([]);
   const [skills, setSkills] = useState<SkillView[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
 
   // Settings update with coupling: when the user changes `sync_mode`, mirror
   // it onto `auto_sync_on_file_change` so the two UI controls stay in sync
@@ -87,7 +103,7 @@ function App() {
       if (settings.sync_mode === "full-auto") {
         addToast("info", `Auto-syncing "${skill_name}"`);
         // Trigger a refresh scan; the sync cycle picks up changes.
-        api.scanSkills().catch(() => {});
+        api.fullScan().catch(() => {});
       } else if (settings.sync_mode === "semi-auto") {
         addToast("info", `"${skill_name}" changed on disk — check for updates`);
       }
@@ -171,18 +187,7 @@ function App() {
       setSettings(await api.getSettings());
     } catch (e) {
       // Fall back to hardcoded defaults when backend loader fails
-      setSettings({
-        sync_mode: "semi-auto",
-        prefer_symlink: false,
-        theme: "light",
-        language: "zh",
-        close_action: "tray",
-        use_system_proxy: true,
-        use_proxy: false,
-        proxy_url: null,
-        view_market_diff_before_update: true,
-        auto_sync_on_file_change: false,
-      });
+      setSettings(DEFAULT_SETTINGS);
       addToast("error", `${t("failedLoadSettings")}: ${e}`);
     }
   }

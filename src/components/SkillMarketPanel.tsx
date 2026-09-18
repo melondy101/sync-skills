@@ -51,28 +51,6 @@ export default function SkillMarketPanel({
   t,
   addToast,
 }: Props) {
-  // T5: global keyboard shortcuts
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      // Ctrl/Cmd+F → focus search
-      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-      // Esc → close detail modal or clear search
-      if (e.key === "Escape") {
-        if (detailSkill) {
-          setDetailSkill(null);
-        } else if (searchQuery) {
-          setSearchQuery("");
-          searchRef.current?.blur();
-        }
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [detailSkill, searchQuery]);
-
   const [markets, setMarkets] = useState<Market[]>([]);
   const [marketTitles, setMarketTitles] = useState<Record<number, string>>({});
   const [marketLoading, setMarketLoading] = useState(false);
@@ -115,6 +93,28 @@ export default function SkillMarketPanel({
 
   // T5: keyboard shortcuts — ref for search input focus
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // T5: global keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl/Cmd+F → focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      // Esc → close detail modal or clear search
+      if (e.key === "Escape") {
+        if (detailSkill) {
+          setDetailSkill(null);
+        } else if (searchQuery) {
+          setSearchQuery("");
+          searchRef.current?.blur();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [detailSkill, searchQuery]);
 
   const { showConfirm, setProgress } = useConfirm();
 
@@ -888,6 +888,7 @@ export default function SkillMarketPanel({
                   );
                 })}
               </div>
+            )
             )}
           </div>
         </div>
