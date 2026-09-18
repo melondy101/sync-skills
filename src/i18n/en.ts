@@ -686,6 +686,16 @@ const en: Record<string, string> = {
   autoSync: "Auto-sync",
   editSkillTitle: "Edit SKILL.md",
   defaultBranchAuto: "Auto-detect main/master",
+
+  // Keyboard shortcuts cheat sheet
+  shortcutsTitle: "Keyboard shortcuts",
+  shortcutFocusSearch: "Search skills",
+  shortcutMoveSelection: "Move between skills",
+  shortcutOpenDetail: "Open the focused skill",
+  shortcutSyncAllInstalled: "Sync all installed skills",
+  shortcutOpenSources: "Manage market sources",
+  shortcutClearSearch: "Clear search",
+  shortcutShowHelp: "Show this panel",
 };
 
 export default en;

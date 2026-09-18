@@ -686,6 +686,16 @@ const zh: Record<string, string> = {
   healthCheck: "健康检查",
   autoSync: "自动同步",
   editSkillTitle: "编辑 SKILL.md",
+
+  // Keyboard shortcuts cheat sheet
+  shortcutsTitle: "键盘快捷键",
+  shortcutFocusSearch: "搜索技能",
+  shortcutMoveSelection: "在技能间移动",
+  shortcutOpenDetail: "打开聚焦的技能",
+  shortcutSyncAllInstalled: "同步全部已安装技能",
+  shortcutOpenSources: "管理市场源",
+  shortcutClearSearch: "清空搜索",
+  shortcutShowHelp: "显示此面板",
 };
 
 export default zh;

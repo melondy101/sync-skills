@@ -9,8 +9,10 @@ import MarketSourcesModal from './MarketSourcesModal';
 import { RemoteSkillDetailModal } from './RemoteSkillDetailModal';
 import RemoteUpdatesModal from './RemoteUpdatesModal';
 import { useConfirm } from './ConfirmProvider';
+import { useHotkeys, type Hotkey } from "../hooks/useHotkeys";
 import { Icon } from "./Icon";
 import MarketSidebar from "./MarketSidebar";
+import { ShortcutsModal } from "./ShortcutsModal";
 import type {
   Market,
   Project,
@@ -39,6 +41,19 @@ const BUILTIN_MARKET_IDS = new Set([
   "andrej-karpathy-skill",
   "khazix-skills",
 ]);
+
+// Single source for both the bindings and the "?" cheat sheet. `keys: []` marks
+// a row as documentation only — cards already activate on Enter/Space natively.
+const MARKET_HOTKEYS: Hotkey[] = [
+  { id: "search", keys: ["k"], withMeta: true, display: "Ctrl / ⌘ + K", labelKey: "shortcutFocusSearch" },
+  { id: "search", keys: ["/"], display: "/", labelKey: "shortcutFocusSearch" },
+  { id: "navigate", keys: ["arrowup", "arrowdown", "arrowleft", "arrowright"], display: "↑ ↓ ← →", labelKey: "shortcutMoveSelection" },
+  { id: "open", keys: [], display: "Enter / Space", labelKey: "shortcutOpenDetail" },
+  { id: "clear-search", keys: ["escape"], display: "Esc", labelKey: "shortcutClearSearch" },
+  { id: "sync-all", keys: ["u"], display: "U", labelKey: "shortcutSyncAllInstalled" },
+  { id: "sources", keys: ["i"], display: "I", labelKey: "shortcutOpenSources" },
+  { id: "help", keys: ["?"], display: "?", labelKey: "shortcutShowHelp" },
+];
 
 export default function SkillMarketPanel({
   projects,
@@ -76,6 +91,7 @@ export default function SkillMarketPanel({
 
   const [installTarget, setInstallTarget] = useState<RemoteSkill | null>(null);
   const [showSourcesModal, setShowSourcesModal] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [installedOnly, setInstalledOnly] = useState(false);
   const [marketSyncErrors, setMarketSyncErrors] = useState<Record<number, string[]>>({});
@@ -91,30 +107,44 @@ export default function SkillMarketPanel({
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [marketSortBy, setMarketSortBy] = useState<"name" | "market" | "updated">("name");
 
-  // T5: keyboard shortcuts — ref for search input focus
+  // T5: keyboard shortcuts — refs for search focus and roving card selection
   const searchRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
-  // T5: global keyboard shortcuts
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      // Ctrl/Cmd+F → focus search
-      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-        e.preventDefault();
+  function moveSelection(key: string) {
+    const cards = gridRef.current?.querySelectorAll<HTMLElement>('[role="button"][tabindex="0"]');
+    if (!cards || cards.length === 0) return;
+    const forward = key === "arrowdown" || key === "arrowright";
+    const current = Array.prototype.indexOf.call(cards, document.activeElement);
+    const target = current === -1
+      ? (forward ? 0 : cards.length - 1)
+      : Math.min(Math.max(current + (forward ? 1 : -1), 0), cards.length - 1);
+    cards[target]?.focus();
+  }
+
+  useHotkeys(MARKET_HOTKEYS, (id, event) => {
+    switch (id) {
+      case "search":
         searchRef.current?.focus();
-      }
-      // Esc → close detail modal or clear search
-      if (e.key === "Escape") {
-        if (detailSkill) {
-          setDetailSkill(null);
-        } else if (searchQuery) {
-          setSearchQuery("");
-          searchRef.current?.blur();
-        }
-      }
+        searchRef.current?.select();
+        break;
+      case "navigate":
+        moveSelection(event.key.toLowerCase());
+        break;
+      case "clear-search":
+        if (searchQuery) setSearchQuery("");
+        break;
+      case "sync-all":
+        requestSyncAllInstalledRemoteSkills();
+        break;
+      case "sources":
+        setShowSourcesModal(true);
+        break;
+      case "help":
+        setShowShortcuts(true);
+        break;
     }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [detailSkill, searchQuery]);
+  });
 
   const { showConfirm, setProgress } = useConfirm();
 
@@ -636,6 +666,14 @@ export default function SkillMarketPanel({
               <Icon name={viewMode === "card" ? "list" : "grid"} size={14} />
             </button>
             <button
+              className="btn btn-small btn-ghost"
+              onClick={() => setShowShortcuts(true)}
+              aria-label={t("shortcutsTitle")}
+              title={t("shortcutsTitle")}
+            >
+              ?
+            </button>
+            <button
               className="btn btn-secondary m-actions-btn"
               onClick={() => setDrawerOpen((v) => !v)}
             >
@@ -761,7 +799,7 @@ export default function SkillMarketPanel({
           })()}
 
           {/* Skill grid */}
-          <div className="m-grid-wrap">
+          <div className="m-grid-wrap" ref={gridRef}>
             {skillLoading ? (
               <div className="skeleton-grid">
                 {[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className="skeleton-card" />)}
@@ -936,6 +974,10 @@ export default function SkillMarketPanel({
           builtinLabels={BUILTIN_LABELS}
           onClose={() => setShowSourcesModal(false)}
         />
+      )}
+
+      {showShortcuts && (
+        <ShortcutsModal t={t} hotkeys={MARKET_HOTKEYS} onClose={() => setShowShortcuts(false)} />
       )}
 
       {/* 更新弹窗（任务 7 实现） */}

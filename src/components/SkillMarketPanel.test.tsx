@@ -85,6 +85,14 @@ beforeEach(() => {
 
 function makeT(key: string) {
   const map: Record<string, string> = {
+    shortcutsTitle: "Keyboard shortcuts",
+    shortcutFocusSearch: "Search skills",
+    shortcutMoveSelection: "Move between skills",
+    shortcutOpenDetail: "Open the focused skill",
+    shortcutSyncAllInstalled: "Sync all installed skills",
+    shortcutOpenSources: "Manage market sources",
+    shortcutClearSearch: "Clear search",
+    shortcutShowHelp: "Show this panel",
     market: "Market",
     marketSearchPlaceholder: "Search skills (name or description)…",
     filterAll: "All",
@@ -619,6 +627,38 @@ describe("SkillMarketPanel", () => {
     expect(within(dialog).getByText(/^fedcba0987654321/)).toBeInTheDocument();
 
     expect(within(dialog).getAllByRole("button", { name: "Copy full hash" })).toHaveLength(2);
+  });
+
+  it("binds the market shortcuts: ? opens the cheat sheet, / focuses search", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <SkillMarketPanel
+        projects={[]}
+        projectPaths={{}}
+        tools={[]}
+        onRemoteInstallationsChanged={vi.fn()}
+        onSkillsChanged={vi.fn()}
+        onMarketsChanged={vi.fn()}
+        defaultProjectId={0}
+        t={makeT}
+        addToast={toast}
+      />,
+    );
+    await waitFor(() => expect(api.listMarkets).toHaveBeenCalled());
+
+    await user.keyboard("?");
+    const sheet = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+    expect(within(sheet).getByText("Ctrl / ⌘ + K")).toBeInTheDocument();
+    expect(within(sheet).getAllByText("Search skills")).toHaveLength(2);
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Keyboard shortcuts" })).toBeNull(),
+    );
+
+    const search = screen.getByPlaceholderText("Search skills (name or description)…");
+    await user.keyboard("/");
+    expect(document.activeElement).toBe(search);
   });
 });
 

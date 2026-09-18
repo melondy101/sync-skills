@@ -1142,6 +1142,56 @@ body::before {
   max-width: 640px;
 }
 
+.shortcuts-modal {
+  min-width: 420px;
+  max-width: 520px;
+}
+
+.shortcuts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.shortcuts-row dt {
+  flex: none;
+}
+
+.shortcuts-row dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.shortcuts-modal kbd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  white-space: nowrap;
+}
+
 .scan-summary {
   display: flex;
   gap: 12px;
