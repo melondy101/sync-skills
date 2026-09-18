@@ -14,7 +14,7 @@ use crate::DbState;
 
 use crate::models::{Market, MarketCommitUpdate, MarketSyncResult, MarketTemplate, RemoteInstallation, RemoteSkill, RemoteSkillUpdate, SyncResult};
 use crate::fs::{copy_directory, replace_directory, symlink_or_copy};
-use crate::providers::provider_for;
+use crate::providers::{provider_for, provider_for_reference};
 use crate::settings::Settings;
 use serde::Serialize;
 use std::fs;
@@ -197,7 +197,7 @@ pub async fn add_market_by_url(
     // `"root"`, `"subdir"`, or `"auto"` (probe SKILL.md locations and pick).
     layout: Option<String>,
 ) -> Result<Market, String> {
-    let provider = provider_for("github")?;
+    let provider = provider_for_reference(&url)?;
     let (owner, name, branch_hint) = provider.parse_reference(&url)?;
     let resolved_branch = match (branch, branch_hint) {
         (Some(b), _) => b,
