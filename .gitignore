@@ -48,3 +48,6 @@ src-tauri/target-out2/
 
 # Staged sidecar binaries for `bundle.externalBin` (created by beforeBundleCommand)
 src-tauri/bin/
+
+# 临时截图与一次性验证脚本（AGENTS.md「不要提交」）
+artifacts/
