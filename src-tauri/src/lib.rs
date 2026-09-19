@@ -176,6 +176,7 @@ pub fn run() {
             // Conflicts (M5)
             commands::conflicts::list_conflicts,
             commands::conflicts::resolve_conflict,
+            commands::conflicts::auto_resolve_conflicts,
             // Reverse sync & dismiss
             commands::syncing::reverse_sync_skill,
             commands::syncing::dismiss_skill_update,

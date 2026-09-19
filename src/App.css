@@ -1745,6 +1745,23 @@ body::before {
   margin-bottom: 6px;
 }
 
+/* Strategy picker + batch button, right-aligned in the banner header. */
+.conflict-auto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.conflict-auto select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
 .conflict-icon {
   font-size: 18px;
   color: var(--error);

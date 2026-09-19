@@ -3,23 +3,29 @@
 
 import { useRef, useState } from "react";
 import * as api from "../api";
-import type { ConflictView, SkillDiff } from "../types";
+import type { ConflictView, SkillDiff, Tool } from "../types";
 import type { TranslateFn } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { DiffFilesView, DiffViewControls } from "./DiffView";
+import { useConfirm } from "./ConfirmProvider";
 import { Icon } from "./Icon";
+
+type AutoStrategy = "newest" | "preferred-tool";
 
 /** Conflict banner (M5) with per-version resolve buttons and a diff modal. */
 export function ConflictSection({
   t,
   conflicts,
+  tools,
   projectId,
   addToast,
   onResolved,
 }: {
   t: TranslateFn;
   conflicts: ConflictView[];
+  /** Configured tools, in the order the "preferred tool" strategy reads. */
+  tools: Tool[];
   projectId: number;
   addToast: AddToastFn;
   onResolved: () => Promise<void>;
@@ -29,7 +35,10 @@ export function ConflictSection({
   const [loadingConflictDiff, setLoadingConflictDiff] = useState<number | null>(null);
   const [conflictMaximized, setConflictMaximized] = useState(false);
   const [diffSideBySide, setDiffSideBySide] = useState(true);
+  const [autoStrategy, setAutoStrategy] = useState<AutoStrategy>("newest");
+  const [autoRunning, setAutoRunning] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const { showConfirm } = useConfirm();
 
   function closeConflictDiff() {
     setConflictDiff(null);
@@ -39,6 +48,51 @@ export function ConflictSection({
   useFocusTrap(dialogRef, { active: conflictDiff !== null, onEscape: closeConflictDiff });
 
   if (conflicts.length === 0) return null;
+
+  async function runAutoResolve() {
+    setAutoRunning(true);
+    try {
+      const outcomes = await api.autoResolveConflicts(
+        autoStrategy,
+        tools.map((tool) => tool.name),
+        projectId,
+      );
+      const resolved = outcomes.filter((o) => o.resolved);
+      const skipped = outcomes.filter((o) => !o.resolved);
+      if (resolved.length > 0) {
+        addToast("success", `${t("autoResolveDone")}: ${resolved.length}`);
+      }
+      if (skipped.length > 0) {
+        addToast("info", `${t("autoResolveSkipped")}: ${skipped.map((o) => o.skill_name).join(", ")}`);
+      }
+      const failed = resolved.flatMap((o) => o.errors);
+      if (failed.length > 0) {
+        addToast("error", failed.join(", "));
+      }
+      if (resolved.length === 0 && skipped.length === outcomes.length) {
+        addToast("info", t("autoResolveNothing"));
+      }
+      await onResolved();
+    } catch (e) {
+      addToast("error", `${t("failedResolve")}: ${e}`);
+    } finally {
+      setAutoRunning(false);
+    }
+  }
+
+  function handleAutoResolve() {
+    showConfirm({
+      title: t("autoResolveTitle"),
+      message:
+        autoStrategy === "newest"
+          ? t("autoResolveNewestDesc")
+          : t("autoResolvePreferredDesc"),
+      detail: t("autoResolveDetail"),
+      confirmText: t("autoResolveConfirm"),
+      cancelText: t("cancel"),
+      onConfirm: runAutoResolve,
+    });
+  }
 
   async function handleResolveConflict(conflictId: number, keepToolName: string) {
     setResolvingConflict(conflictId);
@@ -77,6 +131,24 @@ export function ConflictSection({
             <Icon name="alert-triangle" size={16} className="conflict-icon" />
             <span className="conflict-title">{t("conflictsTitle")}</span>
             <span className="badge badge-conflict">{conflicts.length}</span>
+            <div className="conflict-auto">
+              <select
+                aria-label={t("autoResolveStrategy")}
+                value={autoStrategy}
+                disabled={autoRunning}
+                onChange={(e) => setAutoStrategy(e.target.value as AutoStrategy)}
+              >
+                <option value="newest">{t("autoResolveNewest")}</option>
+                <option value="preferred-tool">{t("autoResolvePreferred")}</option>
+              </select>
+              <button
+                className="btn btn-small btn-secondary"
+                disabled={autoRunning}
+                onClick={handleAutoResolve}
+              >
+                {autoRunning ? t("resolving") : t("autoResolve")}
+              </button>
+            </div>
           </div>
           <p className="conflict-desc">{t("conflictsDesc")}</p>
           <div className="conflict-list">

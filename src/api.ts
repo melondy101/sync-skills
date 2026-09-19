@@ -8,7 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Tool, ToolTemplate, Project, SkillView, ScanResult, SyncResult,
   SkillUpdate, SkillDiff, SyncLog, Settings, ConflictView,
-  SkillFile, SkillLint, AppUpdateInfo,
+  SkillFile, SkillLint, AppUpdateInfo, AutoResolveOutcome,
   Market, MarketTemplate, RemoteSkill, RemoteSkillDetail, RemoteSkillUpdate, MarketSyncResult,
   RemoteInstallation, MarketCommitUpdate, RemoteSkillInstalledResult, PathCheck,
   RecoveryNotice, WorkspaceCandidate, McpServerEntry, McpSuggestedEntry, McpTargetStatus,
@@ -134,6 +134,17 @@ export const listConflicts = (projectId: number) =>
 
 export const resolveConflict = (conflictId: number, keepToolName: string, projectId: number) =>
   invoke<SyncResult>("resolve_conflict", { conflictId, keepToolName, projectId });
+
+export const autoResolveConflicts = (
+  strategy: "newest" | "preferred-tool",
+  preferredTools: string[],
+  projectId: number,
+) =>
+  invoke<AutoResolveOutcome[]>("auto_resolve_conflicts", {
+    strategy,
+    preferredTools,
+    projectId,
+  });
 
 // ==================== Skill Market ====================
 

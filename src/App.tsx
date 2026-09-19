@@ -727,6 +727,7 @@ function App() {
       <ConflictSection
         t={t}
         conflicts={conflicts}
+        tools={tools}
         projectId={selectedProject}
         addToast={addToast}
         onResolved={async () => {
