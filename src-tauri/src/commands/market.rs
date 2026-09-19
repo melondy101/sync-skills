@@ -14,7 +14,7 @@ use crate::DbState;
 
 use crate::models::{Market, MarketCommitUpdate, MarketSyncResult, MarketTemplate, RemoteInstallation, RemoteSkill, RemoteSkillUpdate, SyncResult};
 use crate::fs::{copy_directory, replace_directory, symlink_or_copy};
-use crate::providers::{provider_for, provider_for_reference};
+use crate::providers::{provider_for, provider_for_market, provider_for_reference_probed};
 use crate::settings::Settings;
 use serde::Serialize;
 use std::fs;
@@ -197,7 +197,7 @@ pub async fn add_market_by_url(
     // `"root"`, `"subdir"`, or `"auto"` (probe SKILL.md locations and pick).
     layout: Option<String>,
 ) -> Result<Market, String> {
-    let provider = provider_for_reference(&url)?;
+    let provider = provider_for_reference_probed(&url).await?;
     let (owner, name, branch_hint) = provider.parse_reference(&url)?;
     let resolved_branch = match (branch, branch_hint) {
         (Some(b), _) => b,
@@ -230,7 +230,7 @@ pub fn delete_market(db: State<'_, DbState>, id: i64) -> Result<(), String> {
 pub async fn sync_market_index(db: State<'_, DbState>, market_id: i64) -> Result<MarketSyncResult, String> {
     let market = db.get_market(market_id)?.ok_or_else(|| format!("market {market_id} not found"))?;
     let result = crate::ops::market::scan_market(&db, &market).await?;
-    let commit_sha = provider_for(&market.provider)?
+    let commit_sha = provider_for_market(&market)?
         .latest_commit_sha(&market.owner, &market.name, &market.branch)
         .await;
     db.update_market(
@@ -278,7 +278,7 @@ pub async fn check_market_commits(db: State<'_, DbState>) -> Result<Vec<MarketCo
 
     let mut updates = Vec::new();
     for market in markets {
-        let new_sha = match provider_for(&market.provider)?
+        let new_sha = match provider_for_market(&market)?
             .latest_commit_sha(&market.owner, &market.name, &market.branch)
             .await
         {
@@ -321,7 +321,7 @@ pub async fn download_remote_skill_to_ssot(db: State<'_, DbState>, remote_skill_
     let ssot = PathBuf::from(&skill.ssot_path);
     fs::create_dir_all(&ssot).map_err(|e| e.to_string())?;
 
-    let bytes = match provider_for(&market.provider)?
+    let bytes = match provider_for_market(&market)?
         .fetch_skill_md(&market, &skill.skill_name)
         .await
     {

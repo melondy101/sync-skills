@@ -96,32 +96,122 @@ pub fn provider_for(kind: &str) -> Result<Box<dyn MarketProvider>, String> {
         "github" | "" => Ok(Box::new(GithubProvider::new())),
         "gitlab" => Ok(Box::new(GitlabProvider::new())),
         "bitbucket" => Ok(Box::new(BitbucketProvider::new())),
+        "azure" => Ok(Box::new(AzureDevopsProvider::new())),
         other => Err(format!("unsupported provider: {}", other)),
+    }
+}
+
+/// The adapter for an already-registered market. GitLab is the only provider
+/// whose instance is part of the identity, and the stored `remote_url` carries
+/// that host, so a self-hosted market keeps working across restarts without a
+/// schema change.
+pub fn provider_for_market(market: &Market) -> Result<Box<dyn MarketProvider>, String> {
+    if market.provider == "gitlab" {
+        if let Some(base) = instance_base(&market.remote_url) {
+            if base != GITLAB_COM {
+                return Ok(Box::new(GitlabProvider::with_base(&base)));
+            }
+        }
+    }
+    provider_for(&market.provider)
+}
+
+/// `scheme://host` out of a display URL, or `None` when there is nothing to read.
+fn instance_base(remote_url: &str) -> Option<String> {
+    let without_scheme = remote_url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+    let host = without_scheme.split('/').next()?.trim_end_matches('/');
+    if host.is_empty() || !host.contains('.') {
+        return None;
+    }
+    let scheme = if remote_url.starts_with("http://") { "http://" } else { "https://" };
+    Some(format!("{scheme}{host}"))
+}
+
+/// Drop a leading `host/` from a reference that already had its scheme removed.
+/// Only a segment that looks like a hostname (contains a dot) is treated as one,
+/// so `group/repo` keeps its group.
+fn strip_host(reference: &str) -> &str {
+    match reference.split_once('/') {
+        Some((head, rest)) if head.contains('.') && !head.contains(':') => rest,
+        _ => reference,
     }
 }
 
 /// Pick an adapter from a user-entered reference. `add_market_by_url` receives a
 /// URL and no provider discriminator, so the host decides here. Only the public
-/// SaaS hosts are routed: `gitlab.com` speaks to the SaaS API and cannot address
-/// a self-hosted instance, and Bitbucket Server is a different API again.
-pub fn provider_for_reference(raw: &str) -> Result<Box<dyn MarketProvider>, String> {
-    let host = raw
-        .trim()
+/// SaaS hosts are routed by name: a GitLab adapter speaks to one instance, so an
+/// unknown host has to be probed (see [`provider_for_reference_probed`]).
+///
+/// Accepts the `https://`, `http://`, `ssh://` and bare `git@host:` spellings of
+/// the same repository.
+pub fn provider_kind_for_reference(raw: &str) -> (&'static str, Option<String>) {
+    let trimmed = raw.trim();
+    let without_scheme = trimmed
         .trim_start_matches("https://")
         .trim_start_matches("http://")
-        .split(['/', ':'])
-        .next()
-        .unwrap_or("");
+        .trim_start_matches("ssh://");
+    let head = without_scheme.split(['/', ':']).next().unwrap_or("");
     // `git@gitlab.com:group/repo.git` is the SSH spelling of the same host.
-    let host = host.strip_prefix("git@").unwrap_or(host);
-    let kind = if host.eq_ignore_ascii_case("gitlab.com") {
-        "gitlab"
-    } else if host.eq_ignore_ascii_case("bitbucket.org") {
-        "bitbucket"
-    } else {
-        "github"
-    };
+    let host = head.strip_prefix("git@").unwrap_or(head);
+    if host.eq_ignore_ascii_case("gitlab.com") {
+        return ("gitlab", None);
+    }
+    if host.eq_ignore_ascii_case("bitbucket.org") {
+        return ("bitbucket", None);
+    }
+    // Azure serves git over a per-org `ssh.dev.azure.com` alias as well as the
+    // canonical `dev.azure.com` web host.
+    if host.eq_ignore_ascii_case("dev.azure.com")
+        || host.ends_with(".dev.azure.com")
+        || host.ends_with(".visualstudio.com")
+    {
+        return ("azure", None);
+    }
+    // Some other host that still looks like `owner/repo` may be a self-hosted
+    // GitLab; hand back its base so the caller can probe, and let GitHub be the
+    // fallback if the probe says no.
+    if without_scheme.contains('/') && host.contains('.') && !host.eq_ignore_ascii_case("github.com")
+    {
+        return ("github", instance_base(trimmed));
+    }
+    ("github", None)
+}
+
+/// [`provider_for_reference`] plus one request to tell an anonymous self-hosted
+/// GitLab apart from a GitHub Enterprise or arbitrary host. The probe is the
+/// cheapest read GitLab answers without credentials: `GET /api/v4/projects` is
+/// JSON on GitLab and an error page or 404 everywhere else.
+pub async fn provider_for_reference_probed(raw: &str) -> Result<Box<dyn MarketProvider>, String> {
+    let (kind, base) = provider_kind_for_reference(raw);
+    if kind == "github" {
+        if let Some(base) = base {
+            if looks_like_gitlab(&base).await {
+                return Ok(Box::new(GitlabProvider::with_base(&base)));
+            }
+        }
+    }
     provider_for(kind)
+}
+
+async fn looks_like_gitlab(base: &str) -> bool {
+    let settings = Settings::load();
+    let proxy = http::resolve_proxy(
+        settings.use_system_proxy,
+        settings.use_proxy,
+        settings.proxy_url.as_deref(),
+    );
+    let client = match http::build_client(
+        HttpConfig::new("skill-manager", Duration::from_secs(10)).with_proxy(proxy),
+    ) {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+    let url = GitlabProvider::instance_probe_url(base);
+    get_json::<Vec<serde_json::Value>>(&client, &url, "application/json")
+        .await
+        .is_ok()
 }
 
 /// Builds an adapter's client on first use, reflecting the proxy settings live at
@@ -478,16 +568,25 @@ impl MarketProvider for GithubProvider {
     }
 }
 
-/// GitLab adapter — [`MarketProvider`] over gitlab.com's REST v4 API. Three
-/// shapes force it to diverge from GitHub: the project is addressed by its
-/// URL-encoded namespace path (`group%2Fsubgroup%2Frepo`) instead of
-/// `owner/repo`, a directory listing is one flat paginated `tree` whose entries
-/// carry `path` + `type` (`"blob"`/`"tree"`) instead of per-directory `contents`
-/// with `type == "dir"`, and web links need a `/-/` separator before any
-/// ref-scoped path.
+/// GitLab adapter — [`MarketProvider`] over GitLab's REST v4 API. Three shapes
+/// force it to diverge from GitHub: the project is addressed by its URL-encoded
+/// namespace path (`group%2Fsubgroup%2Frepo`) instead of `owner/repo`, a
+/// directory listing is one flat paginated `tree` whose entries carry `path` +
+/// `type` (`"blob"`/`"tree"`) instead of per-directory `contents` with
+/// `type == "dir"`, and web links need a `/-/` separator before any ref-scoped
+/// path.
+///
+/// `base` is the instance root, so the same adapter serves gitlab.com and a
+/// self-hosted `https://gitlab.example.org`. The API paths below the root are
+/// identical on both — verified against a live self-hosted instance, whose
+/// `tree` and project payloads matched gitlab.com's field for field.
 pub struct GitlabProvider {
     client: std::sync::OnceLock<reqwest::Client>,
+    base: String,
 }
+
+/// The SaaS instance, which is what a bare `owner/repo` reference means.
+const GITLAB_COM: &str = "https://gitlab.com";
 
 /// gitlab.com caps `per_page` at 100 for anonymous tree listings.
 const TREE_PAGE_SIZE: usize = 100;
@@ -496,7 +595,23 @@ const TREE_MAX_PAGES: usize = 10;
 
 impl GitlabProvider {
     pub fn new() -> Self {
-        Self { client: std::sync::OnceLock::new() }
+        Self {
+            client: std::sync::OnceLock::new(),
+            base: GITLAB_COM.to_string(),
+        }
+    }
+
+    /// Point at a self-hosted instance. Any trailing slash and path suffix are
+    /// dropped so `/api/v4/...` always hangs off the instance root.
+    pub fn with_base(base: &str) -> Self {
+        let trimmed = base
+            .trim_end_matches('/')
+            .trim_end_matches("/api/v4")
+            .to_string();
+        Self {
+            client: std::sync::OnceLock::new(),
+            base: trimmed,
+        }
     }
 
     fn client(&self) -> Result<&reqwest::Client, String> {
@@ -524,14 +639,21 @@ impl GitlabProvider {
         format!("{}%2F{}", Self::encode(owner), Self::encode(repo))
     }
 
-    fn project_url(owner: &str, repo: &str) -> String {
-        format!("https://gitlab.com/api/v4/projects/{}", Self::project_id(owner, repo))
+    fn project_url(&self, owner: &str, repo: &str) -> String {
+        format!("{}/api/v4/projects/{}", self.base, Self::project_id(owner, repo))
     }
 
-    fn tree_url(owner: &str, repo: &str, branch: &str, path: &str, page: usize) -> String {
+    /// The cheapest "is this host a GitLab at all" read: the projects list needs
+    /// no credentials on instances that allow anonymous browsing and answers with
+    /// a JSON array nowhere else.
+    fn instance_probe_url(base: &str) -> String {
+        format!("{}/api/v4/projects?per_page=1", base.trim_end_matches('/'))
+    }
+
+    fn tree_url(&self, owner: &str, repo: &str, branch: &str, path: &str, page: usize) -> String {
         format!(
             "{}/repository/tree?path={}&ref={}&per_page={}&page={}",
-            Self::project_url(owner, repo),
+            self.project_url(owner, repo),
             Self::encode(path.trim_start_matches('/')),
             Self::encode(branch),
             TREE_PAGE_SIZE,
@@ -539,13 +661,17 @@ impl GitlabProvider {
         )
     }
 
-    fn file_url(owner: &str, repo: &str, branch: &str, path: &str) -> String {
+    fn file_url(&self, owner: &str, repo: &str, branch: &str, path: &str) -> String {
         format!(
             "{}/repository/files/{}/raw?ref={}",
-            Self::project_url(owner, repo),
+            self.project_url(owner, repo),
             Self::encode(path.trim_start_matches('/')),
             Self::encode(branch)
         )
+    }
+
+    fn web_url(&self, owner: &str, repo: &str) -> String {
+        format!("{}/{}/{}", self.base, owner, repo)
     }
 
     async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String> {
@@ -568,7 +694,7 @@ impl GitlabProvider {
         let mut entries: Vec<serde_json::Value> = Vec::new();
         for page in 1..=TREE_MAX_PAGES {
             let page_entries: Vec<serde_json::Value> = self
-                .fetch_json(&Self::tree_url(owner, repo, branch, path, page))
+                .fetch_json(&self.tree_url(owner, repo, branch, path, page))
                 .await?;
             let count = page_entries.len();
             entries.extend(page_entries);
@@ -610,7 +736,7 @@ impl GitlabProvider {
         skill_name: &str,
         skill_md_path: &str,
     ) -> Result<(String, String, Option<String>), String> {
-        let url = Self::file_url(owner, repo, branch, skill_md_path);
+        let url = self.file_url(owner, repo, branch, skill_md_path);
         let bytes = self.fetch_bytes(&url).await?;
         hash_skill_payload(skill_name, &bytes)
     }
@@ -624,17 +750,17 @@ impl MarketProvider for GitlabProvider {
     fn display_url(&self, owner: &str, repo: &str, branch: &str) -> String {
         // `/-/` is GitLab's marker for "what follows is ref-scoped"; GitHub has
         // no equivalent and a browser link without it 404s.
-        format!("https://gitlab.com/{}/{}/-/tree/{}", owner, repo, branch)
+        format!("{}/-/tree/{}", self.web_url(owner, repo), branch)
     }
 
     fn parse_reference(&self, raw: &str) -> Result<(String, String, Option<String>), String> {
-        let without_host = raw
-            .trim()
-            .trim_start_matches("https://")
-            .trim_start_matches("http://");
+        let without_host = strip_host(raw.trim().trim_start_matches("https://").trim_start_matches("http://"));
         let without_host = without_host
-            .strip_prefix("gitlab.com/")
-            .or_else(|| without_host.strip_prefix("git@gitlab.com:"))
+            .strip_prefix("git@")
+            .map(|rest| match rest.split_once(':') {
+                Some((_host, path)) => path,
+                None => rest,
+            })
             .unwrap_or(without_host)
             .trim_end_matches('/');
         let segments: Vec<&str> = without_host.split('/').filter(|s| !s.is_empty()).collect();
@@ -674,7 +800,7 @@ impl MarketProvider for GitlabProvider {
         repo: &'a str,
     ) -> BoxFuture<'a, Result<String, String>> {
         Box::pin(async move {
-            let project_url = Self::project_url(owner, repo);
+            let project_url = self.project_url(owner, repo);
             match self.fetch_bytes(&project_url).await {
                 Ok(bytes) => {
                     if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
@@ -710,7 +836,7 @@ impl MarketProvider for GitlabProvider {
     ) -> BoxFuture<'a, Option<&'static str>> {
         Box::pin(async move {
             if self
-                .fetch_bytes(&Self::file_url(owner, repo, branch, "/SKILL.md"))
+                .fetch_bytes(&self.file_url(owner, repo, branch, "/SKILL.md"))
                 .await
                 .is_ok()
             {
@@ -816,7 +942,7 @@ impl MarketProvider for GitlabProvider {
                 "root" => "/SKILL.md".to_string(),
                 _ => format!("/{}/SKILL.md", skill_name),
             };
-            let url = Self::file_url(&market.owner, &market.name, &market.branch, &path);
+            let url = self.file_url(&market.owner, &market.name, &market.branch, &path);
             self.fetch_bytes(&url).await
         })
     }
@@ -830,7 +956,7 @@ impl MarketProvider for GitlabProvider {
         Box::pin(async move {
             let url = format!(
                 "{}/repository/commits?ref_name={}&per_page=1",
-                Self::project_url(owner, repo),
+                self.project_url(owner, repo),
                 Self::encode(branch)
             );
             let bytes = self.fetch_bytes(&url).await.ok()?;
@@ -1243,6 +1369,425 @@ impl MarketProvider for BitbucketProvider {
     }
 }
 
+/// Azure DevOps adapter — [`MarketProvider`] over the `dev.azure.com` Git REST
+/// API.
+///
+/// Coordinates are three levels deep here (organisation → project → repository),
+/// so `owner` carries `"org/project"` the same way the GitLab adapter carries a
+/// nested namespace, and `name` is the repository.
+///
+/// Read access is gated per organisation, and this is the one adapter that
+/// cannot be exercised anonymously: measured on 2026-09-19, `azure-sdk` answers
+/// with a 302 to the sign-in page (HTML), and `dnceng/public` lists repositories
+/// but returns `TF401019 … you do not have permissions` for repository detail,
+/// items and commits. So a token is required to get anywhere useful and it is
+/// taken from [`ADO_TOKEN_ENV`] rather than the settings file, which is
+/// plaintext. Everything below the auth boundary — URL shapes, payload fields —
+/// follows the documented contract, and the failure modes observed live are
+/// surfaced as their own errors instead of a bare 404.
+pub struct AzureDevopsProvider {
+    client: std::sync::OnceLock<reqwest::Client>,
+}
+
+/// Set this to a PAT with `Code (read)` to index an organisation that does not
+/// allow anonymous access.
+pub const ADO_TOKEN_ENV: &str = "AZURE_DEVOPS_PAT";
+const ADO_API_VERSION: &str = "7.1";
+/// A ref of this shape is how ADO spells "branch" in its version descriptors.
+const ADO_BRANCH_PREFIX: &str = "refs/heads/";
+
+impl AzureDevopsProvider {
+    pub fn new() -> Self {
+        Self { client: std::sync::OnceLock::new() }
+    }
+
+    fn client(&self) -> Result<&reqwest::Client, String> {
+        pooled_client(&self.client)
+    }
+
+    fn token() -> Option<String> {
+        std::env::var(ADO_TOKEN_ENV)
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    }
+
+    fn encode(value: &str) -> String {
+        value
+            .bytes()
+            .map(|b| match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
+                    (b as char).to_string()
+                }
+                _ => format!("%{:02X}", b),
+            })
+            .collect()
+    }
+
+    /// `"org/proj"` + `"repo"` → the repository-scoped API root.
+    fn repo_url(owner: &str, repo: &str) -> String {
+        format!(
+            "https://dev.azure.com/{}/_apis/git/repositories/{}",
+            Self::encode(owner),
+            Self::encode(repo)
+        )
+    }
+
+    fn items_url(owner: &str, repo: &str, branch: &str, path: &str) -> String {
+        format!(
+            "{}/items?path={}&versionDescriptor.version={}&versionDescriptor.versionType=branch&recursionLevel=OneLevel&api-version={}",
+            Self::repo_url(owner, repo),
+            Self::encode(path),
+            Self::encode(branch),
+            ADO_API_VERSION
+        )
+    }
+
+    fn blob_url(owner: &str, repo: &str, object_id: &str) -> String {
+        format!(
+            "{}/objects/{}?api-version={}",
+            Self::repo_url(owner, repo),
+            Self::encode(object_id),
+            ADO_API_VERSION
+        )
+    }
+
+    fn commits_url(owner: &str, repo: &str) -> String {
+        format!(
+            "{}/commits?$top=1&api-version={}",
+            Self::repo_url(owner, repo),
+            ADO_API_VERSION
+        )
+    }
+
+    /// Folders only; a skill is a directory containing `SKILL.md`, and the entry
+    /// keeps its full repo path so nested layouts survive.
+    fn skill_dirs(entries: &[serde_json::Value]) -> Vec<(String, String)> {
+        entries
+            .iter()
+            .filter(|entry| entry.get("isFolder").and_then(|v| v.as_bool()) == Some(true))
+            .filter_map(|entry| {
+                let path = entry.get("path")?.as_str()?;
+                let name = path.trim_end_matches('/').rsplit('/').next()?;
+                if name.is_empty() {
+                    return None;
+                }
+                Some((name.to_string(), path.trim_start_matches('/').to_string()))
+            })
+            .collect()
+    }
+
+    /// One authenticated GET. The auth-free failure modes observed live are
+    /// translated into something the user can act on.
+    async fn fetch(&self, url: &str, accept: &str) -> Result<Vec<u8>, String> {
+        let mut request = self
+            .client()?
+            .get(url)
+            .header("Accept", accept);
+        if let Some(token) = Self::token() {
+            // Azure DevOps accepts HTTP basic with the PAT as the password and
+            // any (or empty) user name.
+            use base64::Engine as _;
+            let credentials = base64::engine::general_purpose::STANDARD.encode(format!(":{token}"));
+            request = request.header("Authorization", format!("Basic {}", credentials));
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| format!("Network error: {}", e))?;
+        let status = response.status();
+        let bytes = response.bytes().await.map_err(|e| e.to_string())?.to_vec();
+        if !status.is_success() {
+            if matches!(status.as_u16(), 401 | 403 | 404) && Self::token().is_none() {
+                return Err(format!(
+                    "HTTP {} — Azure DevOps needs a read token for this organisation; set {}",
+                    status.as_u16(),
+                    ADO_TOKEN_ENV
+                ));
+            }
+            return Err(format!(
+                "HTTP {} ({})",
+                status.as_u16(),
+                describe_status(status.as_u16())
+            ));
+        }
+        if bytes.starts_with(b"<") {
+            return Err("sign-in page instead of data; this organisation does not allow anonymous access".to_string());
+        }
+        Ok(bytes)
+    }
+
+    async fn fetch_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, String> {
+        serde_json::from_slice(&self.fetch(url, "application/json").await?)
+            .map_err(|e| e.to_string())
+    }
+
+    /// The item's metadata, which is where the blob id for its content lives.
+    async fn item_object_id(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        path: &str,
+    ) -> Result<String, String> {
+        let url = Self::items_url(owner, repo, branch, path);
+        let body: serde_json::Value = self.fetch_json(&url).await?;
+        body.get("objectId")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "item has no objectId".to_string())
+    }
+
+    /// Two reads: the item's metadata for its blob id, then the blob itself.
+    /// ADO serves file bytes only from the objects endpoint, as octet-stream.
+    async fn fetch_item(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        path: &str,
+    ) -> Result<Vec<u8>, String> {
+        let object_id = self.item_object_id(owner, repo, branch, path).await?;
+        self.fetch(
+            &Self::blob_url(owner, repo, &object_id),
+            "application/octet-stream",
+        )
+        .await
+    }
+
+    async fn probe_skill_md(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        skill_name: &str,
+        skill_md_path: &str,
+    ) -> Result<(String, String, Option<String>), String> {
+        let bytes = self.fetch_item(owner, repo, branch, skill_md_path).await?;
+        hash_skill_payload(skill_name, &bytes)
+    }
+}
+
+impl MarketProvider for AzureDevopsProvider {
+    fn kind(&self) -> &'static str {
+        "azure"
+    }
+
+    fn display_url(&self, owner: &str, repo: &str, branch: &str) -> String {
+        // ADO's web UI spells a branch selector as `version=GB<branch>`.
+        format!(
+            "https://dev.azure.com/{}/_git/{}?version=GB{}",
+            owner, repo, branch
+        )
+    }
+
+    fn parse_reference(&self, raw: &str) -> Result<(String, String, Option<String>), String> {
+        let trimmed = raw.trim();
+        let without_scheme = trimmed
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .trim_start_matches("ssh://");
+        let without_user = match without_scheme.split_once('@') {
+            Some((_user, rest)) => rest,
+            None => without_scheme,
+        };
+        let (_host, path) = without_user
+            .split_once('/')
+            .ok_or_else(|| format!("无法解析市场地址: {}", raw))?;
+        let (path, query) = match path.split_once('?') {
+            Some((path, query)) => (path, Some(query)),
+            None => (path, None),
+        };
+        let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+        // `ssh://…@ssh.dev.azure.com/v3/{org}/{project}/{repo}` carries no `_git`
+        // marker, so drop the leading API version segment when it is present.
+        let segments = match segments.first() {
+            Some(head) if *head == "v3" => &segments[1..],
+            _ => &segments[..],
+        };
+        let git_idx = segments.iter().position(|p| *p == "_git");
+        let (coordinates, tail) = match git_idx {
+            // `_git` is the separator, so everything before it is org + project.
+            Some(idx) if idx >= 2 => segments.split_at(idx),
+            Some(_) | None if segments.len() == 3 => segments.split_at(2),
+            _ => return Err(format!("无法解析市场地址: {}", raw)),
+        };
+        if tail.first() == Some(&"_git") {
+            return Err(format!("无法解析市场地址: {}", raw));
+        }
+        let owner = coordinates.join("/");
+        let name = match tail.first() {
+            Some(name) => name.trim_end_matches(".git").to_string(),
+            None => return Err(format!("无法解析市场地址: {}", raw)),
+        };
+        if owner.is_empty() || name.is_empty() {
+            return Err(format!("无法解析市场地址: {}", raw));
+        }
+        // `?version=GBmain`, `GBrefs/heads/main` and `GBrelease%2F1.2` all appear
+        // in links the web UI hands out.
+        let branch_hint = query.and_then(|query| {
+            query.split('&').find_map(|pair| {
+                let (key, value) = pair.split_once('=')?;
+                if key != "version" {
+                    return None;
+                }
+                let value = value.strip_prefix("GB").unwrap_or(value);
+                let value = value.replace("%2F", "/");
+                let value = value
+                    .strip_prefix(ADO_BRANCH_PREFIX)
+                    .unwrap_or(&value)
+                    .to_string();
+                Some(value)
+            })
+        });
+        Ok((owner, name, branch_hint))
+    }
+
+    fn resolve_branch<'a>(&'a self, owner: &'a str, repo: &'a str) -> BoxFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            let url = format!("{}?api-version={}", Self::repo_url(owner, repo), ADO_API_VERSION);
+            let body: serde_json::Value = self.fetch_json(&url).await?;
+            let default_branch = body
+                .get("defaultBranch")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim_start_matches(ADO_BRANCH_PREFIX).to_string())
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| format!("no defaultBranch for {}/{}", owner, repo))?;
+            Ok(default_branch)
+        })
+    }
+
+    fn detect_layout<'a>(
+        &'a self,
+        owner: &'a str,
+        repo: &'a str,
+        branch: &'a str,
+    ) -> BoxFuture<'a, Option<&'static str>> {
+        Box::pin(async move {
+            let url = Self::items_url(owner, repo, branch, "/SKILL.md");
+            if self.fetch_json::<serde_json::Value>(&url).await.is_ok() {
+                return Some("root");
+            }
+            let entries: Vec<serde_json::Value> = self
+                .fetch_json(&Self::items_url(owner, repo, branch, ""))
+                .await
+                .ok()?;
+            if entries.is_empty() {
+                return None;
+            }
+            Some("subdir")
+        })
+    }
+
+    fn discover_skills<'a>(
+        &'a self,
+        market: &'a Market,
+    ) -> BoxFuture<'a, Result<Vec<RemoteSkillProbe>, Vec<String>>> {
+        Box::pin(async move {
+            let owner = &market.owner;
+            let repo = &market.name;
+            let branch = &market.branch;
+            let display_base = self.display_url(owner, repo, branch);
+
+            if market.layout == "root" {
+                let skill_name = repo.clone();
+                let ssot = match ssot_path(&skill_name, 0) {
+                    Ok(p) => p,
+                    Err(e) => return Err(vec![format!("{}: ssot path error: {}", skill_name, e)]),
+                };
+                let path = "/SKILL.md".to_string();
+                return match self
+                    .probe_skill_md(owner, repo, branch, &skill_name, &path)
+                    .await
+                {
+                    Ok((content_hash, core_hash, description)) => Ok(vec![RemoteSkillProbe {
+                        skill_name,
+                        remote_url: display_base,
+                        skill_md_repo_path: path,
+                        ssot_path: ssot.to_string_lossy().to_string(),
+                        remote_content_hash: content_hash,
+                        remote_core_hash: core_hash,
+                        description,
+                    }]),
+                    Err(e) => Err(vec![e]),
+                };
+            }
+
+            let entries: Vec<serde_json::Value> =
+                match self.fetch_json(&Self::items_url(owner, repo, branch, "")).await {
+                    Ok(v) => v,
+                    Err(e) => return Err(vec![format!("root listing: {}", e)]),
+                };
+            let mut probes = Vec::new();
+            let mut errors = Vec::new();
+            for (skill_name, entry_path) in Self::skill_dirs(&entries) {
+                let skill_md_path = format!("/{}/SKILL.md", entry_path);
+                let remote_url = format!("{}&path=%2F{}", display_base, entry_path);
+                let ssot = match ssot_path(&skill_name, 0) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        errors.push(format!("{}: ssot path error: {}", skill_name, e));
+                        continue;
+                    }
+                };
+                match self
+                    .probe_skill_md(owner, repo, branch, &skill_name, &skill_md_path)
+                    .await
+                {
+                    Ok((content_hash, core_hash, description)) => probes.push(RemoteSkillProbe {
+                        skill_name,
+                        remote_url,
+                        skill_md_repo_path: skill_md_path,
+                        ssot_path: ssot.to_string_lossy().to_string(),
+                        remote_content_hash: content_hash,
+                        remote_core_hash: core_hash,
+                        description,
+                    }),
+                    Err(e) => errors.push(format!("{}: {}", skill_name, e)),
+                }
+            }
+            if probes.is_empty() && !errors.is_empty() {
+                Err(errors)
+            } else {
+                Ok(probes)
+            }
+        })
+    }
+
+    fn fetch_skill_md<'a>(
+        &'a self,
+        market: &'a Market,
+        skill_name: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<u8>, String>> {
+        Box::pin(async move {
+            // root  → /SKILL.md; subdir → /{skill_name}/SKILL.md
+            let path = match market.layout.as_str() {
+                "root" => "/SKILL.md".to_string(),
+                _ => format!("/{}/SKILL.md", skill_name),
+            };
+            self.fetch_item(&market.owner, &market.name, &market.branch, &path)
+                .await
+        })
+    }
+
+    fn latest_commit_sha<'a>(
+        &'a self,
+        owner: &'a str,
+        repo: &'a str,
+        _branch: &'a str,
+    ) -> BoxFuture<'a, Option<String>> {
+        Box::pin(async move {
+            let body: serde_json::Value = self.fetch_json(&Self::commits_url(owner, repo)).await.ok()?;
+            body.get("value")?
+                .as_array()?
+                .first()?
+                .get("commitId")?
+                .as_str()
+                .map(|s| s.to_string())
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1263,17 +1808,34 @@ mod tests {
         assert_eq!(b.as_deref(), branch, "branch hint of {}", raw);
     }
 
+    /// The adapter a reference would resolve to, without the network probe.
+    fn kind_of(url: &str) -> &'static str {
+        provider_kind_for_reference(url).0
+    }
+
     #[test]
     fn provider_for_resolves_each_discriminator() {
         assert_eq!(provider_for("github").unwrap().kind(), "github");
         assert_eq!(provider_for("").unwrap().kind(), "github");
         assert_eq!(provider_for("gitlab").unwrap().kind(), "gitlab");
         assert_eq!(provider_for("bitbucket").unwrap().kind(), "bitbucket");
+        assert_eq!(provider_for("azure").unwrap().kind(), "azure");
         // `map` because `unwrap_err` wants `Debug` on the Ok side, which a trait object lacks.
         assert_eq!(
             provider_for("azure-devops").map(|_| ()).unwrap_err(),
             "unsupported provider: azure-devops"
         );
+    }
+
+    #[test]
+    fn azure_references_route_to_the_azure_adapter() {
+        for url in [
+            "https://dev.azure.com/org/proj/_git/repo",
+            "ssh://git@ssh.dev.azure.com/v3/org/proj/repo",
+            "https://org@org.visualstudio.com/proj/_git/repo",
+        ] {
+            assert_eq!(kind_of(url), "azure", "{}", url);
+        }
     }
 
     #[test]
@@ -1284,7 +1846,7 @@ mod tests {
             "gitlab.com/g/r",
             "git@gitlab.com:g/r.git",
         ] {
-            assert_eq!(provider_for_reference(url).unwrap().kind(), "gitlab", "{}", url);
+            assert_eq!(kind_of(url), "gitlab", "{}", url);
         }
         for url in [
             "https://bitbucket.org/ws/repo",
@@ -1292,10 +1854,10 @@ mod tests {
             "bitbucket.org/ws/repo",
             "git@bitbucket.org:ws/repo.git",
         ] {
-            assert_eq!(provider_for_reference(url).unwrap().kind(), "bitbucket", "{}", url);
+            assert_eq!(kind_of(url), "bitbucket", "{}", url);
         }
         for url in ["https://github.com/o/r", "owner/repo", "https://notgitlab.com/o/r"] {
-            assert_eq!(provider_for_reference(url).unwrap().kind(), "github", "{}", url);
+            assert_eq!(kind_of(url), "github", "{}", url);
         }
     }
 
@@ -1382,21 +1944,121 @@ mod tests {
     #[test]
     fn gitlab_builds_tree_and_file_urls() {
         assert_eq!(
-            GitlabProvider::tree_url("grp/sub", "repo", "main", "/skills", 2),
+            gitlab().tree_url("grp/sub", "repo", "main", "/skills", 2),
             "https://gitlab.com/api/v4/projects/grp%2Fsub%2Frepo/repository/tree?path=skills&ref=main&per_page=100&page=2"
         );
         assert_eq!(
-            GitlabProvider::tree_url("grp", "repo", "main", "", 1),
+            gitlab().tree_url("grp", "repo", "main", "", 1),
             "https://gitlab.com/api/v4/projects/grp%2Frepo/repository/tree?path=&ref=main&per_page=100&page=1"
         );
         assert_eq!(
-            GitlabProvider::file_url("grp", "repo", "main", "/SKILL.md"),
+            gitlab().file_url("grp", "repo", "main", "/SKILL.md"),
             "https://gitlab.com/api/v4/projects/grp%2Frepo/repository/files/SKILL.md/raw?ref=main"
         );
         assert_eq!(
-            GitlabProvider::file_url("grp/sub", "repo", "dev/x", "/a b/SKILL.md"),
+            gitlab().file_url("grp/sub", "repo", "dev/x", "/a b/SKILL.md"),
             "https://gitlab.com/api/v4/projects/grp%2Fsub%2Frepo/repository/files/a%20b%2FSKILL.md/raw?ref=dev%2Fx"
         );
+    }
+
+    #[test]
+    fn a_self_hosted_instance_only_moves_the_root() {
+        let gnome = GitlabProvider::with_base("https://gitlab.gnome.org/");
+        assert_eq!(gnome.base, "https://gitlab.gnome.org");
+        assert_eq!(
+            gnome.file_url("roi824", "manuals", "main", "/SKILL.md"),
+            "https://gitlab.gnome.org/api/v4/projects/roi824%2Fmanuals/repository/files/SKILL.md/raw?ref=main"
+        );
+        assert_eq!(
+            gnome.display_url("roi824", "manuals", "main"),
+            "https://gitlab.gnome.org/roi824/manuals/-/tree/main"
+        );
+        // Pasting the API root instead of the instance root must not double it.
+        assert_eq!(
+            GitlabProvider::with_base("https://gitlab.example.org/api/v4").base,
+            "https://gitlab.example.org"
+        );
+    }
+
+    #[test]
+    fn a_self_hosted_reference_parses_like_a_saas_one() {
+        let gnome = GitlabProvider::with_base("https://gitlab.gnome.org");
+        let (owner, name, branch) = gnome
+            .parse_reference("https://gitlab.gnome.org/roi824/manuals/-/tree/main/doc")
+            .expect("self-hosted link");
+        assert_eq!((owner.as_str(), name.as_str(), branch.as_deref()), ("roi824", "manuals", Some("main")));
+    }
+
+    #[test]
+    fn the_instance_probe_is_the_anonymous_projects_list() {
+        assert_eq!(
+            GitlabProvider::instance_probe_url("https://gitlab.gnome.org/"),
+            "https://gitlab.gnome.org/api/v4/projects?per_page=1"
+        );
+    }
+
+    #[test]
+    fn provider_kind_routes_known_hosts_without_the_network() {
+        assert_eq!(provider_kind_for_reference("https://gitlab.com/g/r"), ("gitlab", None));
+        assert_eq!(
+            provider_kind_for_reference("https://bitbucket.org/ws/r"),
+            ("bitbucket", None)
+        );
+        assert_eq!(
+            provider_kind_for_reference("https://dev.azure.com/org/proj/_git/repo"),
+            ("azure", None)
+        );
+        assert_eq!(
+            provider_kind_for_reference("https://org.visualstudio.com/proj/_git/repo"),
+            ("azure", None)
+        );
+        // A bare `owner/repo` and a github.com URL need no probe at all.
+        assert_eq!(provider_kind_for_reference("owner/repo"), ("github", None));
+        assert_eq!(
+            provider_kind_for_reference("https://github.com/o/r"),
+            ("github", None)
+        );
+        // An unknown host that looks like owner/repo is offered for probing.
+        assert_eq!(
+            provider_kind_for_reference("https://gitlab.gnome.org/roi824/manuals"),
+            ("github", Some("https://gitlab.gnome.org".to_string()))
+        );
+    }
+
+    #[test]
+    fn instance_base_reads_a_stored_display_url() {
+        assert_eq!(
+            instance_base("https://gitlab.gnome.org/roi824/manuals/-/tree/main"),
+            Some("https://gitlab.gnome.org".to_string())
+        );
+        assert_eq!(instance_base("http://git.local/grp/r/-/tree/main"), Some("http://git.local".to_string()));
+        assert_eq!(instance_base("not a url"), None);
+    }
+
+    #[test]
+    fn provider_for_market_keeps_the_instance_from_the_stored_url() {
+        let market = Market {
+            id: 1,
+            provider: "gitlab".to_string(),
+            owner: "roi824".to_string(),
+            name: "manuals".to_string(),
+            branch: "main".to_string(),
+            layout: "subdir".to_string(),
+            enabled: true,
+            remote_url: "https://gitlab.gnome.org/roi824/manuals/-/tree/main".to_string(),
+            last_commit_sha: None,
+            last_indexed_at: None,
+            last_checked_at: None,
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+        assert_eq!(provider_for_market(&market).unwrap().kind(), "gitlab");
+        // The SaaS URL keeps the default base rather than being re-derived.
+        let saas = Market {
+            remote_url: "https://gitlab.com/g/r/-/tree/main".to_string(),
+            ..market
+        };
+        assert_eq!(provider_for_market(&saas).unwrap().kind(), "gitlab");
     }
 
     #[test]

@@ -8,7 +8,7 @@
 
 use crate::db::Database;
 use crate::models::{Market, MarketSyncResult};
-use crate::providers::{provider_for, RemoteSkillProbe};
+use crate::providers::{provider_for_market, RemoteSkillProbe};
 use rusqlite::params;
 
 /// Scan a single market: pick its provider adapter, discover remote skills,
@@ -16,7 +16,7 @@ use rusqlite::params;
 /// into the result (not returned as `Err`) so callers can render per-market
 /// failures alongside the successful batch.
 pub async fn scan_market(db: &Database, market: &Market) -> Result<MarketSyncResult, String> {
-    let provider = provider_for(&market.provider)?;
+    let provider = provider_for_market(market)?;
     let probes = match provider.discover_skills(market).await {
         Ok(p) => p,
         Err(errs) => {

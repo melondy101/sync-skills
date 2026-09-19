@@ -135,7 +135,7 @@ pub struct DiscoveredSkill {
 // ==================== M5: Conflict types ====================
 
 /// A version of a conflicted skill from a specific tool
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConflictVersion {
     pub tool_id: i64,
     pub tool_name: String,
@@ -184,6 +184,11 @@ pub struct Market {
     /// or `"root"` (the repository itself is a single skill — e.g. `karpathy/skill`).
     #[serde(default = "default_market_layout")]
     pub layout: String,
+    /// The browser URL for this market at its branch. Beyond display, it is what
+    /// carries a self-hosted GitLab instance's host, so re-adding or indexing a
+    /// market reaches the same API it was discovered through.
+    #[serde(default)]
+    pub remote_url: String,
     pub created_at: String,
     pub updated_at: String,
 }

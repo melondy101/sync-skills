@@ -194,6 +194,16 @@ export interface ConflictView {
   versions: ConflictVersion[];
 }
 
+/** Per-conflict result of a batch automatic adjudication. */
+export interface AutoResolveOutcome {
+  conflict_id: number;
+  skill_name: string;
+  resolved: boolean;
+  kept_tool: string | null;
+  reason: string | null;
+  errors: string[];
+}
+
 export interface Toast {
   type: "success" | "error" | "info";
   message: string;
@@ -251,6 +261,12 @@ export interface Market {
    * market rows return undefined at runtime and default to "subdir".
    */
   layout?: "subdir" | "root";
+  /**
+   * Browser URL of the market at its branch. Also the carrier of a
+   * self-hosted GitLab instance's host, so indexing a stored market reaches
+   * the API it was discovered through.
+   */
+  remote_url?: string;
   created_at: string;
   updated_at: string;
 }

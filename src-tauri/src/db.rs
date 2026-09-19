@@ -1284,7 +1284,7 @@ impl Database {
     pub fn list_markets(&self) -> Result<Vec<crate::models::Market>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let mut stmt = conn
-            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, layout FROM markets ORDER BY created_at")
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, layout, remote_url FROM markets ORDER BY created_at")
             .map_err(|e| format!("Prepare error: {}", e))?;
         let markets = stmt
             .query_map([], |row| {
@@ -1301,6 +1301,7 @@ impl Database {
                     created_at: row.get(9)?,
                     updated_at: row.get(10)?,
                     layout: row.get::<_, String>(11)?,
+                    remote_url: row.get::<_, String>(12).unwrap_or_default(),
                 })
             })
             .map_err(|e| format!("Query error: {}", e))?
@@ -1312,7 +1313,7 @@ impl Database {
     pub fn get_market(&self, market_id: i64) -> Result<Option<crate::models::Market>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let mut stmt = conn
-            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, layout FROM markets WHERE id = ?1")
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, layout, remote_url FROM markets WHERE id = ?1")
             .map_err(|e| format!("Prepare error: {}", e))?;
         let result = stmt
             .query_row(params![market_id], |row| {
@@ -1329,6 +1330,7 @@ impl Database {
                     created_at: row.get(9)?,
                     updated_at: row.get(10)?,
                     layout: row.get::<_, String>(11)?,
+                    remote_url: row.get::<_, String>(12).unwrap_or_default(),
                 })
             });
         match result {
@@ -1347,7 +1349,7 @@ impl Database {
     pub fn get_market_by_key(&self, provider: &str, owner: &str, name: &str, branch: &str) -> Result<Option<crate::models::Market>, String> {
         let conn = self.conn.lock().map_err(|e| format!("Lock error: {}", e))?;
         let mut stmt = conn
-            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, layout FROM markets WHERE provider = ?1 AND owner = ?2 AND name = ?3 AND branch = ?4")
+            .prepare("SELECT id, provider, owner, name, branch, enabled, last_indexed_at, last_checked_at, last_commit_sha, created_at, updated_at, layout, remote_url FROM markets WHERE provider = ?1 AND owner = ?2 AND name = ?3 AND branch = ?4")
             .map_err(|e| format!("Prepare error: {}", e))?;
         let result = stmt
             .query_row(params![provider, owner, name, branch], |row| {
@@ -1364,6 +1366,7 @@ impl Database {
                     created_at: row.get(9)?,
                     updated_at: row.get(10)?,
                     layout: row.get::<_, String>(11)?,
+                    remote_url: row.get::<_, String>(12).unwrap_or_default(),
                 })
             });
         match result {
