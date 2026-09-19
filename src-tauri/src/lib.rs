@@ -23,6 +23,7 @@ mod scanner;
 mod settings;
 mod sync;
 mod watcher;
+mod workspaces;
 
 use db::Database;
 use lock::LockManager;
@@ -161,6 +162,7 @@ pub fn run() {
             commands::app_settings::update_settings,
             // Projects (M3)
             commands::projects::list_projects,
+            commands::projects::discover_workspaces,
             commands::projects::add_project,
             commands::projects::delete_project,
             commands::projects::update_project,

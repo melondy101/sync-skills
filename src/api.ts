@@ -11,7 +11,7 @@ import type {
   SkillFile, SkillLint, AppUpdateInfo,
   Market, MarketTemplate, RemoteSkill, RemoteSkillDetail, RemoteSkillUpdate, MarketSyncResult,
   RemoteInstallation, MarketCommitUpdate, RemoteSkillInstalledResult, PathCheck,
-  RecoveryNotice,
+  RecoveryNotice, WorkspaceCandidate,
 } from "./types";
 
 // ==================== Tools ====================
@@ -33,6 +33,9 @@ export const discoverTools = () => invoke<ToolTemplate[]>("discover_tools");
 
 /** Preflight a typed path: tells the form whether it resolves and exists. */
 export const checkPath = (path: string) => invoke<PathCheck>("check_path", { path });
+
+/** Workspaces the local coding tools remember, offered for import. */
+export const discoverWorkspaces = () => invoke<WorkspaceCandidate[]>("discover_workspaces");
 
 /** Non-null once per run, when startup quarantined a corrupt index. */
 export const getDbRecovery = () => invoke<RecoveryNotice | null>("get_db_recovery");

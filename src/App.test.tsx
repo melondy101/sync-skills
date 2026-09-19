@@ -6,7 +6,7 @@
 // (components never call `invoke` directly, per CONTRIBUTING.md).
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { listen } from "@tauri-apps/api/event";
 import App from "./App";
 import * as api from "./api";
@@ -92,6 +92,7 @@ beforeEach(() => {
   vi.mocked(api.discoverTools).mockResolvedValue([]);
   vi.mocked(api.listToolTemplates).mockResolvedValue([]);
   vi.mocked(api.getDbRecovery).mockResolvedValue(null);
+  vi.mocked(api.discoverWorkspaces).mockResolvedValue([]);
 });
 
 async function renderApp() {
@@ -237,6 +238,28 @@ describe("App orchestration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(api.getDbRecovery).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers the workspaces other tools remember for one-click import", async () => {
+    vi.mocked(api.discoverWorkspaces).mockResolvedValue([
+      { name: "MyBlog", path: "D:/MyBlog", source: "claude" },
+      { name: "copyCursor", path: "d:/Develop/copyCursor", source: "cursor" },
+    ]);
+    vi.mocked(api.addProject).mockResolvedValue(mockProject);
+    await renderApp();
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+
+    const region = await screen.findByRole("region", {
+      name: "Workspaces other tools remember",
+    });
+    expect(within(region).getByText("MyBlog")).toBeInTheDocument();
+    expect(within(region).getByText("Cursor")).toBeInTheDocument();
+
+    fireEvent.click(within(region).getAllByRole("button", { name: "Add" })[0]);
+
+    await waitFor(() => expect(api.addProject).toHaveBeenCalledWith("MyBlog", "D:/MyBlog"));
+    // Importing one leaves the other proposed, and the project list reloads.
+    expect(within(region).getByText("copyCursor")).toBeInTheDocument();
   });
 
   it("only notifies when neither full-auto nor the toggle is on", async () => {

@@ -3,12 +3,20 @@
 
 use crate::models::Project;
 use crate::paths;
+use crate::workspaces::{self, WorkspaceCandidate};
 use crate::DbState;
 use tauri::State;
 
 #[tauri::command]
 pub fn list_projects(db: State<DbState>) -> Result<Vec<Project>, String> {
     db.list_projects()
+}
+
+/// Workspaces the local coding tools remember, offered for import. Proposes only
+/// — nothing is added to the database until the user accepts a candidate.
+#[tauri::command]
+pub fn discover_workspaces(db: State<DbState>) -> Result<Vec<WorkspaceCandidate>, String> {
+    workspaces::discover_workspaces(&db)
 }
 
 #[tauri::command]

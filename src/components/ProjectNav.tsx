@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Skill Manager Contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as api from "../api";
-import type { Project } from "../types";
+import type { Project, WorkspaceCandidate } from "../types";
 import type { TranslateFn } from "../i18n";
 import { localizeApiError } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
@@ -34,6 +34,8 @@ export function ProjectNav({
   const [editProjectName, setEditProjectName] = useState("");
   const [editProjectPath, setEditProjectPath] = useState("");
   const [editPathHint, setEditPathHint] = useState("");
+  const [wsCandidates, setWsCandidates] = useState<WorkspaceCandidate[]>([]);
+  const [addingWorkspaces, setAddingWorkspaces] = useState(false);
   const addDialogRef = useRef<HTMLDivElement>(null);
   const editDialogRef = useRef<HTMLDivElement>(null);
 
@@ -76,6 +78,44 @@ export function ProjectNav({
       setHint(check.is_dir ? "" : `${t("pathErrorNotFound")}: ${check.expanded}`);
     } catch (e) {
       setHint(localizeApiError(t, String(e)));
+    }
+  }
+
+  // PRD §11 自动检测工作区目录: the tools already remember which folders were
+  // opened, so the panel only proposes them — one import per click, and a
+  // failure on one candidate must not stop the rest.
+  useEffect(() => {
+    let active = true;
+    api
+      .discoverWorkspaces()
+      .then((found) => {
+        if (active) setWsCandidates(found);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleAddWorkspace(candidate: WorkspaceCandidate) {
+    try {
+      await api.addProject(candidate.name, candidate.path);
+      setWsCandidates((prev) => prev.filter((c) => c.path !== candidate.path));
+      await onProjectsChanged();
+      addToast("success", `${t("projectAdded")} "${candidate.name}"`);
+    } catch (e) {
+      addToast("error", `${t("failedAddProject")}: ${localizeApiError(t, String(e))}`);
+    }
+  }
+
+  async function handleAddAllWorkspaces() {
+    setAddingWorkspaces(true);
+    try {
+      for (const candidate of [...wsCandidates]) {
+        await handleAddWorkspace(candidate);
+      }
+    } finally {
+      setAddingWorkspaces(false);
     }
   }
 
@@ -149,6 +189,46 @@ export function ProjectNav({
             </button>
           </div>
         ))}
+        {wsCandidates.length > 0 && (
+          <div className="workspace-candidates" role="region" aria-label={t("foundWorkspaces")}>
+            <p className="workspace-candidates-title">
+              {t("foundWorkspaces")} ({wsCandidates.length})
+            </p>
+            {wsCandidates.map((candidate) => (
+              <div className="workspace-candidate" key={`${candidate.source}:${candidate.path}`}>
+                <span className="workspace-candidate-name" title={candidate.path}>
+                  {candidate.name}
+                  <span className="workspace-candidate-source">
+                    {candidate.source === "cursor" ? t("wsSourceCursor") : t("wsSourceClaude")}
+                  </span>
+                </span>
+                <button
+                  className="btn btn-small btn-primary"
+                  disabled={addingWorkspaces}
+                  onClick={() => void handleAddWorkspace(candidate)}
+                >
+                  {t("add")}
+                </button>
+              </div>
+            ))}
+            <div className="workspace-candidates-actions">
+              <button
+                className="btn btn-small btn-secondary"
+                disabled={addingWorkspaces}
+                onClick={() => void handleAddAllWorkspaces()}
+              >
+                {t("addAll")}
+              </button>
+              <button
+                className="btn btn-small btn-secondary"
+                onClick={() => setWsCandidates([])}
+              >
+                {t("dismiss")}
+              </button>
+            </div>
+          </div>
+        )}
+
         <button
           className="btn btn-small btn-primary"
           onClick={() => setShowAddProject(true)}

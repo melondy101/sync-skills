@@ -335,3 +335,8 @@ export interface RecoveryNotice {
   reason: string;
   moved_to: string;
 }
+export interface WorkspaceCandidate {
+  path: string;
+  name: string;
+  source: string;
+}
