@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 冲突自动裁决（M5 补全）：`commands/conflicts.rs` 抽出 `promote_version`，手动与自动共用同一条"提升为 SSOT 并广播"的路径；新 IPC `auto_resolve_conflicts` 提供 `newest`（比 `SKILL.md` 修改时间）与 `preferred-tool`（按工具列表顺序取第一个确实持有版本的工具）两种策略，时间戳读不到或并列时**不裁决**并把原因返回，冲突留在面板等手动处理；自动裁决在 `skill_conflicts.resolved_by` 记为 `auto:<strategy>:<tool>` 以区分人工点击；冲突横幅新增策略下拉 + 带确认对话框的「自动裁决」按钮
 
 ### Fixed
+- Linux 上 `~\...` 形式的 Windows 路径被静默解析成一个畸形目录名：`scanner::expand_path` 的 `~` 分支写的是 `home.join(&path[2..])`，而 Unix 把反斜杠当普通字符，于是 `~\.claude\skills\` 展开成 `/home/<user>/\.claude\skills\`（一个真实存在但不该有的名字）；同一输入在 `paths::looks_absolute` 里却按分隔符处理（它无条件 `replace('\\', "/")`），两处对"什么算分隔符"的判断不一致。改为按 `/` 与 `\` 两种分隔符切成组件逐段 `join`，`edge_tests.rs` 补多段断言把这条固定在 scanner 这一层
 - 全新 clone 根本构建不了（chicken-and-egg）：`bundle.externalBin` 由 tauri 的构建脚本在**每一次** cargo 调用时校验 `src-tauri/bin/skill-manager-mcp-<triple>[.exe]`，而该文件只能由构建产物 stage 出来，于是 `cargo build` / `tauri dev` 一律报 `resource path ... doesn't exist`。`pnpm stage:sidecar` 现在带 `--allow-placeholder`——无产物时先写空占位打破循环，首次构建后再跑一次即替换为真二进制（`beforeBundleCommand` 保持严格：缺真二进制就报错，绝不把占位打进安装包）。启动步骤同步补进 `AGENTS.md`、`CONTRIBUTING.md`、README ×3 与 `docs/HANDOFF.md`
 - 全自动模式下文件监听只重扫、不同步：`App.tsx` 的 `skill-file-changed` 处理改为按 1.5s debounce 触发 `fullScan` + 同步，半自动模式仍只提示
 - 本地开发/打包无法启动：加入第二个 `[[bin]]`（`skill-manager-mcp`）之后，`cargo run` 报 `unable to find binary 'skill-manager'`/`could not determine which binary to run`，而 `tauri dev` 与 `tauri build` 都经它启动。`src-tauri/Cargo.toml` 补 `default-run = "skill-manager"`（MCP 面板此前无法在真实窗口点测即源于此）

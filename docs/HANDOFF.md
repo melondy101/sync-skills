@@ -13,7 +13,7 @@
 **许可证**：AGPL-3.0-only  
 **上游仓库**：`github.com/huang-yi-dae/sync-skills`  
 
-最新发布标签为 `v0.3.0`（2026-09-19）。发版走 `git tag vX.Y.Z && git push origin vX.Y.Z`，由 `.github/workflows/release.yml` 出包；该 workflow 目前被 `02910d5`「temporarily remove workflows」临时移除、仓库里并不存在，所以推标签不会有任何构建产物——发版前需先把 `.github/workflows/` 恢复回去。详见 [CHANGELOG.md](CHANGELOG.md)。
+最新发布标签为 `v0.3.0`（2026-09-19，Linux + Windows 两个安装包）。发版走 `git tag vX.Y.Z && git push origin vX.Y.Z`，由 `.github/workflows/release.yml` 构建，产物先汇总成一个 **draft** Release，需在 Releases 页面人工转为 published（或 `gh release edit vX.Y.Z --draft=false`）。macOS 自 `4eeb791` 起不在矩阵里，`tauri.conf.json` 仍声明 `app`/`dmg`，要出 macOS 包只需把 `macos-latest` 加回 matrix。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 

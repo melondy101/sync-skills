@@ -192,7 +192,15 @@ fn is_hidden(path: &Path) -> bool {
 pub fn expand_path(path: &str) -> Result<std::path::PathBuf, String> {
     let expanded = if path.starts_with("~/") || path.starts_with("~\\") {
         let home = dirs::home_dir().ok_or("Cannot find home directory")?;
-        home.join(&path[2..])
+        // Joined component by component rather than `home.join(rest)`: on Unix a
+        // backslash is an ordinary character, so `~\.claude\skills` would become
+        // one directory literally named `\.claude\skills`. `paths::looks_absolute`
+        // already reads `\` as a separator on every platform, and the expansion
+        // has to agree with that or the two checks disagree about the same input.
+        path[2..]
+            .split(['/', '\\'])
+            .filter(|part| !part.is_empty())
+            .fold(home, |acc, part| acc.join(part))
     } else if path == "~" {
         dirs::home_dir().ok_or("Cannot find home directory".to_string())?
     } else {

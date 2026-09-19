@@ -284,6 +284,16 @@ fn expand_path_tilde_variants() {
     assert_eq!(scanner::expand_path("~").unwrap(), home);
     assert_eq!(scanner::expand_path("~/x").unwrap(), home.join("x"));
     assert_eq!(scanner::expand_path("~\\x").unwrap(), home.join("x"));
+    // Multi-segment: the interior separators must also become real components,
+    // which is exactly what a Unix host used to get wrong.
+    assert_eq!(
+        scanner::expand_path("~\\a\\b\\").unwrap(),
+        home.join("a").join("b")
+    );
+    assert_eq!(
+        scanner::expand_path("~/a/b").unwrap(),
+        home.join("a").join("b")
+    );
 }
 
 #[test]
