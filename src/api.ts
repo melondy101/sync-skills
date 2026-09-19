@@ -10,7 +10,7 @@ import type {
   SkillUpdate, SkillDiff, SyncLog, Settings, ConflictView,
   SkillFile, SkillLint, AppUpdateInfo,
   Market, MarketTemplate, RemoteSkill, RemoteSkillDetail, RemoteSkillUpdate, MarketSyncResult,
-  RemoteInstallation, MarketCommitUpdate, RemoteSkillInstalledResult,
+  RemoteInstallation, MarketCommitUpdate, RemoteSkillInstalledResult, PathCheck,
 } from "./types";
 
 // ==================== Tools ====================
@@ -29,6 +29,9 @@ export const deleteTool = (toolId: number, toolName: string) =>
 export const listToolTemplates = () => invoke<ToolTemplate[]>("list_tool_templates");
 
 export const discoverTools = () => invoke<ToolTemplate[]>("discover_tools");
+
+/** Preflight a typed path: tells the form whether it resolves and exists. */
+export const checkPath = (path: string) => invoke<PathCheck>("check_path", { path });
 
 // ==================== Skills ====================
 

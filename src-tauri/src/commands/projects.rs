@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 use crate::models::Project;
+use crate::paths;
 use crate::DbState;
 use tauri::State;
 
@@ -12,6 +13,7 @@ pub fn list_projects(db: State<DbState>) -> Result<Vec<Project>, String> {
 
 #[tauri::command]
 pub fn add_project(db: State<DbState>, name: String, path: String) -> Result<Project, String> {
+    let path = validated_project_path(&path)?;
     let project = db.add_project(&name, &path)?;
     let _ = db.insert_action_log("add_project", None, None, project.id, "success", Some(&format!("{} ({})", name, path)));
     Ok(project)
@@ -28,7 +30,18 @@ pub fn delete_project(db: State<DbState>, project_id: i64) -> Result<(), String>
 
 #[tauri::command]
 pub fn update_project(db: State<DbState>, project_id: i64, name: String, path: String) -> Result<(), String> {
+    let path = validated_project_path(&path)?;
     db.update_project(project_id, &name, &path)?;
     let _ = db.insert_action_log("edit_project", None, None, project_id, "success", Some(&format!("{} ({})", name, path)));
     Ok(())
+}
+
+/// Unlike a tool path — which may point somewhere the tool has not created yet —
+/// a project root has to be a directory that is already there.
+fn validated_project_path(raw: &str) -> Result<String, String> {
+    let check = paths::check_user_path(raw)?;
+    if !check.is_dir {
+        return Err(format!("path-not-found:{}", check.expanded));
+    }
+    Ok(check.input)
 }

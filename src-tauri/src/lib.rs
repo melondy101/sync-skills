@@ -17,6 +17,7 @@ mod market;
 mod mcp;
 mod models;
 mod ops;
+mod paths;
 mod providers;
 mod scanner;
 mod settings;
@@ -136,6 +137,7 @@ pub fn run() {
             commands::tools::delete_tool,
             commands::tools::list_tool_templates,
             commands::tools::discover_tools,
+            commands::paths::check_path,
             // Skills
             commands::skills::list_skills,
             commands::skills::read_skill_md,

@@ -323,3 +323,9 @@ export interface MarketCommitUpdate {
   new_commit_sha: string;
 }
 
+export interface PathCheck {
+  input: string;
+  expanded: string;
+  exists: boolean;
+  is_dir: boolean;
+}

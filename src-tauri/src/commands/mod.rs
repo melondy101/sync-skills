@@ -8,6 +8,7 @@ pub mod app_settings;
 pub mod conflicts;
 pub mod logs;
 pub mod market;
+pub mod paths;
 pub mod projects;
 pub mod scan;
 pub mod skills;

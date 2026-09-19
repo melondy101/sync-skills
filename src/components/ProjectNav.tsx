@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import * as api from "../api";
 import type { Project } from "../types";
 import type { TranslateFn } from "../i18n";
+import { localizeApiError } from "../i18n";
 import type { AddToastFn } from "../hooks/useToasts";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Icon } from "./Icon";
@@ -28,9 +29,11 @@ export function ProjectNav({
   const [showAddProject, setShowAddProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectPath, setNewProjectPath] = useState("");
+  const [addPathHint, setAddPathHint] = useState("");
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editProjectName, setEditProjectName] = useState("");
   const [editProjectPath, setEditProjectPath] = useState("");
+  const [editPathHint, setEditPathHint] = useState("");
   const addDialogRef = useRef<HTMLDivElement>(null);
   const editDialogRef = useRef<HTMLDivElement>(null);
 
@@ -48,10 +51,6 @@ export function ProjectNav({
       addToast("error", t("nameAndPathRequiredProject"));
       return;
     }
-    if (newProjectPath.startsWith("./") || newProjectPath.startsWith("../")) {
-      addToast("error", t("enterAbsolutePath"));
-      return;
-    }
     try {
       await api.addProject(newProjectName, newProjectPath);
       setShowAddProject(false);
@@ -61,7 +60,22 @@ export function ProjectNav({
       await onProjectsChanged();
       addToast("success", `${t("projectAdded")} "${addedName}"`);
     } catch (e) {
-      addToast("error", `${t("failedAddProject")}: ${e}`);
+      addToast("error", `${t("failedAddProject")}: ${localizeApiError(t, String(e))}`);
+    }
+  }
+
+  // The backend owns the path rules (`src-tauri/src/paths.rs`); the form only asks
+  // whether what was typed points at a directory, so a typo shows up before submit.
+  async function reportPath(raw: string, setHint: (hint: string) => void) {
+    if (!raw.trim()) {
+      setHint("");
+      return;
+    }
+    try {
+      const check = await api.checkPath(raw);
+      setHint(check.is_dir ? "" : `${t("pathErrorNotFound")}: ${check.expanded}`);
+    } catch (e) {
+      setHint(localizeApiError(t, String(e)));
     }
   }
 
@@ -99,7 +113,7 @@ export function ProjectNav({
       await onProjectsChanged();
       addToast("success", t("projectUpdated"));
     } catch (e) {
-      addToast("error", `${t("failedUpdateProject")}: ${e}`);
+      addToast("error", `${t("failedUpdateProject")}: ${localizeApiError(t, String(e))}`);
     }
   }
 
@@ -172,9 +186,11 @@ export function ProjectNav({
                 type="text"
                 value={newProjectPath}
                 onChange={(e) => setNewProjectPath(e.target.value)}
+                onBlur={() => void reportPath(newProjectPath, setAddPathHint)}
                 className="edit-input"
                 placeholder={t("projectPathPlaceholder")}
               />
+              {addPathHint && <p className="settings-hint update-error">{addPathHint}</p>}
             </div>
             <div className="modal-actions">
               <button className="btn btn-primary" onClick={handleAddProject}>{t("add")}</button>
@@ -212,8 +228,10 @@ export function ProjectNav({
                 type="text"
                 value={editProjectPath}
                 onChange={(e) => setEditProjectPath(e.target.value)}
+                onBlur={() => void reportPath(editProjectPath, setEditPathHint)}
                 className="edit-input"
               />
+              {editPathHint && <p className="settings-hint update-error">{editPathHint}</p>}
             </div>
             <div className="modal-actions">
               <button className="btn btn-primary" onClick={handleSaveProjectEdit}>{t("save")}</button>
