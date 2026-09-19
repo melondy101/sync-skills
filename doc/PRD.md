@@ -163,8 +163,8 @@ function scan(dir):
 
 `SSOT` 按 `(name, project_id)` 域隔离：
 
-- 全局域：`~/.agents/skill-manager/ssot/<name>/`
-- 项目域：`~/.agents/skill-manager/ssot/_p<project_id>/<name>/`
+- 全局域：`~/.skill-manager/ssot/<name>/`
+- 项目域：`~/.skill-manager/ssot/_p<project_id>/<name>/`
 
 **同步流程：**
 
@@ -446,15 +446,25 @@ flowchart TD
 
 ## 11. 未实现功能
 
-以下功能已讨论或部分实现，但尚未完全落地：
+历史版本本节列出的条目已逐项核对代码，落地情况如下（“落点”为实际实现位置）：
 
-- 文件系统监听自动同步（M12）。
-- 时间戳驱动同步 UI（M11 部分完成）。
-- `core_hash` 用于更新检测，而非仅用于冲突检测（M9 部分完成）。
-- `MCP` 集成：MCP Server 配置管控与跨工具同步。
-- 除 GitHub 外的其他代码托管平台适配。
-- 自动检测工作区目录。
-- 定时检测同步。
+| 功能 | 状态 | 落点 |
+|------|------|------|
+| 文件系统监听自动同步（M12） | 已实现 | `src-tauri/src/watcher.rs` 只监听 `SKILL.md`，`App.tsx` 半自动提示 / 全自动 debounce 后扫描并同步 |
+| 时间戳驱动同步 UI（M11） | 已定稿，不改 | 决策为仅展示时间戳，同步判定仍以 hash 为准（见 `doc/phase4_design.md` §二） |
+| `core_hash` 用于更新检测（M9） | 已实现 | `sync.rs` 的检查更新路径按 `core_hash` 比对，附属文件变更不再触发提示 |
+| `MCP` 集成：Server 配置管控与跨工具同步 | 部分实现 | `mcp.rs` + `skill-manager-mcp` 二进制提供只读服务；`mcp_config.rs` 负责六家 JSON 配置的登记/移除。Codex 的 TOML 与安装包内的二进制分发仍未落地 |
+| 除 GitHub 外的其他代码托管平台适配 | 部分实现 | `providers.rs`：GitHub、gitlab.com、Bitbucket Cloud。GitLab 自建实例与 Azure DevOps 未落地 |
+| 自动检测工作区目录 | 已实现 | `workspaces.rs`：读 `~/.claude.json` 与 Cursor `workspaceStorage`，项目面板一键导入 |
+| 定时检测同步 | 部分实现 | `useUpdateSchedule.ts` 只做定时**检测**并提示，不做定时写入（与 §10「无后台进程」一致） |
+
+仍未落地的开放项：
+
+- `MCP`：随安装包分发 `skill-manager-mcp` 可执行文件（当前 bundle 只含主程序，安装版登记会指向不存在的路径，设置面板已给出告警）。
+- `MCP`：Codex `~/.codex/config.toml` 的 `[mcp_servers]` 写入——保留用户注释需要 `toml_edit`，目前不是依赖。
+- `Market`：GitLab 自建实例（非 `gitlab.com` 主机目前按 GitHub 解析）。
+- `Market`：Azure DevOps——匿名读取受组织策略限制，无法在无凭据下验证。
+- 冲突自动裁决策略（当前仅手动裁决）。
 
 ## 12. 验收检查清单
 
@@ -665,6 +675,7 @@ Rust 后端通过 `#[tauri::command]` 暴露接口给 React 前端。
 | `delete_tool` | `tool_id, tool_name?` | `Result<()>` | 删除工具（级联删除）。 |
 | `list_tool_templates` | - | `Vec<ToolTemplate>` | 获取内置工具模板列表。 |
 | `discover_tools` | - | `Vec<ToolTemplate>` | 自动发现本机已安装但未注册的工具。 |
+| `check_path` | `path` | `PathCheck` | 校验用户输入路径：`~` 展开结果、是否存在、是否目录（§14 规则的单一入口）。 |
 
 #### 17.3.2 项目管理
 
@@ -674,6 +685,7 @@ Rust 后端通过 `#[tauri::command]` 暴露接口给 React 前端。
 | `add_project` | `name, path` | `Result<Project>` | 添加项目，触发扫描。 |
 | `update_project` | `project_id, name, path` | `Result<()>` | 修改项目名称和路径。 |
 | `delete_project` | `project_id` | `Result<()>` | 删除项目（级联删除）。 |
+| `discover_workspaces` | - | `Vec<WorkspaceCandidate>` | 从本机工具的会话记录里发现未注册的工作区，供一键导入。 |
 
 #### 17.3.3 Skill 管理
 
@@ -748,7 +760,17 @@ Rust 后端通过 `#[tauri::command]` 暴露接口给 React 前端。
 | Command | 参数 | 返回 | 说明 |
 |---------|------|------|------|
 | `get_settings` | - | `Settings` | 获取应用设置。 |
-| `update_settings` | `Settings` | `Result<()>` | 更新设置（含同步模式切换）。 |
+| `update_settings` | `Settings` | `Result<()>` | 更新设置（含同步模式切换、定时检测间隔）。 |
+
+#### 17.3.9 `MCP` 与诊断
+
+| Command | 参数 | 返回 | 说明 |
+|---------|------|------|------|
+| `mcp_suggested_entry` | - | `McpSuggestedEntry` | 本应用会写入的服务命令，以及该可执行文件是否存在。 |
+| `mcp_status` | `entry?` | `Vec<McpTargetStatus>` | 每个已知工具的 `mcpServers` 登记状态（只读）。 |
+| `mcp_install` | `entry?` | `Vec<McpTargetStatus>` | 幂等登记 `skill-manager` 一条；未建配置目录的工具跳过。 |
+| `mcp_uninstall` | - | `Vec<McpTargetStatus>` | 只移除 `skill-manager` 一条，其他服务原样保留。 |
+| `get_db_recovery` | - | `RecoveryNotice?` | 本次启动是否隔离并重建过索引数据库（每次运行至多一条）。 |
 
 ### 17.4 跨平台文件操作策略
 
@@ -823,7 +845,7 @@ Rust 后端通过 `#[tauri::command]` 暴露接口给 React 前端。
 
 | 功能 | PRD 章节 |
 |------|----------|
-| `SSOT` 目录创建（`~/.agents/skill-manager/ssot/`） | §5.5 |
+| `SSOT` 目录创建（`~/.skill-manager/ssot/`） | §5.5 |
 | 同步（工具 → `SSOT` → 其他工具） | §5.5 |
 | 反向同步（`SSOT` → 指定工具目录） | §5.5 |
 | `local.md` 标记机制 | §5.5 |
@@ -920,7 +942,7 @@ Rust 后端通过 `#[tauri::command]` 暴露接口给 React 前端。
 | 术语 | 说明 |
 |------|------|
 | Skill | 基于 `SKILL.md` 文件的 AI 编码助手插件，包含 YAML front matter（`name` + `description`）和附属文件。 |
-| `SSOT` | Single Source of Truth，单一信息源。本应用中指 `~/.agents/skill-manager/ssot/` 目录。 |
+| `SSOT` | Single Source of Truth，单一信息源。本应用中指 `~/.skill-manager/ssot/` 目录。 |
 | `content_hash` | Skill 目录的全量文件 SHA-256 哈希（跳过 `local.md`），用于检测内容变化和 diff 展示。 |
 | `core_hash` | 仅 `SKILL.md` 文件的 SHA-256 哈希，用于冲突检测和核心内容比对。 |
 | ID 哈希 | SHA-256 前 8 字节按 little-endian 解析的有符号 64 位整数，用作数据库主键。 |
@@ -962,3 +984,4 @@ Rust 后端通过 `#[tauri::command]` 暴露接口给 React 前端。
 | 2026-08-17 | v1.1 | 全面更新以反映实际实现：`SSOT` 路径修正、name-as-identity、`core_hash`、远程 `Market`、应用内更新、引导、Lint、编辑器、新增里程碑 M4/M5、更新 IPC 清单、更新术语表。 |
 | 2026-08-18 | v1.2 | §5.10 移除“待确定事项 1-98”清单；市场 UI 实施后已全部决策并落地，改为指向 `docs/market-ui-redesign.md` §4 和 `docs/market-ui-impl-guide.md`。 |
 | 2026-09-12 | v1.3 | 结构与可读性优化：新增目录，统一 Markdown 排版和术语，修正核心表数量，补齐已实现的 Tauri Command。 |
+| 2026-09-19 | v1.4 | §11 改为逐项核对过的落地状态表 + 剩余开放项；`SSOT` 路径全部改为代码实际使用的 `~/.skill-manager/ssot/`；§17.3 补 `check_path` / `discover_workspaces` / `mcp_*` / `get_db_recovery`。 |

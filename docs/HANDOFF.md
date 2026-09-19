@@ -91,6 +91,9 @@ sync-skills/
 │   │   ├── projects.rs       # 项目 CRUD
 │   │   ├── skills.rs         # 技能 enable/disable/操作
 │   │   ├── conflicts.rs      # 冲突检测与裁决
+│   │   ├── paths.rs          # 用户输入路径预检（§14 规则的前端入口）
+│   │   ├── diagnostics.rs    # 启动期索引库自愈回执
+│   │   ├── mcp_config.rs     # 本应用 MCP 服务在各工具配置里的登记/移除
 │   │   ├── logs.rs           # 活动日志读写
 │   │   ├── app_settings.rs   # 应用级设置
 │   │   ├── tools.rs          # 工具路径注册
@@ -110,11 +113,14 @@ sync-skills/
 │   ├── market.rs             # 远程市场领域逻辑
 │   ├── models.rs             # Rust 数据结构
 │   ├── settings.rs           # 设置读写
-│   ├── providers.rs          # MarketProvider trait + GitHub / GitLab 适配器
+│   ├── providers.rs          # MarketProvider trait + GitHub / GitLab / Bitbucket 适配器
+│   ├── paths.rs              # §14 路径规则的唯一入口（~ 展开 / 环境变量 / 相对路径 / 存在性）
+│   ├── workspaces.rs         # 从 Claude Code 与 Cursor 的会话记录发现本机工作区
 │   ├── watcher.rs            # notify 文件监听 → `skill-file-changed` 事件
 │   ├── discovery.rs          # 工具自动发现
 │   ├── hash.rs               # content_hash / core_hash / id_hash
 │   ├── mcp.rs                # 对外 MCP server：JSON-RPC 2.0 / stdio，9 个只读工具
+│   ├── mcp_config.rs         # 把 `skill-manager` 一条幂等写入/移出各工具配置
 │   └── bin/skill-manager-mcp.rs # 该 server 的独立可执行入口（GUI 进程不占用其 stdio）
 ├── doc/
 │   ├── PRD.md                # 产品需求文档（当前最权威的规格说明）
@@ -184,7 +190,7 @@ sync-skills/
 | 冲突检测与裁决 | ✅ | `commands/conflicts.rs`, `ConflictSection.tsx` |
 | 差异预览（unified / 并排） | ✅ | `diff.rs`, `DiffView.tsx` |
 | 变更忽略 | ✅ | `db.rs` dismissed_updates 表 |
-| 远程市场（GitHub + GitLab） | ✅ | `market.rs`, `providers.rs`, `commands/market.rs`, `SkillMarketPanel.tsx`, `MarketSidebar.tsx` |
+| 远程市场（GitHub + GitLab + Bitbucket） | ✅ | `market.rs`, `providers.rs`, `commands/market.rs`, `SkillMarketPanel.tsx`, `MarketSidebar.tsx` |
 | Market 详情 Modal（T4） | ✅ | `ops/remote_skill_detail.rs`, `commands/market.rs::get_remote_skill_detail`, `RemoteSkillDetailModal.tsx`, `RemoteSkillFileTree.tsx`, `useFocusTrap.ts` |
 | Modal 无障碍统一（13 个浮层） | ✅ | `useFocusTrap.ts`（模块级 LIFO 栈 + 单一 window 监听），各 `*Modal.tsx` |
 | 文件系统监听（full-auto 自动同步） | ✅ | `watcher.rs`（`notify = "8"`），`lib.rs::start_watcher`，事件 `skill-file-changed` |
@@ -195,15 +201,20 @@ sync-skills/
 | 内置 SKILL.md 编辑器 | ✅ | `SkillEditorModal.tsx` |
 | 主题切换 + 多语言 | ✅ | `App.css`, `src/i18n/`（`index.ts` + `zh.ts` + `en.ts`） |
 | 活动日志 | ✅ | `LogsPanel.tsx`, `commands/logs.rs` |
+| 路径规则集中校验 | ✅ | `paths.rs`（规则）+ `commands/paths.rs::check_path`（IPC）+ `i18n::localizeApiError`（按错误码本地化）+ `ProjectNav.tsx` / `ToolsSection.tsx` 表单提示 |
+| 索引库损坏自愈 | ✅ | `db.rs::integrity_problem` / `quarantine_file`（改名隔离，不删除）+ `commands/diagnostics.rs::get_db_recovery` + `App.tsx` 一次性横幅 |
+| 工作区自动发现 | ✅ | `workspaces.rs` + `commands/projects.rs::discover_workspaces` + `ProjectNav.tsx` 候选面板 |
+| 定时检测更新 | ✅ | `hooks/useUpdateSchedule.ts` + `settings.update_check_interval_minutes`（默认关闭，只检测不同步） |
+| MCP 服务跨工具登记 | ✅ | `mcp_config.rs` + `commands/mcp_config.rs` + `components/McpServersSection.tsx`（设置面板「MCP 服务」分区） |
 
 ### 5.2 部分完成 / 待办
 
 | 功能 | 状态 | 说明 |
 |------|------|------|
-| 时间戳驱动同步 UI | ⏳ 部分 | 时间戳已展示并用于排序，未驱动按钮状态 |
-| MCP 集成 | ⏳ 进行中 | v0.7.0 第一片：`cd src-tauri && cargo run --bin skill-manager-mcp`（或直接把构建出的二进制配进 MCP 客户端）即起只读 stdio server，9 个工具见 `mcp.rs::catalog()`；配置管控与跨工具同步尚未开工 |
+| 时间戳驱动同步 UI | ⏳ 部分 | 时间戳已展示并用于排序，未驱动按钮状态（Phase 4 决策：判定继续以 hash 为准） |
+| MCP 集成 | ⏳ 进行中 | 只读 stdio server（`mcp.rs::catalog()`，9 个工具）与各工具的配置登记（`mcp_config.rs`）已落地；剩余两项：Codex 的 `[mcp_servers]` TOML 写入（保留注释需 `toml_edit`），以及把 `skill-manager-mcp` 打进安装包（当前 bundle 只含主程序，安装版登记会指向不存在的路径，面板会告警） |
 | GitLab 自建实例 | ⏳ 规划中 | `providers.rs::provider_for_reference` 目前只把 `gitlab.com` 路由到 GitLab 适配器 |
-| Bitbucket / Azure DevOps 适配 | ⏳ 规划中 | `MarketProvider` 已有 GitHub + GitLab 两个真实适配器，新增只需实现该 trait |
+| Azure DevOps 适配 | ⏳ 规划中 | 匿名读取受组织策略限制（404 / 302 到 HTML），无法在无凭据条件下验证，暂不写适配器 |
 
 ### 5.3 已知坑与注意事项
 

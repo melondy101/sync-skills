@@ -44,7 +44,7 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
 - **Change Dismissal** — Persistently ignore specific tool changes until content changes again
 - **Project-level Management** — Configure independent skill sets per project, with edit support
 - **Diff Detection** — Built-in LCS diff view (side-by-side / unified) showing precise file-level changes
-- **Skill Market** — Browse, search, and one-click install skills from GitHub / GitLab repos with built-in market source management
+- **Skill Market** — Browse, search, and one-click install skills from GitHub / GitLab / Bitbucket repos with built-in market source management
 - **File Watching** — Monitors the SSOT tree and auto-syncs on disk changes (full-auto) or notifies (semi-auto)
 - **App Self-update** — One-click detection, download, and install of new versions
 - **Onboarding & Health Check** — First-run wizard, built-in Lint checks with auto-fix, and an in-app SKILL.md editor
@@ -171,8 +171,8 @@ The full pre-commit checklist (type check / lint / unit tests, 6 commands across
 | v0.3.0 | ✅ Done | Theme switching, i18n, hash stability fixes |
 | v0.4.0 | ✅ Done | Name-as-identity, conflict detection/resolution, timestamps, project edit, reverse sync, change dismissal |
 | v0.5.0 | ✅ Done | LockManager integration, core_hash change detection |
-| v0.6.0 | ✅ Done | In-app update, onboarding wizard, health check / Lint, built-in editor, Market batch operations, file-watcher auto-sync, GitLab market sources, dialog-wide focus trap & a11y, global keyboard shortcuts with a `?` cheat sheet, Market list render performance |
-| v0.7.0 | 🟡 In progress | MCP integration: first slice landed — `skill-manager-mcp`, a read-only stdio server (9 tools over the same SQLite index the GUI writes); MCP server config management & cross-tool sync still ahead |
+| v0.6.0 | ✅ Done | In-app update, onboarding wizard, health check / Lint, built-in editor, Market batch operations, file-watcher auto-sync, GitLab market sources, dialog-wide focus trap & a11y, global keyboard shortcuts with a `?` cheat sheet, Market list render performance, PRD §14 path rules enforced in one place with inline form feedback, corrupt-index self-healing, workspace discovery and one-click import, scheduled update checks (off by default), full-auto watcher now really syncs |
+| v0.7.0 | 🟡 In progress | MCP integration: `skill-manager-mcp`, a read-only stdio server (9 tools over the same SQLite index the GUI writes), plus a Settings ▸ MCP panel that idempotently registers `skill-manager` in Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf. Still ahead: Codex's TOML config and bundling the server binary with the installer. Bitbucket market sources landed in this stage |
 
 > The versions above are roadmap stage labels and are independent of the published package version (latest tag: `v0.2.1`).
 

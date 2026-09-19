@@ -2,6 +2,8 @@
 
 > 本地闭环同步设计：覆盖 SSOT ↔ 工具目录的自动同步 + 远程仓库的拉取与更新检测。
 > 与现有 Market（远端 pull）并轨，但**不**包含 Local → Remote push。
+>
+> **2026-09-19 状态**：本文的 §1「未实现」清单已成历史——文件监听、`auto_sync_on_file_change` 接线、半自动提示 / 全自动同步全部落地（`watcher.rs` + `App.tsx`），全自动分支的「只重扫不同步」缺陷也已修复。当前口径以 `doc/PRD.md` §11 的落地状态表为准。
 
 ## 1. 目标与非目标
 
@@ -23,7 +25,7 @@
 
 - 远端 Market：`src-tauri/src/commands/market.rs`，GitHub repo × N，按 `raw.githubusercontent.com` 拉 SKILL.md。
 - 版本判断：`src-tauri/src/hash.rs` SHA-256 content hash + commit SHA 早退。
-- SSOT 路径：`src-tauri/src/sync.rs::ssot_path(name, project_id)`，全局 `~/.agents/skill-manager/ssot/<name>/`。
+- SSOT 路径：`src-tauri/src/sync.rs::ssot_path(name, project_id)`，全局 `~/.skill-manager/ssot/<name>/`。
 - DB：`remote_skills` 表已含 `remote_content_hash` / `remote_core_hash` / `ssot_path` / `remote_url` / `is_installed`。
 
 **未实现（本文档覆盖）**
@@ -78,7 +80,7 @@
 
 | 根 | 路径 | 触发后行为 |
 |---|---|---|
-| SSOT 根 | `~/.agents/skill-manager/ssot/<name>/` | 自动 hash 比对 + 重链 |
+| SSOT 根 | `~/.skill-manager/ssot/<name>/` | 自动 hash 比对 + 重链 |
 | 工具目录 | 各 AI 工具的 `skills/` 目录（按已注册工具枚举） | 检测到外部修改 → **冲突告警**（R4.6） |
 
 ### 4.2 事件过滤（三道防线）

@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 对外 MCP stdio server（v0.7.0 第一片）：`src-tauri/src/mcp.rs` + 独立二进制 `skill-manager-mcp`，JSON-RPC 2.0 over stdin/stdout，暴露 9 个只读工具（`list_skills` / `get_skill` / `list_tools` / `list_projects` / `list_markets` / `list_market_skills` / `list_conflicts` / `get_sync_logs` / `get_stats`）读取与 GUI 相同的 SQLite 索引；协议派发是纯 line-in / line-out 函数，17 个单元测试无需进程即可覆盖全部契约
 - 全局快捷键层：`hooks/useHotkeys.ts` 注册 Tab 切换、搜索聚焦、`?` 速查表（`ShortcutsModal.tsx`）等键位，市场卡片的 roving focus 复用同一选择器
 - 市场卡片可访问性与键盘路径：13 个浮层统一走 `useFocusTrap`
+- PRD §14 路径规则集中落地：`src-tauri/src/paths.rs` 一处判定 `~` 展开、环境变量、相对路径与目录是否存在，新 IPC `check_path`；`add_tool` / `update_tool_path` / `add_project` / `update_project` 全部改走同一套校验，工具与项目表单失焦即给出本地化提示（`i18n` 的 `localizeApiError` 按错误码翻译，不解析散文）
+- 索引数据库损坏自愈：`Database::new` 先跑一次完整性检查，损坏的 `skill-manager.db` 连同 `-wal` / `-shm` 一起改名隔离为 `skill-manager.db.corrupt-<ts>`（绝不删除），重建后由 `get_db_recovery` 供前端显示一次性横幅
+- 工作区自动发现：`src-tauri/src/workspaces.rs` 读 `~/.claude.json` 的 `projects` 键与 Cursor `workspaceStorage/*/workspace.json`，去掉已注册与已不存在的路径后经 `discover_workspaces` 交给项目面板逐条或一键导入
+- 定时检查更新：`hooks/useUpdateSchedule.ts` + 设置项 `update_check_interval_minutes`（默认 0＝关闭），只在窗口打开时检测、不同步，发现更新才提示
+- MCP 服务登记：`src-tauri/src/mcp_config.rs` 把 `skill-manager` 这一条幂等写入 Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf 的 JSON 配置（整份文件按 `serde_json::Value` 往返，其他键与服务不受影响；未创建配置目录的工具跳过且不代为建目录），设置面板新增「MCP 服务」分区展示每个工具的登记状态并提供登记/移除
+- Bitbucket Cloud 市场源：`providers.rs::BitbucketProvider` 走 `api.bitbucket.org/2.0`（`src/{ref}/{path}` 单端点兼作目录列表与原始文件、`mainbranch.name` 取默认分支、`next` 游标原样跟随），URL 解析接受 https / http / SSH 形式；命令层、数据库与 UI 零改动
+
+### Fixed
+- 全自动模式下文件监听只重扫、不同步：`App.tsx` 的 `skill-file-changed` 处理改为按 1.5s debounce 触发 `fullScan` + 同步，半自动模式仍只提示
 
 ### Changed
 - 持久化数据根统一按代码实际路径记载为 `~/.skill-manager/`（数据库 `skill-manager.db`、SSOT `ssot/`）：`AGENTS.md`、README ×3 的架构图与功能条目、`docs/HANDOFF.md`、`watcher.rs` 文档注释此前仍写作旧的 `~/.agents/skill-manager/`。工具共享的 `~/.agents/skills/` 未变，两者必须继续区分（SSOT 必须落在任何工具扫描的 `skills/` 树之外）
