@@ -453,7 +453,7 @@ flowchart TD
 | 文件系统监听自动同步（M12） | 已实现 | `src-tauri/src/watcher.rs` 只监听 `SKILL.md`，`App.tsx` 半自动提示 / 全自动 debounce 后扫描并同步 |
 | 时间戳驱动同步 UI（M11） | 已定稿，不改 | 决策为仅展示时间戳，同步判定仍以 hash 为准（见 `doc/phase4_design.md` §二） |
 | `core_hash` 用于更新检测（M9） | 已实现 | `ops/mod.rs` 的 `check_single_skill` 按 `core_hash`（仅 `SKILL.md`）比对，附属文件变更不再触发提示 |
-| `MCP` 集成：Server 配置管控与跨工具同步 | 已实现 | `mcp.rs` + `skill-manager-mcp` 二进制提供只读服务；`mcp_config.rs` 负责六家 JSON 配置与 Codex `~/.codex/config.toml` 的 `[mcp_servers]` TOML 登记/移除（`toml_edit` 保留用户注释）；安装包通过 `tauri.conf.json` 的 `bundle.externalBin` + `scripts/stage-sidecar.mjs` 携带该二进制 |
+| `MCP` 集成：Server 配置管控与跨工具同步 | 已实现 | `mcp.rs` + `skill-manager-mcp` 二进制提供只读服务；`mcp_config.rs` 负责六家 JSON 配置与 Codex `~/.codex/config.toml` 的 `[mcp_servers]` TOML 登记/移除（`toml_edit` 保留用户注释）；该二进制与本 crate 的 `[[bin]]` 同源，Tauri 打包时自动与主程序装入同一目录 |
 | 除 GitHub 外的其他代码托管平台适配 | 已实现 | `providers.rs`：GitHub、GitLab（含自建实例——实例地址随 `markets.remote_url` 落库，未知主机先探测 `/api/v4` 再回落 GitHub）、Bitbucket Cloud、Azure DevOps |
 | 自动检测工作区目录 | 已实现 | `workspaces.rs`：读 `~/.claude.json` 与 Cursor `workspaceStorage`，项目面板一键导入 |
 | 定时检测同步 | 部分实现 | `useUpdateSchedule.ts` 只做定时**检测**并提示，不做定时写入（与 §10「无后台进程」一致） |

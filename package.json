@@ -10,7 +10,6 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint .",
-    "stage:sidecar": "node src-tauri/scripts/stage-sidecar.mjs --allow-placeholder",
     "tauri": "tauri"
   },
   "dependencies": {

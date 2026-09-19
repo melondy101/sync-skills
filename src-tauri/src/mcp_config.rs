@@ -120,8 +120,9 @@ fn targets() -> Vec<Target> {
 
 /// The server binary that ships beside the app executable. In a dev checkout this
 /// resolves inside `target/debug`, the same directory the app runs from; in an
-/// installed bundle `externalBin` lands next to the app executable under the same
-/// name, so one rule covers both.
+/// installed bundle the server lands next to the app executable under the same
+/// name (it is the crate's second binary, so Tauri ships it alongside the first),
+/// which means one rule covers both.
 pub fn default_entry() -> McpServerEntry {
     let exe = std::env::current_exe().unwrap_or_default();
     let dir = exe.parent().unwrap_or(Path::new("."));

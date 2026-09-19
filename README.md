@@ -103,11 +103,10 @@ pnpm tauri build
 
 ```bash
 pnpm install
-pnpm stage:sidecar   # 首次必须：见下方说明
 pnpm tauri dev
 ```
 
-`tauri.conf.json` 的 `bundle.externalBin` 会让 tauri 的构建脚本在**每次** cargo 调用时校验 `src-tauri/bin/skill-manager-mcp-<target-triple>[.exe]` 是否存在，所以全新 clone 必须先跑一次 `pnpm stage:sidecar`（此时还没有构建产物，它会写一个占位文件打破这个环）；首次构建完成后**再跑一次**同样的命令，把占位换成真正的 server 二进制。跳过这一步的话 `pnpm tauri dev` 会报 `resource path ... doesn't exist`。
+MCP server（`skill-manager-mcp`）与主程序同属 `src-tauri` 这个 crate 的第二个二进制，构建与打包都会一起带上，不需要额外准备步骤。
 
 ### 发布（Release）
 
@@ -176,7 +175,7 @@ sync-skills/
 | v0.4.0 | ✅ 已完成 | 名字即身份、冲突检测/裁决、时间戳、项目编辑、反向同步、变更忽略 |
 | v0.5.0 | ✅ 已完成 | LockManager 接入、core_hash 变更检测 |
 | v0.6.0 | ✅ 已完成 | 应用内更新、引导向导、健康检查/Lint、内置编辑器、市场批量操作、文件系统监听自动同步、GitLab 市场源、全站 Modal 无障碍统一、全局快捷键与 `?` 速查表、市场列表渲染优化、PRD §14 路径规则集中校验与表单提示、索引库损坏自愈、工作区自动发现与一键导入、定时检测更新（默认关闭）、全自动监听真正执行同步的修复 |
-| v0.7.0 | ✅ 已完成 | MCP 集成：`skill-manager-mcp` 只读 stdio server（9 个工具，与 GUI 共用 SQLite 索引）+ 设置面板「MCP 服务」把 `skill-manager` 幂等登记进 Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf 的 JSON 与 Codex 的 TOML（`toml_edit` 保留注释），二进制随安装包分发（`bundle.externalBin` + `pnpm stage:sidecar`）；市场源补齐 Bitbucket Cloud、GitLab 自建实例与 Azure DevOps；冲突自动裁决（最新修改 / 首选工具） |
+| v0.7.0 | ✅ 已完成 | MCP 集成：`skill-manager-mcp` 只读 stdio server（9 个工具，与 GUI 共用 SQLite 索引）+ 设置面板「MCP 服务」把 `skill-manager` 幂等登记进 Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf 的 JSON 与 Codex 的 TOML（`toml_edit` 保留注释），二进制随安装包分发；市场源补齐 Bitbucket Cloud、GitLab 自建实例与 Azure DevOps；冲突自动裁决（最新修改 / 首选工具） |
 
 > 表中版本号是路线图阶段标号，与已发布的包版本相互独立（当前最新标签为 `v0.3.0`）。
 

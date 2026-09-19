@@ -103,11 +103,10 @@ Build artifacts (installers) are in `src-tauri/target/release/bundle/`.
 
 ```bash
 pnpm install
-pnpm stage:sidecar   # required on a fresh clone, see below
 pnpm tauri dev
 ```
 
-`bundle.externalBin` in `tauri.conf.json` makes Tauri's build script check for `src-tauri/bin/skill-manager-mcp-<target-triple>[.exe]` on **every** cargo invocation, so a fresh clone has to run `pnpm stage:sidecar` first — nothing is built yet at that point, so the script writes a placeholder to break the cycle. Run the same command **again** after the first build to swap the placeholder for the real server binary. Skipping the step fails `pnpm tauri dev` with `resource path ... doesn't exist`.
+The MCP server (`skill-manager-mcp`) is the second binary of the same `src-tauri` crate, so the build and the installers pick it up automatically — there is no preparation step to run first.
 
 ### Release
 
@@ -177,7 +176,7 @@ The full pre-commit checklist (type check / lint / unit tests, 6 commands across
 | v0.4.0 | ✅ Done | Name-as-identity, conflict detection/resolution, timestamps, project edit, reverse sync, change dismissal |
 | v0.5.0 | ✅ Done | LockManager integration, core_hash change detection |
 | v0.6.0 | ✅ Done | In-app update, onboarding wizard, health check / Lint, built-in editor, Market batch operations, file-watcher auto-sync, GitLab market sources, dialog-wide focus trap & a11y, global keyboard shortcuts with a `?` cheat sheet, Market list render performance, PRD §14 path rules enforced in one place with inline form feedback, corrupt-index self-healing, workspace discovery and one-click import, scheduled update checks (off by default), full-auto watcher now really syncs |
-| v0.7.0 | ✅ Done | MCP integration: `skill-manager-mcp`, a read-only stdio server (9 tools over the same SQLite index the GUI writes), plus a Settings ▸ MCP panel that idempotently registers `skill-manager` in the JSON configs of Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf and in Codex's TOML (comments preserved through `toml_edit`), with the binary shipped inside the installer (`bundle.externalBin` + `pnpm stage:sidecar`); market sources completed with Bitbucket Cloud, self-hosted GitLab and Azure DevOps; automatic conflict adjudication (newest edit / preferred tool) |
+| v0.7.0 | ✅ Done | MCP integration: `skill-manager-mcp`, a read-only stdio server (9 tools over the same SQLite index the GUI writes), plus a Settings ▸ MCP panel that idempotently registers `skill-manager` in the JSON configs of Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf and in Codex's TOML (comments preserved through `toml_edit`), with the binary shipped inside the installer; market sources completed with Bitbucket Cloud, self-hosted GitLab and Azure DevOps; automatic conflict adjudication (newest edit / preferred tool) |
 
 > The versions above are roadmap stage labels and are independent of the published package version (latest tag: `v0.3.0`).
 

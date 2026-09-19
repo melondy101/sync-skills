@@ -46,7 +46,7 @@ src-tauri/target-out2/
 *.db-journal
 *.db-wal
 
-# Staged sidecar binaries for `bundle.externalBin` (created by beforeBundleCommand)
+# Sidecar binaries, should `bundle.externalBin` ever come back — never commit these
 src-tauri/bin/
 
 # 临时截图与一次性验证脚本（AGENTS.md「不要提交」）

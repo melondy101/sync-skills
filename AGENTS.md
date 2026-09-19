@@ -5,13 +5,13 @@ Tauri v2 桌面应用（Rust + React 19 + TypeScript + SQLite），用于跨 AI 
 
 ## 构建 / 开发（用 pnpm，不要用 npm）
 - 安装依赖：`pnpm install`
-- 开发：`pnpm stage:sidecar` → `pnpm tauri dev`。`bundle.externalBin` 会让 tauri 的构建脚本在**每一次** cargo 调用时校验 `src-tauri/bin/skill-manager-mcp-<target-triple>[.exe]` 是否存在，所以全新 clone 必须先 stage（此时没有构建产物，脚本写占位文件打破这个环），首次构建完成后**再 stage 一次**换成真二进制。跳过就会报 `resource path ... doesn't exist`（`tauri dev`、`tauri build`、`cargo build` 都会）
+- 开发：`pnpm tauri dev`（全新 clone 装完依赖即可直接跑，没有预构建步骤）
 - 提交前校验：命令清单以 [CONTRIBUTING.md](CONTRIBUTING.md)「提交前请确保以下校验全部通过」一节为准（前端类型检查 / lint / 测试 + Rust check / clippy / 测试），此处不重复命令以避免漂移；CI 的 `.github/workflows/verify.yml` 执行同一组检查
 - 出安装包见下方「发布」，不要在本地手动 `tauri build` 出发布包
 
 ## 发布（Release）
 - 触发方式：推送 `v*` 标签（`git tag vX.Y.Z && git push origin vX.Y.Z`）。
-- CI：`.github/workflows/release.yml` 在 **Windows 与 Linux** 两个 runner 构建安装包（macOS 自 `4eeb791` 起移出矩阵，`tauri.conf.json` 仍声明 `app`/`dmg`，要出 macOS 包就得把 `macos-latest` 加回 matrix），汇总到 GitHub Release 草稿。两个 job 都要先 `pnpm stage:sidecar`，否则 `bundle.externalBin` 会让 cargo 在空 `src-tauri/bin/` 上直接失败。
+- CI：`.github/workflows/release.yml` 在 **Windows 与 Linux** 两个 runner 构建安装包（macOS 自 `4eeb791` 起移出矩阵，`tauri.conf.json` 仍声明 `app`/`dmg`，要出 macOS 包就得把 `macos-latest` 加回 matrix），汇总到 GitHub Release 草稿；标签必须先落在 CI 全绿的 commit 上，草稿需人工转 published。
 - 普通 push 到 `main` **不会**触发构建；发布前在 Releases 页面将草稿转为 published。
 
 ## 领域规则（写代码前必看）
@@ -20,6 +20,7 @@ Tauri v2 桌面应用（Rust + React 19 + TypeScript + SQLite），用于跨 AI 
 - 差异算法：`diff.rs` 基于 LCS（阈值 5000 行），前端以 unified / 并排两种视图展示。
 - 市场 provider 共 4 家，统一走 `providers.rs` 的 `MarketProvider` seam（分发用 `provider_for_market`，不要再用 `provider_for(&market.provider)`——那会丢掉自建 GitLab 的实例地址）。凭据一律走环境变量：Azure DevOps 只读 `AZURE_DEVOPS_PAT`，**绝不**写进 `settings.json` 或任何配置快照。
 - MCP 登记的写入面固定为「每家配置里的 `skill-manager` 一个键」：JSON 走 `serde_json` 往返（保留其他键，但会规范化排版），Codex 的 TOML 走 `toml_edit`（实测字节级保注释与格式）；目标工具的 config 目录不存在时跳过，绝不代为创建。
+- **`skill-manager-mcp` 不要写进 `bundle.externalBin`**：它是 `src-tauri` 这个包的第二个二进制，Tauri 打包时已经把它跟主程序一起放进安装目录；再声明一次 `externalBin`（配 `src-tauri/bin/<name>-<triple>.exe` 那套 stage 流程）会让 MSI 出现两个装同名文件的组件，WiX `light.exe` 直接以 `ICE30` 失败（NSIS/deb 没有这项校验，所以只有 Windows 出包会炸）。要验证打包结果：`npx tauri bundle --bundles msi` 后生成的 `target/release/wix/x64/main.wxs` 里只应有一个 `Bin_skill_manager_mcp` 组件。
 
 ## 文档指向
 - 贡献流程与代码规范：`CONTRIBUTING.md`
@@ -47,5 +48,5 @@ GitHub Issues on `huang-yi-dae/sync-skills`; `.scratch/<feature>/issues/` is a l
 Single-context repo — root-level `CONTEXT.md` and `docs/adr/`. Created lazily by `/domain-modeling`; not required to exist. See `docs/agents/domain.md`.
 
 ## 不要提交
-- `src-tauri/target/`、`node_modules/`、`dist/`、`.pnpm-store/`、`src-tauri/bin/`（暂存用的 server 二进制）（均已 gitignore）
+- `src-tauri/target/`、`node_modules/`、`dist/`、`.pnpm-store/`（均已 gitignore）
 - 一次性 patch 脚本（`patch_*.py`）、scratch 笔记（`scratch/`、`.scratch/`）、临时截图（`artifacts/`）—— 历史 commit `22c64ef` 误把这些塞进了仓库，已删除该 commit，新提交务必保持工作目录干净

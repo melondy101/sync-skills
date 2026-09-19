@@ -57,13 +57,6 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
-      # `bundle.externalBin` is validated by Tauri's build script on *every*
-      # cargo invocation, and `src-tauri/bin/` is gitignored, so a fresh
-      # checkout has nothing there and even `cargo check` fails. This writes a
-      # placeholder to get cargo running; the real binary is staged by
-      # `build.beforeBundleCommand` at bundling time.
-      - name: Stage the sidecar binary path
-        run: pnpm stage:sidecar
 
       - name: Frontend type check
         run: npx tsc --noEmit
@@ -138,13 +131,6 @@ jobs:
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
-      # `bundle.externalBin` is validated by Tauri's build script on *every*
-      # cargo invocation, and `src-tauri/bin/` is gitignored, so a fresh
-      # checkout has nothing there and even `cargo check` fails. This writes a
-      # placeholder to get cargo running; the real binary is staged by
-      # `build.beforeBundleCommand` at bundling time.
-      - name: Stage the sidecar binary path
-        run: pnpm stage:sidecar
 
       - name: Build and release
         uses: tauri-apps/tauri-action@v1

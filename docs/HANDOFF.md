@@ -23,10 +23,6 @@
 # 安装依赖（必须用 pnpm）
 pnpm install
 
-# 首次 clone 必须：为 bundle.externalBin 准备 src-tauri/bin/ 下的 server 二进制
-# （没有构建产物时写占位；首次构建后再跑一次换成真的）
-pnpm stage:sidecar
-
 # 启动开发环境（前端 Vite + Rust 后端 + 桌面窗口）
 pnpm tauri dev
 
@@ -216,7 +212,7 @@ sync-skills/
 | 功能 | 状态 | 说明 |
 |------|------|------|
 | 时间戳驱动同步 UI | ⏳ 部分 | 时间戳已展示并用于排序，未驱动按钮状态（Phase 4 决策：判定继续以 hash 为准） |
-| MCP 集成 | ✅ 已落地 | 只读 stdio server（`mcp.rs::catalog()`，9 个工具）+ 各工具配置登记（`mcp_config.rs`：六家 JSON 与 Codex `~/.codex/config.toml` 的 `[mcp_servers]` TOML，`toml_edit` 保注释）+ 安装包携带 server 二进制（`bundle.externalBin` 与 `build.beforeBundleCommand` → `src-tauri/scripts/stage-sidecar.mjs`，本地开发先跑 `pnpm stage:sidecar`） |
+| MCP 集成 | ✅ 已落地 | 只读 stdio server（`mcp.rs::catalog()`，9 个工具）+ 各工具配置登记（`mcp_config.rs`：六家 JSON 与 Codex `~/.codex/config.toml` 的 `[mcp_servers]` TOML，`toml_edit` 保注释）+ 安装包携带 server 二进制（它是 `src-tauri` 包的第二个二进制，Tauri 打包时自动与主程序装入同一目录；不要用 `bundle.externalBin` 再声明一次——MSI 会因 WiX `ICE30` 组件重复而失败） |
 | GitLab 自建实例 | ✅ 已实现 | `GitlabProvider` 持有实例 `base`，主机来自 `markets.remote_url`；未知主机先匿名探测 `/api/v4/projects` 再回落 GitHub（`provider_for_reference_probed`），市场读写统一走 `provider_for_market` |
 | Azure DevOps 适配 | ⚠️ 已实现，未经真实抓取验证 | `providers.rs::AzureDevopsProvider`（REST 7.1，PAT 只从 `AZURE_DEVOPS_PAT` 环境变量读）。本机匿名访问被组织策略拦截（登录页 HTML / `TF401019`），因此只有 URL 与载荷构造、错误映射的单元测试证据；改动它的人需要自备 PAT 做一次真实索引 |
 | 冲突自动裁决 | ✅ 已实现 | `commands/conflicts.rs::auto_resolve_conflicts`，两种策略 `newest` / `preferred-tool`；证据不足（时间戳不可读或并列、无匹配的首选工具）时不裁决，手动路径保持不变。自动记录写 `resolved_by = auto:<strategy>:<tool>` |

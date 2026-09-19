@@ -103,11 +103,10 @@ pnpm tauri build
 
 ```bash
 pnpm install
-pnpm stage:sidecar   # 初回必須（下記参照）
 pnpm tauri dev
 ```
 
-`tauri.conf.json` の `bundle.externalBin` により、Tauri のビルドスクリプトは**すべての** cargo 実行時に `src-tauri/bin/skill-manager-mcp-<target-triple>[.exe]` の存在を検証します。そのため新規 clone ではまず `pnpm stage:sidecar` が必要です（この時点では生成物が無いので、プレースホルダーを書いて循環を断ちます）。初回ビルド後に同じコマンドを**もう一度**実行すると本物のサーバーバイナリに差し替わります。省略すると `pnpm tauri dev` は `resource path ... doesn't exist` で失敗します。
+MCP サーバー（`skill-manager-mcp`）は同じ `src-tauri` クレートの 2 番目のバイナリなので、ビルドにもパッケージにも自動で入ります。事前に実行すべき準備ステップはありません。
 
 ### リリース
 
@@ -176,7 +175,7 @@ sync-skills/
 | v0.4.0 | ✅ 完了 | 名前をアイデンティティとして、コンフリクト検出/解決、タイムスタンプ、プロジェクト編集、リバース同期、変更却下 |
 | v0.5.0 | ✅ 完了 | LockManager 統合、core_hash 変更検出 |
 | v0.6.0 | ✅ 完了 | アプリ内アップデート、オンボーディングウィザード、ヘルスチェック/Lint、内蔵エディタ、Market の一括操作、ファイルウォッチャーによる自動同期、GitLab マーケットソース、全ダイアログのフォーカストラップ/アクセシビリティ統一、グローバルキーボードショートカットと `?` 早見表、Market リストの描画性能、PRD §14 のパス規則を一元検証しフォームに即時表示、破損インデックスの自動回復、ワークスペース自動検出とワンクリックインポート、定時の更新検出（デフォルト無効）、full-auto 監視で実際に同期が走るよう修正 |
-| v0.7.0 | ✅ 完了 | MCP 統合：読み取り専用 stdio サーバー `skill-manager-mcp`（GUI と同じ SQLite インデックス上の 9 ツール）と、設定 ▸ MCP パネルで Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf の JSON および Codex の TOML（`toml_edit` でコメントを保持）に `skill-manager` を冪等に登記。サーバー実行ファイルはインストーラーに同梱（`bundle.externalBin` + `pnpm stage:sidecar`）。マーケットソースは Bitbucket Cloud・セルフホスト GitLab・Azure DevOps まで整備。コンフリクトの自動裁定（最終更新 / 優先ツール） |
+| v0.7.0 | ✅ 完了 | MCP 統合：読み取り専用 stdio サーバー `skill-manager-mcp`（GUI と同じ SQLite インデックス上の 9 ツール）と、設定 ▸ MCP パネルで Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf の JSON および Codex の TOML（`toml_edit` でコメントを保持）に `skill-manager` を冪等に登記。サーバー実行ファイルはインストーラーに同梱。マーケットソースは Bitbucket Cloud・セルフホスト GitLab・Azure DevOps まで整備。コンフリクトの自動裁定（最終更新 / 優先ツール） |
 
 > 上のバージョン番号はロードマップ上のステージ名で、公開されているパッケージバージョン（最新タグは `v0.3.0`）とは独立しています。
 
