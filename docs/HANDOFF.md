@@ -227,6 +227,8 @@ sync-skills/
 | 数据库并发 | `Mutex<Connection>` 是全局锁 | 当前数据量下可接受，如需性能再优化 |
 | GitLab tree 分页上限 | `providers.rs` 每页 100、最多 10 页，超出会静默截断 | 单目录 >1000 条 listing 的市场需提高 `TREE_MAX_PAGES` |
 | 市场卡片重渲染 | 卡片 props 必须引用稳定，否则 `React.memo` 失效 | `t` 在 `App.tsx` 已 memo；新增回调走 `skillActions`，不要传行内闭包 |
+| MCP 面板写的是**用户真实配置** | 「登记/移除」直接改 `~/.claude.json`、Cursor/Qoder/Gemini/Codex 等六个文件，写坏即影响用户的工具 | 手动实测前先逐个 `cp -p` 备份并按 sha256 还原。起 dev 时加 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9222 --remote-allow-origins=*"`，再用 playwright `connectOverCDP("http://127.0.0.1:9222")` 就能点真实窗口（首次运行有 OnboardingWizard 全屏遮罩，先点「跳过」） |
+| 登记会重排 JSON 配置 | `serde_json` 往返保留全部数据，但会把用户的缩进/键序规范化；Codex 的 TOML 经 `toml_edit` 往返实测**字节不变** | 已挡住"无物可移除仍写盘"这条路径（`mcp_config.rs::write_target`）；真正保留 JSON 原排版需要文本级拼接，未做 |
 
 ---
 

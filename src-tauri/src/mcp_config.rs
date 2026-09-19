@@ -384,6 +384,12 @@ fn write_target(target: &Target, edit: &Edit) -> McpTargetStatus {
         Ok(None) => Doc::empty(target.format),
         Err(error) => return status_of(target, false, false, Some(error)),
     };
+    // Removing a key the file does not have cannot change anything, and saving
+    // would still rewrite the file — the JSON round-trip reformats it, so a
+    // no-op removal has to stay a no-op.
+    if matches!(edit, Edit::Remove) && doc.ours().is_none() {
+        return read(target, None);
+    }
     if let Err(error) = doc.apply(edit) {
         return status_of(target, false, false, Some(error));
     }
@@ -474,6 +480,30 @@ mod json_tests {
 
     fn read_json(path: &Path) -> Value {
         serde_json::from_str(&std::fs::read_to_string(path).expect("read back")).expect("parse")
+    }
+
+    /// Clicking 移除 on a tool that never held our key must not touch the file:
+    /// saving would re-serialize it, and a user's compact or idiosyncratic
+    /// formatting would silently become ours.
+    #[test]
+    fn a_removal_with_nothing_to_remove_leaves_the_file_untouched() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = temp_target(
+            dir.path(),
+            "mcp.json",
+            r#"{"mcpServers":{"theirs":{"command":"other"}},"theme":"dark"}"#,
+            Format::Json,
+        );
+        let before = std::fs::read_to_string(&target.path).expect("read");
+
+        let status = write_target(&target, &Edit::Remove);
+
+        assert!(!status.installed);
+        assert_eq!(
+            std::fs::read_to_string(&target.path).expect("read again"),
+            before,
+            "a no-op removal must not rewrite the file"
+        );
     }
 
     #[test]

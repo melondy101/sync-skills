@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - 全自动模式下文件监听只重扫、不同步：`App.tsx` 的 `skill-file-changed` 处理改为按 1.5s debounce 触发 `fullScan` + 同步，半自动模式仍只提示
 - 本地开发/打包无法启动：加入第二个 `[[bin]]`（`skill-manager-mcp`）之后，`cargo run` 报 `unable to find binary 'skill-manager'`/`could not determine which binary to run`，而 `tauri dev` 与 `tauri build` 都经它启动。`src-tauri/Cargo.toml` 补 `default-run = "skill-manager"`（MCP 面板此前无法在真实窗口点测即源于此）
+- 设置面板的语言选项显示原始键名 `langZH` / `langEN`：`SettingsPanel` 取 `t(\`lang${lang.toUpperCase()}\`)`，词典里却只有 `langZh` / `langEn`，`t()` 找不到键就回显键名。两侧词典改为 `langZH: "简体中文"` / `langEN: "English"`（语言名按惯例用自称，两种界面语言下都一样），并删除无人引用的 `langZh` / `langEn`
+- 「移除登记」会重写本就没有我们这一条的工具配置：JSON 走 `serde_json` 往返，保存即把用户的排版重排一遍。`write_target` 现在在没有可移除的键时直接返回状态而不写盘（Codex 的 TOML 往返实测字节不变，无需此保护）
 
 ### Changed
 - 持久化数据根统一按代码实际路径记载为 `~/.skill-manager/`（数据库 `skill-manager.db`、SSOT `ssot/`）：`AGENTS.md`、README ×3 的架构图与功能条目、`docs/HANDOFF.md`、`watcher.rs` 文档注释此前仍写作旧的 `~/.agents/skill-manager/`。工具共享的 `~/.agents/skills/` 未变，两者必须继续区分（SSOT 必须落在任何工具扫描的 `skills/` 树之外）
