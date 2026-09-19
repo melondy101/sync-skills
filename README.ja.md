@@ -121,8 +121,8 @@ pnpm tauri dev
    git push origin vX.Y.Z
    ```
 
-3. CI（`.github/workflows/release.yml`）が Windows / macOS / Linux の 3 ランナーで
-   `.msi` / `.nsis.exe`、`.dmg` / `.app`（universal）、`.deb` / `.AppImage` をビルドし、
+3. CI（`.github/workflows/release.yml`）が Windows と Linux の 2 ランナーで
+   `.msi` / `.nsis.exe` と `.deb` / `.AppImage` をビルドし（macOS はまだマトリクス外、必要なら `pnpm tauri build` でローカルビルド）、
    **GitHub Release のドラフト**にまとめます；
 4. Releases ページでドラフトを公開します。
 

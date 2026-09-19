@@ -11,7 +11,7 @@ Tauri v2 桌面应用（Rust + React 19 + TypeScript + SQLite），用于跨 AI 
 
 ## 发布（Release）
 - 触发方式：推送 `v*` 标签（`git tag vX.Y.Z && git push origin vX.Y.Z`）。
-- CI：`.github/workflows/release.yml` 在 Windows / macOS / Linux 构建安装包，汇总到 GitHub Release 草稿。
+- CI：`.github/workflows/release.yml` 在 **Windows 与 Linux** 两个 runner 构建安装包（macOS 自 `4eeb791` 起移出矩阵，`tauri.conf.json` 仍声明 `app`/`dmg`，要出 macOS 包就得把 `macos-latest` 加回 matrix），汇总到 GitHub Release 草稿。两个 job 都要先 `pnpm stage:sidecar`，否则 `bundle.externalBin` 会让 cargo 在空 `src-tauri/bin/` 上直接失败。
 - 普通 push 到 `main` **不会**触发构建；发布前在 Releases 页面将草稿转为 published。
 
 ## 领域规则（写代码前必看）

@@ -121,8 +121,8 @@ pnpm tauri dev
    git push origin vX.Y.Z
    ```
 
-3. CI（`.github/workflows/release.yml`）在 Windows / macOS / Linux 三个 runner 上分别构建
-   `.msi` / `.nsis.exe`、`.dmg` / `.app`（universal）、`.deb` / `.AppImage`，
+3. CI（`.github/workflows/release.yml`）在 Windows 与 Linux 两个 runner 上分别构建
+   `.msi` / `.nsis.exe` 与 `.deb` / `.AppImage`（macOS 暂未进矩阵，需自行 `pnpm tauri build`），
    并汇总到一个 **GitHub Release 草稿**；
 4. 在仓库 Releases 页面将草稿发布即可。
 

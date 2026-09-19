@@ -122,7 +122,8 @@ Installers for all platforms are built automatically via GitHub Actions — no l
    ```
 
 3. CI (`.github/workflows/release.yml`) builds `.msi` / `.nsis.exe` (Windows),
-   `.dmg` / `.app` (universal, macOS) and `.deb` / `.AppImage` (Linux) on three runners,
+   `.msi` / `.nsis.exe` (Windows) and `.deb` / `.AppImage` (Linux) on two runners
+   (macOS is not in the matrix yet — build it locally with `pnpm tauri build`),
    and collects them into a **GitHub Release draft**;
 4. Publish the draft from the Releases page.
 
