@@ -31,6 +31,12 @@ pub enum ProxySource {
     /// A manually configured proxy URL, possibly without a scheme prefix.
     Manual(String),
     /// The OS/system proxy (Windows registry lookup, cached process-wide).
+    ///
+    /// Only ever constructed on Windows — `resolve_proxy` gates the branch with
+    /// `cfg(windows)` because the registry is the only source we read — but
+    /// `build_client` matches it on every platform, so the variant stays
+    /// declared. Without this, `-D warnings` turns the Linux CI job red.
+    #[cfg_attr(not(windows), allow(dead_code))]
     System,
 }
 
