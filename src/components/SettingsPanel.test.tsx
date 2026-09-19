@@ -13,7 +13,8 @@ const t = (key: string) => key;
 // Helper: every Settings shape in these tests starts from the same baseline
 // and only overrides what a particular test cares about. Keeps the new
 // Phase 4 / T1 fields (`view_market_diff_before_update`,
-// `auto_sync_on_file_change`) consistent across fixtures.
+// `auto_sync_on_file_change`) and the scheduled-check interval consistent
+// across fixtures.
 function makeSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     sync_mode: "semi-auto",
@@ -26,6 +27,7 @@ function makeSettings(overrides: Partial<Settings> = {}): Settings {
     proxy_url: "http://127.0.0.1:10090",
     view_market_diff_before_update: true,
     auto_sync_on_file_change: false,
+    update_check_interval_minutes: 0,
     ...overrides,
   };
 }
@@ -126,6 +128,30 @@ describe("SettingsPanel", () => {
     // follows) and by the backend helper `effective_auto_sync_on_file_change`
     // (canonical OR of the two fields for downstream consumers).
     expect(autoSyncToggle).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("saves the scheduled update-check interval as a number, not a string", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <SettingsPanel
+        t={t}
+        settings={makeSettings()}
+        onChange={onChange}
+        onSave={() => {}}
+        onBack={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "syncMode" }));
+
+    // `0` renders as the "off" option; the selector's value is a string, so this
+    // is where the number coercion has to happen for the timer to work at all.
+    const select = screen.getByDisplayValue("updateCheckIntervalOff");
+    await user.selectOptions(select, "30");
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ update_check_interval_minutes: 30 }),
+    );
   });
 
   it("renders auto_sync_on_file_change as a normal switch in full-auto", async () => {

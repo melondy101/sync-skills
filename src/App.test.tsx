@@ -72,6 +72,7 @@ const mockSettings: Settings = {
   proxy_url: null,
   view_market_diff_before_update: true,
   auto_sync_on_file_change: false,
+  update_check_interval_minutes: 0,
 };
 
 beforeEach(() => {

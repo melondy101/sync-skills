@@ -215,6 +215,23 @@ export function SettingsPanel({
               </div>
 
               <div className="settings-group">
+                <label className="settings-label">{t("updateCheckInterval")}</label>
+                <select
+                  className="settings-select"
+                  value={settings.update_check_interval_minutes}
+                  onChange={(e) =>
+                    onChange({ ...settings, update_check_interval_minutes: Number(e.target.value) })
+                  }
+                >
+                  <option value={0}>{t("updateCheckIntervalOff")}</option>
+                  <option value={10}>10</option>
+                  <option value={30}>30</option>
+                  <option value={60}>60</option>
+                </select>
+                <p className="settings-hint">{t("updateCheckIntervalHint")}</p>
+              </div>
+
+              <div className="settings-group">
                 <ToggleSwitch
                   checked={settings.view_market_diff_before_update}
                   onChange={(next) => onChange({ ...settings, view_market_diff_before_update: next })}

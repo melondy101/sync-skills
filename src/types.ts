@@ -130,6 +130,8 @@ export interface Settings {
    * mirrors this rule so the UI stays in sync without a round-trip.
    */
   auto_sync_on_file_change: boolean;
+  /** Minutes between in-app update checks; 0 turns the timer off. */
+  update_check_interval_minutes: number;
 }
 
 export interface DiffLine {

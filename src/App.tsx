@@ -17,6 +17,7 @@ import type {
 import { makeT, type Lang } from "./i18n";
 import { useToasts } from "./hooks/useToasts";
 import { useTheme } from "./hooks/useTheme";
+import { useUpdateSchedule } from "./hooks/useUpdateSchedule";
 import { ToastContainer } from "./components/ToastContainer";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { LogsPanel } from "./components/LogsPanel";
@@ -52,6 +53,7 @@ const DEFAULT_SETTINGS: Settings = {
   proxy_url: null,
   view_market_diff_before_update: true,
   auto_sync_on_file_change: false,
+  update_check_interval_minutes: 0,
 };
 
 // Watcher events arrive per file; one rename or a checkout touches many skills
@@ -271,6 +273,14 @@ function App() {
     };
   }, []);
 
+  // PRD §11 定时检测: opt-in, and detection only. The manual "check updates"
+  // button opens a modal and announces "all up to date"; doing either on a timer
+  // would interrupt work the user is actually doing, so this pass only refreshes
+  // the pending list and speaks up when it found something.
+  useUpdateSchedule(settings.update_check_interval_minutes, () => {
+    void runScheduledUpdateCheck();
+  });
+
   // Sync selectedProject when tab changes
   useEffect(() => {
     if (activeTab === "global") {
@@ -356,6 +366,19 @@ function App() {
       addToast("error", `${t("checkUpdatesFailed")}: ${e}`);
     } finally {
       setCheckingUpdates(false);
+    }
+  }
+
+  async function runScheduledUpdateCheck() {
+    try {
+      const result = await api.checkUpdates(selectedProject);
+      setUpdates(result);
+      if (result.length > 0) {
+        addToast("info", `${t("updatesFoundByTimer")}: ${result.length}`);
+      }
+    } catch {
+      // Silence here is deliberate: the next tick retries, and a manual check
+      // still surfaces the error. A background failure should not interrupt.
     }
   }
 

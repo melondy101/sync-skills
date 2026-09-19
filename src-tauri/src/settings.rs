@@ -49,6 +49,11 @@ pub struct Settings {
     /// Phase 4 / issue #5 (T1 — Settings extension).
     #[serde(default)]
     pub auto_sync_on_file_change: bool,
+    /// Minutes between in-app update checks; `0` (default) keeps the timer off.
+    /// PRD §11 "定时检测同步": detection only, and it runs while the window is
+    /// open — PRD §10 forbids a background process, so there is no cron.
+    #[serde(default)]
+    pub update_check_interval_minutes: u64,
 }
 
 fn default_sync_mode() -> String {
@@ -76,6 +81,7 @@ impl Default for Settings {
             proxy_url: None,
             view_market_diff_before_update: default_true(),
             auto_sync_on_file_change: false,
+            update_check_interval_minutes: 0,
         }
     }
 }
@@ -224,6 +230,10 @@ mod tests {
         assert!(
             !s.auto_sync_on_file_change,
             "missing field should default to false"
+        );
+        assert_eq!(
+            s.update_check_interval_minutes, 0,
+            "the scheduled check must be off for anyone whose settings predate it"
         );
     }
 
