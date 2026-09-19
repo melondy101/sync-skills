@@ -11,7 +11,7 @@ import type {
   SkillFile, SkillLint, AppUpdateInfo,
   Market, MarketTemplate, RemoteSkill, RemoteSkillDetail, RemoteSkillUpdate, MarketSyncResult,
   RemoteInstallation, MarketCommitUpdate, RemoteSkillInstalledResult, PathCheck,
-  RecoveryNotice, WorkspaceCandidate,
+  RecoveryNotice, WorkspaceCandidate, McpServerEntry, McpSuggestedEntry, McpTargetStatus,
 } from "./types";
 
 // ==================== Tools ====================
@@ -211,5 +211,21 @@ export const setAllRemoteSkillsInstalled = (projectId: number, marketId: number 
 
 export const getRemoteSkillDetail = (remoteSkillId: number) =>
   invoke<RemoteSkillDetail>("get_remote_skill_detail", { remoteSkillId });
+
+// ==================== MCP server registration ====================
+
+/** The command line this app would write, and whether it exists on disk. */
+export const mcpSuggestedEntry = () => invoke<McpSuggestedEntry>("mcp_suggested_entry");
+
+/** Where this app's MCP server currently lives, compared against `entry`. */
+export const mcpStatus = (entry?: McpServerEntry | null) =>
+  invoke<McpTargetStatus[]>("mcp_status", { entry: entry ?? null });
+
+/** Add our entry to every tool that already has a config directory. */
+export const mcpInstall = (entry?: McpServerEntry | null) =>
+  invoke<McpTargetStatus[]>("mcp_install", { entry: entry ?? null });
+
+/** Remove only our entry; the user's other servers stay as they were. */
+export const mcpUninstall = () => invoke<McpTargetStatus[]>("mcp_uninstall");
 
 

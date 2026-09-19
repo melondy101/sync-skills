@@ -9,6 +9,7 @@ pub mod conflicts;
 pub mod diagnostics;
 pub mod logs;
 pub mod market;
+pub mod mcp_config;
 pub mod paths;
 pub mod projects;
 pub mod scan;

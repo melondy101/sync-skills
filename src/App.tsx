@@ -533,6 +533,7 @@ function App() {
         onChange={handleSettingsChange}
         onSave={handleSaveSettings}
         onBack={() => setActivePanel("main")}
+        addToast={addToast}
       />
     </main>
   );

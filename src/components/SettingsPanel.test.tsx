@@ -9,6 +9,7 @@ import type { Settings } from "../types";
 import * as api from "../api";
 
 const t = (key: string) => key;
+const addToast = vi.fn();
 
 // Helper: every Settings shape in these tests starts from the same baseline
 // and only overrides what a particular test cares about. Keeps the new
@@ -43,6 +44,7 @@ describe("SettingsPanel", () => {
         onChange={() => {}}
         onSave={() => {}}
         onBack={() => {}}
+        addToast={addToast}
       />,
     );
 
@@ -66,6 +68,7 @@ describe("SettingsPanel", () => {
         onChange={() => {}}
         onSave={() => {}}
         onBack={() => {}}
+        addToast={addToast}
       />,
     );
 
@@ -89,6 +92,7 @@ describe("SettingsPanel", () => {
         onChange={() => {}}
         onSave={() => {}}
         onBack={() => {}}
+        addToast={addToast}
       />,
     );
 
@@ -108,6 +112,7 @@ describe("SettingsPanel", () => {
         onChange={() => {}}
         onSave={() => {}}
         onBack={() => {}}
+        addToast={addToast}
       />,
     );
 
@@ -140,6 +145,7 @@ describe("SettingsPanel", () => {
         onChange={onChange}
         onSave={() => {}}
         onBack={() => {}}
+        addToast={addToast}
       />,
     );
     await user.click(screen.getByRole("button", { name: "syncMode" }));
@@ -166,6 +172,7 @@ describe("SettingsPanel", () => {
         onChange={() => {}}
         onSave={() => {}}
         onBack={() => {}}
+        addToast={addToast}
       />,
     );
 

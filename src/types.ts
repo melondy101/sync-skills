@@ -331,12 +331,35 @@ export interface PathCheck {
   exists: boolean;
   is_dir: boolean;
 }
+
 export interface RecoveryNotice {
   reason: string;
   moved_to: string;
 }
+
 export interface WorkspaceCandidate {
   path: string;
   name: string;
   source: string;
+}
+
+export interface McpServerEntry {
+  command: string;
+  args: string[];
+}
+
+/** The entry the app would write, plus whether that command is on disk. */
+export interface McpSuggestedEntry extends McpServerEntry {
+  command_exists: boolean;
+}
+
+export interface McpTargetStatus {
+  tool: string;
+  path: string;
+  /** The tool created its config directory, so this target can be written. */
+  registered: boolean;
+  file_exists: boolean;
+  installed: boolean;
+  matches: boolean;
+  error: string | null;
 }

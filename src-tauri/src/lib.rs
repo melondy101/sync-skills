@@ -15,6 +15,7 @@ mod lint;
 mod lock;
 mod market;
 mod mcp;
+mod mcp_config;
 mod models;
 mod ops;
 mod paths;
@@ -140,6 +141,10 @@ pub fn run() {
             commands::tools::discover_tools,
             commands::paths::check_path,
             commands::diagnostics::get_db_recovery,
+            commands::mcp_config::mcp_suggested_entry,
+            commands::mcp_config::mcp_status,
+            commands::mcp_config::mcp_install,
+            commands::mcp_config::mcp_uninstall,
             // Skills
             commands::skills::list_skills,
             commands::skills::read_skill_md,

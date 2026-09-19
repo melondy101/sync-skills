@@ -8,7 +8,9 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import * as api from "../api";
 import type { AppUpdateInfo, Settings } from "../types";
 import type { TranslateFn } from "../i18n";
+import type { AddToastFn } from "../hooks/useToasts";
 import { Icon } from "./Icon";
+import { McpServersSection } from "./McpServersSection";
 import { ToggleSwitch } from "./ToggleSwitch";
 
 type UpdateCheckState =
@@ -22,13 +24,14 @@ type UpdateCheckState =
   | { status: "installing" }
   | { status: "error"; error: string };
 
-type Section = "appearance" | "sync" | "proxy" | "update";
+type Section = "appearance" | "sync" | "proxy" | "update" | "mcp";
 
 const SECTIONS: ReadonlyArray<{ key: Section; labelKey: string }> = [
   { key: "appearance", labelKey: "appearance" },
   { key: "sync", labelKey: "syncMode" },
   { key: "proxy", labelKey: "proxySection" },
   { key: "update", labelKey: "appUpdateSection" },
+  { key: "mcp", labelKey: "mcpSection" },
 ];
 
 export function SettingsPanel({
@@ -37,12 +40,14 @@ export function SettingsPanel({
   onChange,
   onSave,
   onBack,
+  addToast,
 }: {
   t: TranslateFn;
   settings: Settings;
   onChange: (settings: Settings) => void;
   onSave: () => void;
   onBack: () => void;
+  addToast: AddToastFn;
 }) {
   // App self-update check (local to this panel)
   const [appVersion, setAppVersion] = useState("");
@@ -353,6 +358,8 @@ export function SettingsPanel({
               </div>
             </>
           )}
+
+          {section === "mcp" && <McpServersSection t={t} addToast={addToast} />}
         </div>
       </div>
 
