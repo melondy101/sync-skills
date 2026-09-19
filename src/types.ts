@@ -329,3 +329,7 @@ export interface PathCheck {
   exists: boolean;
   is_dir: boolean;
 }
+export interface RecoveryNotice {
+  reason: string;
+  moved_to: string;
+}

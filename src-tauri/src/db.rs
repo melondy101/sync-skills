@@ -5,12 +5,26 @@ use crate::hash::compute_id_hash;
 use crate::models::{ConflictVersion, ConflictView, InstallationInfo, Project, Skill, SkillView, SyncLog, Tool};
 use crate::scanner;
 use rusqlite::{params, Connection, Result};
+use serde::Serialize;
+use std::ffi::OsString;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 /// Database wrapper with mutex for thread safety
 pub struct Database {
     pub(crate) conn: Mutex<Connection>,
+    /// Set when startup had to move an unreadable database file aside. The GUI
+    /// reads it once at launch to tell the user where their data went.
+    pub recovered: Option<RecoveryNotice>,
+}
+
+/// PRD §15.2: a file that fails SQLite's own consistency check is quarantined
+/// rather than deleted, so whatever is still readable can be recovered by hand.
+#[derive(Debug, Clone, Serialize)]
+pub struct RecoveryNotice {
+    pub reason: String,
+    pub moved_to: String,
 }
 
 impl Database {
@@ -27,7 +41,48 @@ impl Database {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open database: {}", e))?;
 
-        Self::from_connection(conn)
+        // SQLite reads lazily, so opening a corrupt file succeeds and the first
+        // query is what fails — which is why the check happens here, before any
+        // migration or seed statement runs against it.
+        let problem = match Self::integrity_problem(&conn) {
+            None => return Self::from_connection(conn),
+            Some(problem) => problem,
+        };
+        let quarantined = Self::quarantine_file(&db_path)?;
+        log::error!(
+            "skill-manager.db failed quick_check ({}); moved to {}",
+            problem,
+            quarantined.display()
+        );
+        drop(conn);
+        let conn = Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open rebuilt database: {}", e))?;
+        let mut db = Self::from_connection(conn)?;
+        db.recovered = Some(RecoveryNotice {
+            reason: problem,
+            moved_to: quarantined.to_string_lossy().to_string(),
+        });
+        Ok(db)
+    }
+
+    /// `PRAGMA quick_check` reports `ok` once per healthy page set; anything
+    /// else — or the pragma itself failing, which is what a file that is not a
+    /// database at all produces — is returned as the problem description.
+    fn integrity_problem(conn: &Connection) -> Option<String> {
+        let mut stmt = match conn.prepare("PRAGMA quick_check(1)") {
+            Ok(stmt) => stmt,
+            Err(e) => return Some(format!("quick_check failed: {}", e)),
+        };
+        let rows = match stmt.query_map([], |row| row.get::<_, String>(0)) {
+            Ok(rows) => rows,
+            Err(e) => return Some(format!("quick_check failed: {}", e)),
+        };
+        let problems: Vec<String> = rows.filter_map(|row| row.ok()).filter(|row| row != "ok").collect();
+        if problems.is_empty() {
+            None
+        } else {
+            Some(problems.join("; "))
+        }
     }
 
     /// Open an in-memory database (tests only — never touches the user's real DB)
@@ -46,6 +101,7 @@ impl Database {
 
         let db = Database {
             conn: Mutex::new(conn),
+            recovered: None,
         };
 
         db.init_schema()?;
@@ -56,6 +112,30 @@ impl Database {
 
     fn db_path() -> Result<PathBuf, String> {
         crate::app_paths::database_path()
+    }
+
+    /// Move `path` and its `-wal` / `-shm` sidecars out of the way under a
+    /// timestamped name, returning the name the main file was moved to. Nothing
+    /// is deleted: a corrupt index is the user's data, and a later `sqlite3`
+    /// `.recover` run is still possible if the bytes are on disk.
+    fn quarantine_file(path: &Path) -> Result<PathBuf, String> {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| format!("System clock before Unix epoch: {}", e))?
+            .as_secs();
+        let moved = suffixed(path, &format!(".corrupt-{}", stamp));
+        std::fs::rename(path, &moved)
+            .map_err(|e| format!("Failed to quarantine {}: {}", path.display(), e))?;
+        for sidecar in ["-wal", "-shm"] {
+            let from = suffixed(path, sidecar);
+            if from.exists() {
+                let to = suffixed(&from, &format!(".corrupt-{}", stamp));
+                std::fs::rename(&from, &to).map_err(|e| {
+                    format!("Failed to quarantine {}: {}", from.display(), e)
+                })?;
+            }
+        }
+        Ok(moved)
     }
 
     /// Initialize database schema
@@ -1860,4 +1940,84 @@ pub(crate) fn remote_skill_row(row: &rusqlite::Row) -> Result<crate::models::Rem
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
     })
+}
+
+/// Append `suffix` to a file name, keeping its directory: `a.db` + `.corrupt-1`
+/// becomes `a.db.corrupt-1`, and `a.db-wal` + `.corrupt-1` becomes
+/// `a.db-wal.corrupt-1`.
+fn suffixed(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = match path.file_name() {
+        Some(name) => name.to_os_string(),
+        None => OsString::from("skill-manager.db"),
+    };
+    name.push(suffix);
+    path.with_file_name(name)
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+
+    #[test]
+    fn a_healthy_database_passes_the_startup_check() {
+        let db = Database::new_in_memory().expect("in-memory db");
+        let conn = db.conn.lock().unwrap();
+        assert_eq!(Database::integrity_problem(&conn), None);
+    }
+
+    #[test]
+    fn an_unreadable_file_is_reported_rather_than_opened_blindly() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("skill-manager.db");
+        // Not a SQLite image at all: the header is what `quick_check` reads first.
+        std::fs::write(&path, b"this is definitely not an sqlite database file").expect("write junk");
+
+        let conn = Connection::open(&path).expect("sqlite opens lazily, so this succeeds");
+        let problem = Database::integrity_problem(&conn).expect("junk must be reported");
+        assert!(
+            problem.contains("file is not a database") || problem.contains("malformed"),
+            "unexpected report: {}",
+            problem
+        );
+    }
+
+    #[test]
+    fn quarantine_moves_the_file_and_its_sidecars_aside() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let main = dir.path().join("skill-manager.db");
+        let wal = suffixed(&main, "-wal");
+        let shm = suffixed(&main, "-shm");
+        for path in [&main, &wal, &shm] {
+            std::fs::write(path, b"junk").expect("write sidecar");
+        }
+
+        let moved = Database::quarantine_file(&main).expect("quarantine");
+
+        assert!(moved.exists(), "the corrupt file must be kept, not deleted");
+        assert!(moved.to_string_lossy().contains("skill-manager.db.corrupt-"));
+        assert!(!main.exists());
+        assert!(!wal.exists(), "-wal must not be left for SQLite to pick up");
+        assert!(!shm.exists());
+    }
+
+    #[test]
+    fn missing_sidecars_are_not_an_error() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let main = dir.path().join("skill-manager.db");
+        std::fs::write(&main, b"junk").expect("write db");
+
+        let moved = Database::quarantine_file(&main).expect("quarantine");
+
+        assert!(moved.exists());
+    }
+
+    #[test]
+    fn suffixing_keeps_the_directory_and_appends_to_the_name() {
+        let path = Path::new("/data/skill-manager.db");
+        assert_eq!(suffixed(path, "-wal"), PathBuf::from("/data/skill-manager.db-wal"));
+        assert_eq!(
+            suffixed(path, ".corrupt-1700000000"),
+            PathBuf::from("/data/skill-manager.db.corrupt-1700000000")
+        );
+    }
 }

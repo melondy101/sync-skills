@@ -645,6 +645,7 @@ const zh: Record<string, string> = {
   pathErrorEnvVar: "不支持环境变量，请输入完整路径",
   pathErrorRelative: "请输入绝对路径",
   pathErrorNotFound: "路径不存在",
+  dbRecoveredAfterCorruption: "数据库文件已损坏，应用已新建索引；损坏文件已移动到",
   projectAdded: "已添加项目",
   failedAddProject: "添加项目失败",
   confirmDeleteProject: "删除项目",

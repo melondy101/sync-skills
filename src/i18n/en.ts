@@ -644,6 +644,7 @@ const en: Record<string, string> = {
   pathErrorEnvVar: "Environment variables are not supported; enter the full path",
   pathErrorRelative: "Please enter an absolute path",
   pathErrorNotFound: "Path does not exist",
+  dbRecoveredAfterCorruption: "The database file was corrupt; a fresh index was created and the damaged file was moved to",
   projectAdded: "Project added",
   failedAddProject: "Failed to add project",
   confirmDeleteProject: "Delete project",

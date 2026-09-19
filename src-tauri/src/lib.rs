@@ -138,6 +138,7 @@ pub fn run() {
             commands::tools::list_tool_templates,
             commands::tools::discover_tools,
             commands::paths::check_path,
+            commands::diagnostics::get_db_recovery,
             // Skills
             commands::skills::list_skills,
             commands::skills::read_skill_md,

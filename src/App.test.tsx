@@ -90,6 +90,7 @@ beforeEach(() => {
 // ToolsSection loads these on mount (both fail-silent nice-to-haves).
   vi.mocked(api.discoverTools).mockResolvedValue([]);
   vi.mocked(api.listToolTemplates).mockResolvedValue([]);
+  vi.mocked(api.getDbRecovery).mockResolvedValue(null);
 });
 
 async function renderApp() {
@@ -217,6 +218,24 @@ describe("App orchestration", () => {
     fireFileChanged();
 
     await waitFor(() => expect(api.syncAllPending).toHaveBeenCalled(), { timeout: 4000 });
+  });
+
+  it("tells the user where a quarantined corrupt database went, once", async () => {
+    vi.mocked(api.getDbRecovery).mockResolvedValue({
+      reason: "file is not a database",
+      moved_to: "/data/skill-manager.db.corrupt-1700000000",
+    });
+
+    await renderApp();
+
+    // Exactly one banner, and it survives a settings-driven re-render rather than
+    // re-firing the fetch.
+    expect(await screen.findAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("/data/skill-manager.db.corrupt-1700000000");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(api.getDbRecovery).toHaveBeenCalledTimes(1);
   });
 
   it("only notifies when neither full-auto nor the toggle is on", async () => {

@@ -12,7 +12,7 @@ import "./ui-enhancements.css";
 import * as api from "./api";
 import type {
   Tool, Project, SkillView, ScanResult, SkillUpdate,
-  Settings, InstallationInfo, ConflictView, RemoteInstallation, Market,
+  Settings, InstallationInfo, ConflictView, RemoteInstallation, Market, RecoveryNotice,
 } from "./types";
 import { makeT, type Lang } from "./i18n";
 import { useToasts } from "./hooks/useToasts";
@@ -249,6 +249,26 @@ function App() {
     loadSettings();
     loadConflicts();
     loadRemoteInstallations();
+  }, []);
+
+  // PRD §15.2: when startup had to quarantine an unreadable index, the one place
+  // that can say so is the UI — everything below is legitimately empty in that
+  // case and would otherwise read as a silent loss of configuration. Rendered as
+  // a dismissible banner rather than a toast because it names a file path the
+  // user may need to copy after the toast has faded, and it must not repeat when
+  // the language changes.
+  const [dbRecovery, setDbRecovery] = useState<RecoveryNotice | null>(null);
+  useEffect(() => {
+    let active = true;
+    api
+      .getDbRecovery()
+      .then((notice) => {
+        if (active) setDbRecovery(notice);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Sync selectedProject when tab changes
@@ -665,6 +685,17 @@ function App() {
           </div>
         </div>
       </section>
+      )}
+
+      {dbRecovery && (
+        <div className="discovery-banner" role="alert">
+          <span className="discovery-text">
+            {t("dbRecoveredAfterCorruption")}: {dbRecovery.moved_to}
+          </span>
+          <button className="btn btn-secondary btn-small" onClick={() => setDbRecovery(null)}>
+            {t("dismiss")}
+          </button>
+        </div>
       )}
 
       {/* Conflict banner + diff modal (M5) */}

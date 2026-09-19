@@ -6,6 +6,7 @@
 
 pub mod app_settings;
 pub mod conflicts;
+pub mod diagnostics;
 pub mod logs;
 pub mod market;
 pub mod paths;
