@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { listen } from "@tauri-apps/api/event";
 import App from "./App";
 import * as api from "./api";
 import type { Project, Settings, SkillView, Tool } from "./types";
@@ -175,5 +176,56 @@ describe("App orchestration", () => {
     expect(screen.getByText("beta-skill")).toBeInTheDocument();
     expect(screen.queryByText("alpha-skill")).not.toBeInTheDocument();
     expect(api.listSkills).not.toHaveBeenCalled();
+  });
+
+  // ==================== file-watcher auto-sync (T3 / M12) ====================
+
+  // The effect re-subscribes whenever the settings load, so every handler the
+  // app registered is fired: the ones from renders before `getSettings` resolved
+  // take the notify-only branch, which is what makes this a faithful reproduction
+  // of a live watcher event.
+  function fireFileChanged() {
+    const handlers = vi.mocked(listen).mock.calls.map((call) => call[1]);
+    for (const handler of handlers) {
+      handler({ id: 1, event: "skill-file-changed", payload: { skill_name: "alpha-skill", path: "/tmp/alpha-skill" } });
+    }
+  }
+
+  it("rescans and syncs the pending batch once a watcher burst settles", async () => {
+    vi.mocked(api.getSettings).mockResolvedValue({ ...mockSettings, sync_mode: "full-auto", auto_sync_on_file_change: true });
+    vi.mocked(api.fullScan).mockResolvedValue({ skills_found: 0, skills_new: 0, skills_updated: 0, errors: [], details: [] });
+    vi.mocked(api.syncAllPending).mockResolvedValue([{ skill_id: 1, skill_name: "alpha-skill", synced_to: 2, errors: [] }]);
+    await renderApp();
+    vi.mocked(api.fullScan).mockClear();
+    vi.mocked(api.syncAllPending).mockClear();
+
+    fireFileChanged();
+    fireFileChanged();
+
+    await waitFor(() => expect(api.syncAllPending).toHaveBeenCalledTimes(1), { timeout: 4000 });
+    // One pass for the whole burst, and it starts with a rescan so the pending
+    // set is current — a scan alone used to leave SSOT and the tools out of step.
+    expect(api.fullScan).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats the file-change toggle as auto-sync even in semi-auto", async () => {
+    vi.mocked(api.getSettings).mockResolvedValue({ ...mockSettings, auto_sync_on_file_change: true });
+    vi.mocked(api.syncAllPending).mockResolvedValue([]);
+    await renderApp();
+    vi.mocked(api.syncAllPending).mockClear();
+
+    fireFileChanged();
+
+    await waitFor(() => expect(api.syncAllPending).toHaveBeenCalled(), { timeout: 4000 });
+  });
+
+  it("only notifies when neither full-auto nor the toggle is on", async () => {
+    await renderApp();
+
+    fireFileChanged();
+    await screen.findByText(/changed on disk/);
+
+    expect(api.syncAllPending).not.toHaveBeenCalled();
+    expect(api.fullScan).not.toHaveBeenCalled();
   });
 });

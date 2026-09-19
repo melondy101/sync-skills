@@ -5,7 +5,7 @@
 // projects, settings, updates, conflicts) and top-level UI state, and wires the
 // feature components together. All rendering details live in src/components/.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 import "./ui-enhancements.css";
@@ -54,6 +54,10 @@ const DEFAULT_SETTINGS: Settings = {
   auto_sync_on_file_change: false,
 };
 
+// Watcher events arrive per file; one rename or a checkout touches many skills
+// at once, so the auto-sync pass waits for the burst to settle before scanning.
+const AUTO_SYNC_DEBOUNCE_MS = 1500;
+
 function App() {
   // ==================== Shared data ====================
   const [tools, setTools] = useState<Tool[]>([]);
@@ -96,22 +100,46 @@ function App() {
     return () => clearTimeout(timer);
   }, [settings]);
 
-  // T3 / M12: listen for file-system watcher events from the backend.
-  // In full-auto mode, auto-trigger a scan + sync. In semi-auto mode,
-  // show a toast notification so the user knows a skill changed on disk.
+  // T3 / M12: the backend watcher reports on-disk changes. Auto-sync runs on the
+  // same OR the backend's `effective_auto_sync_on_file_change` computes; with
+  // neither enabled the user only gets a notice.
+  //
+  // A refresh scan is not enough — it marks updates but leaves SSOT and the tool
+  // directories out of step — so the pending batch is synced after the rescan.
+  // Events burst (one rename touches several skills), hence the coalescing timer,
+  // and the sync pass is read through a ref so the subscription never calls a
+  // stale closure of `handleSyncAll`.
+  const syncAllRef = useRef(handleSyncAll);
   useEffect(() => {
+    syncAllRef.current = handleSyncAll;
+  });
+
+  const autoSyncTimer = useRef<number | null>(null);
+  useEffect(() => {
+    const autoSync = settings.sync_mode === "full-auto" || settings.auto_sync_on_file_change;
     const unlisten = listen<{ skill_name: string; path: string }>("skill-file-changed", (event) => {
-      const { skill_name } = event.payload;
-      if (settings.sync_mode === "full-auto") {
-        addToast("info", `Auto-syncing "${skill_name}"`);
-        // Trigger a refresh scan; the sync cycle picks up changes.
-        api.fullScan().catch(() => {});
-      } else if (settings.sync_mode === "semi-auto") {
-        addToast("info", `"${skill_name}" changed on disk — check for updates`);
+      if (!autoSync) {
+        addToast("info", `"${event.payload.skill_name}" changed on disk — check for updates`);
+        return;
       }
+      if (autoSyncTimer.current !== null) window.clearTimeout(autoSyncTimer.current);
+      autoSyncTimer.current = window.setTimeout(() => {
+        autoSyncTimer.current = null;
+        void (async () => {
+          try {
+            await api.fullScan();
+          } catch {
+            // A failed rescan must not swallow the sync of what already changed.
+          }
+          await syncAllRef.current();
+        })();
+      }, AUTO_SYNC_DEBOUNCE_MS);
     });
-    return () => { unlisten.then((fn) => fn()); };
-  }, [settings.sync_mode, addToast]);
+    return () => {
+      if (autoSyncTimer.current !== null) window.clearTimeout(autoSyncTimer.current);
+      unlisten.then((fn) => fn());
+    };
+  }, [settings.sync_mode, settings.auto_sync_on_file_change, addToast]);
 
   // ==================== UI state ====================
   const [activeTab, setActiveTab] = useState<Tab>("global");
