@@ -452,19 +452,17 @@ flowchart TD
 |------|------|------|
 | 文件系统监听自动同步（M12） | 已实现 | `src-tauri/src/watcher.rs` 只监听 `SKILL.md`，`App.tsx` 半自动提示 / 全自动 debounce 后扫描并同步 |
 | 时间戳驱动同步 UI（M11） | 已定稿，不改 | 决策为仅展示时间戳，同步判定仍以 hash 为准（见 `doc/phase4_design.md` §二） |
-| `core_hash` 用于更新检测（M9） | 已实现 | `sync.rs` 的检查更新路径按 `core_hash` 比对，附属文件变更不再触发提示 |
-| `MCP` 集成：Server 配置管控与跨工具同步 | 部分实现 | `mcp.rs` + `skill-manager-mcp` 二进制提供只读服务；`mcp_config.rs` 负责六家 JSON 配置的登记/移除。Codex 的 TOML 与安装包内的二进制分发仍未落地 |
-| 除 GitHub 外的其他代码托管平台适配 | 部分实现 | `providers.rs`：GitHub、gitlab.com、Bitbucket Cloud。GitLab 自建实例与 Azure DevOps 未落地 |
+| `core_hash` 用于更新检测（M9） | 已实现 | `ops/mod.rs` 的 `check_single_skill` 按 `core_hash`（仅 `SKILL.md`）比对，附属文件变更不再触发提示 |
+| `MCP` 集成：Server 配置管控与跨工具同步 | 已实现 | `mcp.rs` + `skill-manager-mcp` 二进制提供只读服务；`mcp_config.rs` 负责六家 JSON 配置与 Codex `~/.codex/config.toml` 的 `[mcp_servers]` TOML 登记/移除（`toml_edit` 保留用户注释）；安装包通过 `tauri.conf.json` 的 `bundle.externalBin` + `scripts/stage-sidecar.mjs` 携带该二进制 |
+| 除 GitHub 外的其他代码托管平台适配 | 已实现 | `providers.rs`：GitHub、GitLab（含自建实例——实例地址随 `markets.remote_url` 落库，未知主机先探测 `/api/v4` 再回落 GitHub）、Bitbucket Cloud、Azure DevOps |
 | 自动检测工作区目录 | 已实现 | `workspaces.rs`：读 `~/.claude.json` 与 Cursor `workspaceStorage`，项目面板一键导入 |
 | 定时检测同步 | 部分实现 | `useUpdateSchedule.ts` 只做定时**检测**并提示，不做定时写入（与 §10「无后台进程」一致） |
+| 冲突自动裁决 | 已实现 | `commands/conflicts.rs`：`newest`（按 `SKILL.md` 修改时间）与 `preferred-tool`（按工具列表顺序）两种策略，冲突面板可一键批量裁决；证据不足时不裁决，仍回落到手动 |
 
 仍未落地的开放项：
 
-- `MCP`：随安装包分发 `skill-manager-mcp` 可执行文件（当前 bundle 只含主程序，安装版登记会指向不存在的路径，设置面板已给出告警）。
-- `MCP`：Codex `~/.codex/config.toml` 的 `[mcp_servers]` 写入——保留用户注释需要 `toml_edit`，目前不是依赖。
-- `Market`：GitLab 自建实例（非 `gitlab.com` 主机目前按 GitHub 解析）。
-- `Market`：Azure DevOps——匿名读取受组织策略限制，无法在无凭据下验证。
-- 冲突自动裁决策略（当前仅手动裁决）。
+- `Market`：Azure DevOps 适配器无法在本机做端到端验证——匿名读取被组织策略拦截（`azure-sdk` 返回登录页、`dnceng` 返回 `TF401019`），因此只有 URL/载荷构造与错误映射有单元测试覆盖，真实抓取需用户提供 `AZURE_DEVOPS_PAT` 后验证。
+- 冲突：自动裁决只选整份版本，不做三方差异合并；同秒修改或时间戳不可读的冲突仍留给人。
 
 ## 12. 验收检查清单
 

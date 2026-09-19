@@ -45,9 +45,9 @@ M4-M7 建立了新的架构基础：名字即身份、双层时间戳、冲突�
 | 组件 | 状态 |
 |------|------|
 | LockManager | ✅ 已接入（`do_sync_skill` / `check_single_skill` / `reverse_sync_skill` / `sync_remote_skill_to_tools`） |
-| 时间戳字段 | 已存储和展示，未驱动"是否需要同步"的判断 |
-| check_updates | 仍用 `content_hash`（全目录）；`core_hash` 已实现并用于冲突检测，但未用于更新判断 |
-| 文件监听 | 完全缺失，full-auto 模式仍需手动扫描 |
+| 时间戳字段 | 已定稿，不改：仅展示时间戳，"是否需要同步"仍以 hash 判定（见 `doc/phase4_design.md` §二） |
+| check_updates | ✅ 已改为按 `core_hash` 比对（`ops/mod.rs` 的 `check_single_skill`），附属文件变更不再触发更新提示 |
+| 文件监听 | ✅ 已实现（M12）：`watcher.rs` 监听 `SKILL.md`，半自动提示 / 全自动 debounce 后扫描并同步 |
 | ~~工具→中心同步~~ | ~~检测可用，但 diff 展示和同步后状态清除有 bug~~ ✅ Bug #1 已修复 |
 | 项目编辑 | ✅ 已完成 |
 | 反向同步 | ✅ 已完成 |

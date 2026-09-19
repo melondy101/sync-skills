@@ -35,6 +35,7 @@ Rules:
 - One file per ticket at `.scratch/<feature>/issues/NN-<slug>.md`, numbered from `01`.
 - The header of each file references its canonical GitHub issue number (`GitHub: #N`). If the ticket has not yet been published, write `GitHub: pending` and create the issue before marking the work done.
 - `.scratch/` is gitignored — see `AGENTS.md` "不要提交" — so local drafts never leak into commits.
+- **Checkboxes in these files are not status.** Verified on 2026-09-19: `gh issue list --state open` returns nothing for this repo, yet 198 unchecked `- [ ]` boxes remain across `.scratch/*/issues/`. GitHub is authoritative — re-run `gh issue list` before treating any local ticket as open work, and don't infer remaining scope from a mirror's checkbox count. Pruning the stale mirrors is a local tidy-up of gitignored files, not a repo change.
 
 ## When a skill says "publish to the issue tracker"
 

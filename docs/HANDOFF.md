@@ -212,9 +212,10 @@ sync-skills/
 | 功能 | 状态 | 说明 |
 |------|------|------|
 | 时间戳驱动同步 UI | ⏳ 部分 | 时间戳已展示并用于排序，未驱动按钮状态（Phase 4 决策：判定继续以 hash 为准） |
-| MCP 集成 | ⏳ 进行中 | 只读 stdio server（`mcp.rs::catalog()`，9 个工具）与各工具的配置登记（`mcp_config.rs`）已落地；剩余两项：Codex 的 `[mcp_servers]` TOML 写入（保留注释需 `toml_edit`），以及把 `skill-manager-mcp` 打进安装包（当前 bundle 只含主程序，安装版登记会指向不存在的路径，面板会告警） |
-| GitLab 自建实例 | ⏳ 规划中 | `providers.rs::provider_for_reference` 目前只把 `gitlab.com` 路由到 GitLab 适配器 |
-| Azure DevOps 适配 | ⏳ 规划中 | 匿名读取受组织策略限制（404 / 302 到 HTML），无法在无凭据条件下验证，暂不写适配器 |
+| MCP 集成 | ✅ 已落地 | 只读 stdio server（`mcp.rs::catalog()`，9 个工具）+ 各工具配置登记（`mcp_config.rs`：六家 JSON 与 Codex `~/.codex/config.toml` 的 `[mcp_servers]` TOML，`toml_edit` 保注释）+ 安装包携带 server 二进制（`bundle.externalBin` 与 `build.beforeBundleCommand` → `src-tauri/scripts/stage-sidecar.mjs`，本地开发先跑 `pnpm stage:sidecar`） |
+| GitLab 自建实例 | ✅ 已实现 | `GitlabProvider` 持有实例 `base`，主机来自 `markets.remote_url`；未知主机先匿名探测 `/api/v4/projects` 再回落 GitHub（`provider_for_reference_probed`），市场读写统一走 `provider_for_market` |
+| Azure DevOps 适配 | ⚠️ 已实现，未经真实抓取验证 | `providers.rs::AzureDevopsProvider`（REST 7.1，PAT 只从 `AZURE_DEVOPS_PAT` 环境变量读）。本机匿名访问被组织策略拦截（登录页 HTML / `TF401019`），因此只有 URL 与载荷构造、错误映射的单元测试证据；改动它的人需要自备 PAT 做一次真实索引 |
+| 冲突自动裁决 | ✅ 已实现 | `commands/conflicts.rs::auto_resolve_conflicts`，两种策略 `newest` / `preferred-tool`；证据不足（时间戳不可读或并列、无匹配的首选工具）时不裁决，手动路径保持不变。自动记录写 `resolved_by = auto:<strategy>:<tool>` |
 
 ### 5.3 已知坑与注意事项
 

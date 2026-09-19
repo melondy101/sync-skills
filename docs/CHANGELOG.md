@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - MarketProvider 抽象层：`providers.rs` 定义 `MarketProvider` trait，市场扫描/索引/安装统一走 provider 分发，不再把 GitHub 语义硬编码进 `ops/market.rs`
-- GitLab 适配器：`providers.rs::GitlabProvider` 走 gitlab.com REST v4（tree API 分页游标 + 单层失败降级），URL 解析接受 https / http / SSH 与子组路径；自建实例（非 `gitlab.com` 主机）仍按 GitHub 处理，属待办
+- GitLab 适配器：`providers.rs::GitlabProvider` 走 gitlab.com REST v4（tree API 分页游标 + 单层失败降级），URL 解析接受 https / http / SSH 与子组路径；自建实例见下条
 - 对外 MCP stdio server（v0.7.0 第一片）：`src-tauri/src/mcp.rs` + 独立二进制 `skill-manager-mcp`，JSON-RPC 2.0 over stdin/stdout，暴露 9 个只读工具（`list_skills` / `get_skill` / `list_tools` / `list_projects` / `list_markets` / `list_market_skills` / `list_conflicts` / `get_sync_logs` / `get_stats`）读取与 GUI 相同的 SQLite 索引；协议派发是纯 line-in / line-out 函数，17 个单元测试无需进程即可覆盖全部契约
 - 全局快捷键层：`hooks/useHotkeys.ts` 注册 Tab 切换、搜索聚焦、`?` 速查表（`ShortcutsModal.tsx`）等键位，市场卡片的 roving focus 复用同一选择器
 - 市场卡片可访问性与键盘路径：13 个浮层统一走 `useFocusTrap`
@@ -21,9 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 定时检查更新：`hooks/useUpdateSchedule.ts` + 设置项 `update_check_interval_minutes`（默认 0＝关闭），只在窗口打开时检测、不同步，发现更新才提示
 - MCP 服务登记：`src-tauri/src/mcp_config.rs` 把 `skill-manager` 这一条幂等写入 Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf 的 JSON 配置（整份文件按 `serde_json::Value` 往返，其他键与服务不受影响；未创建配置目录的工具跳过且不代为建目录），设置面板新增「MCP 服务」分区展示每个工具的登记状态并提供登记/移除
 - Bitbucket Cloud 市场源：`providers.rs::BitbucketProvider` 走 `api.bitbucket.org/2.0`（`src/{ref}/{path}` 单端点兼作目录列表与原始文件、`mainbranch.name` 取默认分支、`next` 游标原样跟随），URL 解析接受 https / http / SSH 形式；命令层、数据库与 UI 零改动
+- GitLab 自建实例市场源：`GitlabProvider` 改为持有实例 `base`，主机地址复用已存在的 `markets.remote_url` 列（无 schema 变更）；`add_market_by_url` 对无法按名字命中的主机先匿名探测 `GET /api/v4/projects`，是 GitLab 就走该实例，否则回落 GitHub；索引/检查更新/下载三条路径统一改走 `provider_for_market`，自建市场重启后仍指向原实例
+- Azure DevOps 市场源：`providers.rs::AzureDevopsProvider` 走 `dev.azure.com` REST 7.1（`_apis/git/.../items?recursionLevel=Full` 列目录 + `objects/{objectId}` 取原始字节 + `defaultBranch` 解析分支），凭据只从环境变量 `AZURE_DEVOPS_PAT` 读取，绝不写入 `settings.json`；URL 解析接受 `https://dev.azure.com/{org}/{proj}/_git/{repo}?version=GB{branch}` 与 `ssh://git@ssh.dev.azure.com/v3/{org}/{proj}/{repo}`。匿名访问受组织策略限制（实测 `azure-sdk` 返回登录页、`dnceng` 返回 `TF401019`），故本项仅有单元测试证据，真实抓取需自备 PAT
+- `skill-manager-mcp` 进入安装包：`tauri.conf.json` 声明 `bundle.externalBin`，`build.beforeBundleCommand` 调 `scripts/stage-sidecar.mjs`（`cargo metadata` + `rustc -vV` 求出 target 目录与 triple，把刚构建的 server 复制成 `src-tauri/bin/skill-manager-mcp-<triple>[.exe]`），安装后二进制与主程序同目录，设置面板登记的命令路径因此真实可达；`src-tauri/bin/` 已加入 `.gitignore`
+- MCP 服务登记支持 Codex：`mcp_config.rs` 由"只写 JSON"改为按目标格式分派，新增 `~/.codex/config.toml` 的 `[mcp_servers.skill-manager]`，用 `toml_edit` 往返以保留用户的注释、其余服务表与格式；写入仍只碰这一个键，无法解析或 `[mcp_servers]` 不是表时该目标报错而其余目标继续
+- 冲突自动裁决（M5 补全）：`commands/conflicts.rs` 抽出 `promote_version`，手动与自动共用同一条"提升为 SSOT 并广播"的路径；新 IPC `auto_resolve_conflicts` 提供 `newest`（比 `SKILL.md` 修改时间）与 `preferred-tool`（按工具列表顺序取第一个确实持有版本的工具）两种策略，时间戳读不到或并列时**不裁决**并把原因返回，冲突留在面板等手动处理；自动裁决在 `skill_conflicts.resolved_by` 记为 `auto:<strategy>:<tool>` 以区分人工点击；冲突横幅新增策略下拉 + 带确认对话框的「自动裁决」按钮
 
 ### Fixed
 - 全自动模式下文件监听只重扫、不同步：`App.tsx` 的 `skill-file-changed` 处理改为按 1.5s debounce 触发 `fullScan` + 同步，半自动模式仍只提示
+- 本地开发/打包无法启动：加入第二个 `[[bin]]`（`skill-manager-mcp`）之后，`cargo run` 报 `unable to find binary 'skill-manager'`/`could not determine which binary to run`，而 `tauri dev` 与 `tauri build` 都经它启动。`src-tauri/Cargo.toml` 补 `default-run = "skill-manager"`（MCP 面板此前无法在真实窗口点测即源于此）
 
 ### Changed
 - 持久化数据根统一按代码实际路径记载为 `~/.skill-manager/`（数据库 `skill-manager.db`、SSOT `ssot/`）：`AGENTS.md`、README ×3 的架构图与功能条目、`docs/HANDOFF.md`、`watcher.rs` 文档注释此前仍写作旧的 `~/.agents/skill-manager/`。工具共享的 `~/.agents/skills/` 未变，两者必须继续区分（SSOT 必须落在任何工具扫描的 `skills/` 树之外）
