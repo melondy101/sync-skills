@@ -45,3 +45,6 @@ src-tauri/target-out2/
 *.db
 *.db-journal
 *.db-wal
+
+# Staged sidecar binaries for `bundle.externalBin` (created by beforeBundleCommand)
+src-tauri/bin/

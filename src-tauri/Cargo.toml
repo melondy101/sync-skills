@@ -5,6 +5,9 @@ description = "AI Skill sync manager across coding tools"
 authors = ["you"]
 edition = "2021"
 license = "AGPL-3.0-only"
+# Two bins ship from this crate (the GUI and the stdio MCP server), so `cargo
+# run` / `tauri dev` / `tauri build` need to be told which one is the app.
+default-run = "skill-manager"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -37,6 +40,8 @@ windows-sys = { version = "0.61.2", features = ["Win32_Web_InternetExplorer"] }
 rustls = "0.23"
 tempfile = "3"
 notify = { version = "8", features = ["macos_fsevent"] }
+toml_edit = { version = "0.25.15", default-features = false, features = ["parse", "display"] }
+base64 = "0.22"
 
 [dev-dependencies]
 # tempfile was accidentally kept in dev-dependencies only, which is not
