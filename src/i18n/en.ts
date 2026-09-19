@@ -566,7 +566,7 @@ const en: Record<string, string> = {
   kindStandard: "standard",
   kindNonstandard: "nonstandard",
   addMarketUrlRequired: "Please enter a market URL",
-  addMarketUrlPlaceholder: "https://github.com/owner/repo or owner/repo",
+  addMarketUrlPlaceholder: "github.com/owner/repo, gitlab.com/group/repo or bitbucket.org/ws/repo",
   addMarketUrlHint: "Only the repo link is needed; the branch (main/master) is auto-detected",
   repoNoSkills: "Repository indexed, but no skills were found. Make sure each skill is a subdirectory of the repo root, or the repo itself is a skill.",
   repoSyncFailed: "Index failed: {0}",

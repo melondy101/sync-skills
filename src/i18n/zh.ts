@@ -568,7 +568,7 @@ const zh: Record<string, string> = {
   kindStandard: "standard",
   kindNonstandard: "nonstandard",
   addMarketUrlRequired: "请填写市场链接",
-  addMarketUrlPlaceholder: "https://github.com/owner/repo 或 owner/repo",
+  addMarketUrlPlaceholder: "github.com/owner/repo、gitlab.com/group/repo 或 bitbucket.org/ws/repo",
   addMarketUrlHint: "只需填写仓库链接，分支（main/master）由系统自动探测",
   repoNoSkills: "仓库已索引，但未发现 Skill（确认结构：每个 Skill 都是仓库根目录下的子目录，或仓库本身即为 Skill）",
   repoSyncFailed: "索引失败：{0}",

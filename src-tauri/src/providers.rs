@@ -8,8 +8,9 @@
 //! download paths, layout probing) behind a small, provider-agnostic surface of
 //! seven operations. [`commands::market`](crate::commands::market) and
 //! [`ops::market`](crate::ops::market) talk only to the trait, so a marketplace
-//! is one adapter: [`GithubProvider`] and [`GitlabProvider`] are the two shipped
-//! today, and neither required a command or DB orchestration change.
+//! is one adapter: [`GithubProvider`], [`GitlabProvider`] and [`BitbucketProvider`]
+//! are the three shipped today, and none required a command or DB orchestration
+//! change.
 //!
 //! Design note (design-it-twice, Plan A3 + A2 connection reuse): the trait is
 //! deliberately keyed 1:1 on the operations the command layer already performs,
@@ -94,14 +95,15 @@ pub fn provider_for(kind: &str) -> Result<Box<dyn MarketProvider>, String> {
     match kind {
         "github" | "" => Ok(Box::new(GithubProvider::new())),
         "gitlab" => Ok(Box::new(GitlabProvider::new())),
+        "bitbucket" => Ok(Box::new(BitbucketProvider::new())),
         other => Err(format!("unsupported provider: {}", other)),
     }
 }
 
 /// Pick an adapter from a user-entered reference. `add_market_by_url` receives a
-/// URL and no provider discriminator, so the host decides here. Only
-/// gitlab.com is routed to the GitLab adapter: that adapter speaks to the SaaS
-/// API and cannot address a self-hosted instance.
+/// URL and no provider discriminator, so the host decides here. Only the public
+/// SaaS hosts are routed: `gitlab.com` speaks to the SaaS API and cannot address
+/// a self-hosted instance, and Bitbucket Server is a different API again.
 pub fn provider_for_reference(raw: &str) -> Result<Box<dyn MarketProvider>, String> {
     let host = raw
         .trim()
@@ -112,7 +114,13 @@ pub fn provider_for_reference(raw: &str) -> Result<Box<dyn MarketProvider>, Stri
         .unwrap_or("");
     // `git@gitlab.com:group/repo.git` is the SSH spelling of the same host.
     let host = host.strip_prefix("git@").unwrap_or(host);
-    let kind = if host.eq_ignore_ascii_case("gitlab.com") { "gitlab" } else { "github" };
+    let kind = if host.eq_ignore_ascii_case("gitlab.com") {
+        "gitlab"
+    } else if host.eq_ignore_ascii_case("bitbucket.org") {
+        "bitbucket"
+    } else {
+        "github"
+    };
     provider_for(kind)
 }
 
@@ -832,12 +840,419 @@ impl MarketProvider for GitlabProvider {
     }
 }
 
+/// Bitbucket Cloud adapter — [`MarketProvider`] over `api.bitbucket.org/2.0`.
+///
+/// Bitbucket collapses what GitHub needs two endpoints for into one: `/src/{ref}
+/// /{path}` returns a paginated JSON listing when the path is a directory (which
+/// it must be told explicitly, with a trailing slash) and the file's raw bytes
+/// when it is not. Listing entries carry `path` + `type`
+/// (`commit_directory`/`commit_file`) and no `name`, so a skill's name is the
+/// last segment of its path.
+///
+/// Anonymous access is what this adapter can offer without a token, and it runs
+/// against a per-IP budget measured in dozens of requests per hour. A `subdir`
+/// market costs one request per skill, so a large marketplace can exhaust that
+/// budget; when it does, the API answers 429 and [`describe_status`] labels it as
+/// rate-limited rather than retrying into the hole.
+///
+/// Verified against the live API: `src/<branch>/` lists JSON `values` whose
+/// entries carry `path` + `type`, `src/<branch>/<file>` returns the raw bytes,
+/// `refs/branches/<name>` wraps the commit under `target`, and the repository
+/// payload names the default branch `mainbranch.name`.
+pub struct BitbucketProvider {
+    client: std::sync::OnceLock<reqwest::Client>,
+}
+
+/// Bitbucket caps a `pagelen` page at 100 entries.
+const SRC_PAGE_SIZE: usize = 100;
+/// Only a bound on runaway paging: an absent `next` ends the walk.
+const SRC_MAX_PAGES: usize = 20;
+
+impl BitbucketProvider {
+    pub fn new() -> Self {
+        Self { client: std::sync::OnceLock::new() }
+    }
+
+    fn client(&self) -> Result<&reqwest::Client, String> {
+        pooled_client(&self.client)
+    }
+
+    /// Percent-encode a path or ref. `/` stays verbatim in a path (Bitbucket
+    /// takes the whole repo-relative path as free-form tail) but must be escaped
+    /// in a ref, where it would otherwise read as another segment.
+    fn encode(value: &str, keep_slash: bool) -> String {
+        value
+            .bytes()
+            .map(|b| match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                    (b as char).to_string()
+                }
+                b'/' if keep_slash => "/".to_string(),
+                _ => format!("%{:02X}", b),
+            })
+            .collect()
+    }
+
+    fn repo_url(owner: &str, repo: &str) -> String {
+        format!(
+            "https://api.bitbucket.org/2.0/repositories/{}/{}",
+            Self::encode(owner, false),
+            Self::encode(repo, false)
+        )
+    }
+
+    /// Listing URL for a directory. The trailing slash is what asks for a
+    /// listing; without it the API reads the path as a file, and the root path
+    /// without it collapses to the repository resource itself.
+    fn listing_url(owner: &str, repo: &str, branch: &str, path: &str) -> String {
+        let trimmed = path.trim_start_matches('/').trim_end_matches('/');
+        let dir = if trimmed.is_empty() {
+            String::new()
+        } else {
+            format!("{}/", Self::encode(trimmed, true))
+        };
+        format!(
+            "{}/src/{}/{}?pagelen={}",
+            Self::repo_url(owner, repo),
+            Self::encode(branch, false),
+            dir,
+            SRC_PAGE_SIZE
+        )
+    }
+
+    fn file_url(owner: &str, repo: &str, branch: &str, path: &str) -> String {
+        format!(
+            "{}/src/{}/{}",
+            Self::repo_url(owner, repo),
+            Self::encode(branch, false),
+            Self::encode(path.trim_start_matches('/'), true)
+        )
+    }
+
+    async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>, String> {
+        get_bytes(self.client()?, url, "application/json").await
+    }
+
+    /// Raw file content. `*/*` because a JSON `Accept` invites the API to answer
+    /// a `src` file request with metadata instead of the bytes themselves.
+    async fn fetch_raw(&self, url: &str) -> Result<Vec<u8>, String> {
+        get_bytes(self.client()?, url, "*/*").await
+    }
+
+    async fn fetch_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, String> {
+        let bytes = self.fetch_bytes(url).await?;
+        // Bitbucket mixes plain REST with the web app: some failures arrive as a
+        // 200 and an HTML body, which would otherwise surface as a cryptic
+        // `expected value at line 1 column 1`.
+        if bytes.starts_with(b"<") {
+            return Err("HTML response where JSON was expected".to_string());
+        }
+        serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+    }
+
+    /// Walk every page by following `next` verbatim. Its `page=` token is opaque
+    /// and not a page number, so rebuilding the URL from a counter would loop on
+    /// the first page forever.
+    async fn fetch_listing(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        path: &str,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let mut url = Self::listing_url(owner, repo, branch, path);
+        let mut entries: Vec<serde_json::Value> = Vec::new();
+        for _ in 0..SRC_MAX_PAGES {
+            let page: serde_json::Value = self.fetch_json(&url).await?;
+            if let Some(values) = page.get("values").and_then(|v| v.as_array()) {
+                entries.extend(values.iter().cloned());
+            }
+            let next = page
+                .get("next")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            match next {
+                Some(next) => url = next,
+                None => break,
+            }
+        }
+        Ok(entries)
+    }
+
+    /// The listing entries that are candidate skills, as `(name, repo path)`. A
+    /// skill's name is the last path segment because these entries carry no
+    /// `name`; the trailing slash is trimmed defensively so it cannot leak into
+    /// the `SKILL.md` URL as a doubled separator.
+    fn skill_dirs(entries: &[serde_json::Value]) -> Vec<(String, String)> {
+        entries
+            .iter()
+            .filter_map(|entry| {
+                if entry.get("type").and_then(|v| v.as_str()) != Some("commit_directory") {
+                    return None;
+                }
+                let path = entry.get("path").and_then(|v| v.as_str())?.trim_end_matches('/');
+                let name = path.rsplit('/').next()?;
+                if name.is_empty() {
+                    return None;
+                }
+                Some((name.to_string(), path.to_string()))
+            })
+            .collect()
+    }
+
+    async fn probe_skill_md(
+        &self,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+        skill_name: &str,
+        skill_md_path: &str,
+    ) -> Result<(String, String, Option<String>), String> {
+        let url = Self::file_url(owner, repo, branch, skill_md_path);
+        let bytes = self.fetch_raw(&url).await?;
+        hash_skill_payload(skill_name, &bytes)
+    }
+
+    /// The fallback when a repo payload carries no `mainbranch`: probe the two
+    /// conventional names, as the other adapters do.
+    async fn probe_branch(&self, owner: &str, repo: &str, candidate: &str) -> bool {
+        let url = format!(
+            "{}/refs/branches/{}",
+            Self::repo_url(owner, repo),
+            Self::encode(candidate, false)
+        );
+        self.fetch_bytes(&url).await.is_ok()
+    }
+}
+
+impl MarketProvider for BitbucketProvider {
+    fn kind(&self) -> &'static str {
+        "bitbucket"
+    }
+
+    fn display_url(&self, owner: &str, repo: &str, branch: &str) -> String {
+        format!("https://bitbucket.org/{}/{}/src/{}", owner, repo, branch)
+    }
+
+    fn parse_reference(&self, raw: &str) -> Result<(String, String, Option<String>), String> {
+        let trimmed = raw.trim();
+        let without_host = trimmed
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+        let without_host = without_host
+            .strip_prefix("bitbucket.org/")
+            .or_else(|| without_host.strip_prefix("git@bitbucket.org:"))
+            .unwrap_or(without_host)
+            .trim_end_matches('/');
+        let segments: Vec<&str> = without_host.split('/').filter(|s| !s.is_empty()).collect();
+        // A workspace owns exactly one level, unlike GitLab's nested groups, so
+        // the first two segments are the coordinates and anything after them is
+        // either a ref-scoped path or a section we do not care about.
+        if segments.len() < 2 {
+            return Err(format!("无法解析市场地址: {}", raw));
+        }
+        let owner = segments[0].to_string();
+        let name = segments[1].trim_end_matches(".git").to_string();
+        if owner.is_empty() || name.is_empty() {
+            return Err(format!("无法解析市场地址: {}", raw));
+        }
+        // `src` is the only verb that puts a ref first; `browse`/`raw` do too, and
+        // refs with slashes are not claimable beyond their leading segment.
+        let branch_hint = segments
+            .iter()
+            .position(|p| matches!(*p, "src" | "browse" | "raw"))
+            .and_then(|idx| segments.get(idx + 1))
+            .map(|s| s.to_string());
+        Ok((owner, name, branch_hint))
+    }
+
+    fn resolve_branch<'a>(
+        &'a self,
+        owner: &'a str,
+        repo: &'a str,
+    ) -> BoxFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            let repo_url = Self::repo_url(owner, repo);
+            match self.fetch_bytes(&repo_url).await {
+                Ok(bytes) => {
+                    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                        // Bitbucket calls it `mainbranch`, and unlike the other
+                        // two it is an object rather than a bare name.
+                        if let Some(name) = json
+                            .get("mainbranch")
+                            .and_then(|b| b.get("name"))
+                            .and_then(|v| v.as_str())
+                        {
+                            if !name.is_empty() {
+                                return Ok(name.to_string());
+                            }
+                        }
+                    }
+                    // Metadata reachable but no mainbranch — fall through to probe.
+                }
+                Err(e) => {
+                    return Err(format!("Cannot access {}/{}: {}", owner, repo, e));
+                }
+            }
+            for candidate in ["main", "master"] {
+                if self.probe_branch(owner, repo, candidate).await {
+                    return Ok(candidate.to_string());
+                }
+            }
+            Err(format!("Cannot find default branch for {}/{}", owner, repo))
+        })
+    }
+
+    fn detect_layout<'a>(
+        &'a self,
+        owner: &'a str,
+        repo: &'a str,
+        branch: &'a str,
+    ) -> BoxFuture<'a, Option<&'static str>> {
+        Box::pin(async move {
+            let root_md = Self::file_url(owner, repo, branch, "/SKILL.md");
+            if self.fetch_raw(&root_md).await.is_ok() {
+                return Some("root");
+            }
+            if let Ok(entries) = self.fetch_listing(owner, repo, branch, "").await {
+                if !Self::skill_dirs(&entries).is_empty() {
+                    return Some("subdir");
+                }
+            }
+            None
+        })
+    }
+
+    fn discover_skills<'a>(
+        &'a self,
+        market: &'a Market,
+    ) -> BoxFuture<'a, Result<Vec<RemoteSkillProbe>, Vec<String>>> {
+        Box::pin(async move {
+            let owner = &market.owner;
+            let repo = &market.name;
+            let branch = &market.branch;
+
+            let mut probes = Vec::new();
+            let mut errors = Vec::new();
+            let display_base = self.display_url(owner, repo, branch);
+
+            if market.layout == "root" {
+                let skill_name = repo.clone();
+                let ssot = match ssot_path(&skill_name, 0) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        errors.push(format!("{}: ssot path error: {}", skill_name, e));
+                        return Err(errors);
+                    }
+                };
+                let path = "/SKILL.md".to_string();
+                match self
+                    .probe_skill_md(owner, repo, branch, &skill_name, &path)
+                    .await
+                {
+                    Ok((content_hash, core_hash, description)) => probes.push(RemoteSkillProbe {
+                        skill_name,
+                        remote_url: display_base,
+                        skill_md_repo_path: path,
+                        ssot_path: ssot.to_string_lossy().to_string(),
+                        remote_content_hash: content_hash,
+                        remote_core_hash: core_hash,
+                        description,
+                    }),
+                    Err(e) => errors.push(format!("{}: {}", skill_name, e)),
+                }
+                return if probes.is_empty() { Err(errors) } else { Ok(probes) };
+            }
+
+            let entries = match self.fetch_listing(owner, repo, branch, "").await {
+                Ok(v) => v,
+                Err(e) => return Err(vec![format!("root listing: {}", e)]),
+            };
+            for (skill_name, entry_path) in Self::skill_dirs(&entries) {
+                let skill_md_path = format!("/{}/SKILL.md", entry_path);
+                let remote_url = format!("{}/{}", display_base, entry_path);
+                let ssot = match ssot_path(&skill_name, 0) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        errors.push(format!("{}: ssot path error: {}", skill_name, e));
+                        continue;
+                    }
+                };
+                match self
+                    .probe_skill_md(owner, repo, branch, &skill_name, &skill_md_path)
+                    .await
+                {
+                    Ok((content_hash, core_hash, description)) => probes.push(RemoteSkillProbe {
+                        skill_name,
+                        remote_url,
+                        skill_md_repo_path: skill_md_path,
+                        ssot_path: ssot.to_string_lossy().to_string(),
+                        remote_content_hash: content_hash,
+                        remote_core_hash: core_hash,
+                        description,
+                    }),
+                    Err(e) => errors.push(format!("{}: {}", skill_name, e)),
+                }
+            }
+
+            if probes.is_empty() && !errors.is_empty() {
+                Err(errors)
+            } else {
+                Ok(probes)
+            }
+        })
+    }
+
+    fn fetch_skill_md<'a>(
+        &'a self,
+        market: &'a Market,
+        skill_name: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<u8>, String>> {
+        Box::pin(async move {
+            // root  → /SKILL.md; subdir → /{skill_name}/SKILL.md
+            let path = match market.layout.as_str() {
+                "root" => "/SKILL.md".to_string(),
+                _ => format!("/{}/SKILL.md", skill_name),
+            };
+            let url = Self::file_url(&market.owner, &market.name, &market.branch, &path);
+            self.fetch_raw(&url).await
+        })
+    }
+
+    fn latest_commit_sha<'a>(
+        &'a self,
+        owner: &'a str,
+        repo: &'a str,
+        branch: &'a str,
+    ) -> BoxFuture<'a, Option<String>> {
+        Box::pin(async move {
+            let url = format!(
+                "{}/refs/branches/{}",
+                Self::repo_url(owner, repo),
+                Self::encode(branch, false)
+            );
+            let json: serde_json::Value = self.fetch_json(&url).await.ok()?;
+            // A branch ref wraps its commit under `target`, as in the GitLab and
+            // GitHub listing shapes but one level deeper here.
+            json.get("target")?
+                .get("hash")?
+                .as_str()
+                .map(|s| s.to_string())
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn gitlab() -> GitlabProvider {
         GitlabProvider::new()
+    }
+
+    fn bitbucket() -> BitbucketProvider {
+        BitbucketProvider::new()
     }
 
     fn assert_parsed(raw: &str, owner: &str, name: &str, branch: Option<&str>) {
@@ -853,10 +1268,11 @@ mod tests {
         assert_eq!(provider_for("github").unwrap().kind(), "github");
         assert_eq!(provider_for("").unwrap().kind(), "github");
         assert_eq!(provider_for("gitlab").unwrap().kind(), "gitlab");
+        assert_eq!(provider_for("bitbucket").unwrap().kind(), "bitbucket");
         // `map` because `unwrap_err` wants `Debug` on the Ok side, which a trait object lacks.
         assert_eq!(
-            provider_for("bitbucket").map(|_| ()).unwrap_err(),
-            "unsupported provider: bitbucket"
+            provider_for("azure-devops").map(|_| ()).unwrap_err(),
+            "unsupported provider: azure-devops"
         );
     }
 
@@ -869,6 +1285,14 @@ mod tests {
             "git@gitlab.com:g/r.git",
         ] {
             assert_eq!(provider_for_reference(url).unwrap().kind(), "gitlab", "{}", url);
+        }
+        for url in [
+            "https://bitbucket.org/ws/repo",
+            "http://bitbucket.org/ws/repo",
+            "bitbucket.org/ws/repo",
+            "git@bitbucket.org:ws/repo.git",
+        ] {
+            assert_eq!(provider_for_reference(url).unwrap().kind(), "bitbucket", "{}", url);
         }
         for url in ["https://github.com/o/r", "owner/repo", "https://notgitlab.com/o/r"] {
             assert_eq!(provider_for_reference(url).unwrap().kind(), "github", "{}", url);
@@ -990,6 +1414,90 @@ mod tests {
             vec![("skill-a", "skill-a"), ("skill-b", "skill-b")]
         );
         assert!(GitlabProvider::skill_dirs(&[]).is_empty());
+    }
+
+    #[test]
+    fn bitbucket_urls_and_coordinates() {
+        assert_eq!(
+            bitbucket().display_url("ws", "repo", "main"),
+            "https://bitbucket.org/ws/repo/src/main"
+        );
+        for raw in [
+            "https://bitbucket.org/ws/repo",
+            "http://bitbucket.org/ws/repo/",
+            "bitbucket.org/ws/repo",
+            "git@bitbucket.org:ws/repo.git",
+            "ws/repo",
+        ] {
+            let (o, n, b) = bitbucket()
+                .parse_reference(raw)
+                .unwrap_or_else(|e| panic!("{} should parse: {}", raw, e));
+            assert_eq!((o.as_str(), n.as_str()), ("ws", "repo"), "{}", raw);
+            assert_eq!(b, None, "no ref to read from {}", raw);
+        }
+        // `src/<ref>` is where a branch can be claimed; the rest is a repo path.
+        let (o, n, b) = bitbucket()
+            .parse_reference("https://bitbucket.org/ws/repo/src/main/skills/foo")
+            .unwrap();
+        assert_eq!((o.as_str(), n.as_str(), b.as_deref()), ("ws", "repo", Some("main")));
+        let (_, _, b) = bitbucket()
+            .parse_reference("https://bitbucket.org/ws/repo/browse/master/SKILL.md")
+            .unwrap();
+        assert_eq!(b.as_deref(), Some("master"));
+        for raw in ["", "   ", "bitbucket.org", "https://bitbucket.org/ws", "just-a-name"] {
+            assert!(bitbucket().parse_reference(raw).is_err(), "{} should be rejected", raw);
+        }
+    }
+
+    #[test]
+    fn bitbucket_asks_for_a_listing_with_a_trailing_slash() {
+        assert_eq!(
+            BitbucketProvider::listing_url("ws", "repo", "main", ""),
+            "https://api.bitbucket.org/2.0/repositories/ws/repo/src/main/?pagelen=100"
+        );
+        assert_eq!(
+            BitbucketProvider::listing_url("ws", "repo", "main", "/skills"),
+            "https://api.bitbucket.org/2.0/repositories/ws/repo/src/main/skills/?pagelen=100"
+        );
+        assert_eq!(
+            BitbucketProvider::file_url("ws", "repo", "main", "/skills/a/SKILL.md"),
+            "https://api.bitbucket.org/2.0/repositories/ws/repo/src/main/skills/a/SKILL.md"
+        );
+        // A slash in a ref must not become another path segment, while a slash in
+        // a path stays a path separator and a space still gets escaped.
+        assert_eq!(
+            BitbucketProvider::file_url("ws", "repo", "release/1.2", "/a b/SKILL.md"),
+            "https://api.bitbucket.org/2.0/repositories/ws/repo/src/release%2F1.2/a%20b/SKILL.md"
+        );
+    }
+
+    #[test]
+    fn bitbucket_paths_survive_a_personal_workspace_slug() {
+        // `~<account id>` is the legacy spelling of a personal workspace; `~` is
+        // an unreserved character and must reach the API untouched.
+        assert_eq!(
+            BitbucketProvider::repo_url("~melondy", "repo"),
+            "https://api.bitbucket.org/2.0/repositories/~melondy/repo"
+        );
+    }
+
+    #[test]
+    fn bitbucket_reads_skill_dirs_from_path_not_name() {
+        let entries = serde_json::json!([
+            { "path": "skill-a/", "type": "commit_directory" },
+            { "path": "skills/deep/skill-b", "type": "commit_directory" },
+            { "path": "SKILL.md", "type": "commit_file" },
+            { "type": "commit_directory" },
+            { "path": "/", "type": "commit_directory" },
+        ]);
+        assert_eq!(
+            BitbucketProvider::skill_dirs(entries.as_array().unwrap()),
+            vec![
+                ("skill-a".to_string(), "skill-a".to_string()),
+                ("skill-b".to_string(), "skills/deep/skill-b".to_string()),
+            ]
+        );
+        assert!(BitbucketProvider::skill_dirs(&[]).is_empty());
     }
 
     #[test]
