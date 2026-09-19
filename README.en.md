@@ -110,7 +110,7 @@ The MCP server (`skill-manager-mcp`) is the second binary of the same `src-tauri
 
 ### Release
 
-Installers for all platforms are built automatically via GitHub Actions — no local packaging needed:
+Installers for Windows and Linux are built automatically via GitHub Actions — no local packaging needed (macOS is not in the release matrix):
 
 1. Make sure `main` is up to date;
 2. Push a version tag:
@@ -120,8 +120,8 @@ Installers for all platforms are built automatically via GitHub Actions — no l
    git push origin vX.Y.Z
    ```
 
-3. CI (`.github/workflows/release.yml`) builds `.msi` / `.nsis.exe` (Windows),
-   `.msi` / `.nsis.exe` (Windows) and `.deb` / `.AppImage` (Linux) on two runners
+3. CI (`.github/workflows/release.yml`) builds `.msi` / `.nsis.exe` (Windows)
+   and `.deb` / `.AppImage` (Linux) on two runners
    (macOS is not in the matrix yet — build it locally with `pnpm tauri build`),
    and collects them into a **GitHub Release draft**;
 4. Publish the draft from the Releases page.
