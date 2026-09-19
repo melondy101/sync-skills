@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 冲突自动裁决（M5 补全）：`commands/conflicts.rs` 抽出 `promote_version`，手动与自动共用同一条"提升为 SSOT 并广播"的路径；新 IPC `auto_resolve_conflicts` 提供 `newest`（比 `SKILL.md` 修改时间）与 `preferred-tool`（按工具列表顺序取第一个确实持有版本的工具）两种策略，时间戳读不到或并列时**不裁决**并把原因返回，冲突留在面板等手动处理；自动裁决在 `skill_conflicts.resolved_by` 记为 `auto:<strategy>:<tool>` 以区分人工点击；冲突横幅新增策略下拉 + 带确认对话框的「自动裁决」按钮
 
 ### Fixed
+- 全新 clone 根本构建不了（chicken-and-egg）：`bundle.externalBin` 由 tauri 的构建脚本在**每一次** cargo 调用时校验 `src-tauri/bin/skill-manager-mcp-<triple>[.exe]`，而该文件只能由构建产物 stage 出来，于是 `cargo build` / `tauri dev` 一律报 `resource path ... doesn't exist`。`pnpm stage:sidecar` 现在带 `--allow-placeholder`——无产物时先写空占位打破循环，首次构建后再跑一次即替换为真二进制（`beforeBundleCommand` 保持严格：缺真二进制就报错，绝不把占位打进安装包）。启动步骤同步补进 `AGENTS.md`、`CONTRIBUTING.md`、README ×3 与 `docs/HANDOFF.md`
 - 全自动模式下文件监听只重扫、不同步：`App.tsx` 的 `skill-file-changed` 处理改为按 1.5s debounce 触发 `fullScan` + 同步，半自动模式仍只提示
 - 本地开发/打包无法启动：加入第二个 `[[bin]]`（`skill-manager-mcp`）之后，`cargo run` 报 `unable to find binary 'skill-manager'`/`could not determine which binary to run`，而 `tauri dev` 与 `tauri build` 都经它启动。`src-tauri/Cargo.toml` 补 `default-run = "skill-manager"`（MCP 面板此前无法在真实窗口点测即源于此）
 - 设置面板的语言选项显示原始键名 `langZH` / `langEN`：`SettingsPanel` 取 `t(\`lang${lang.toUpperCase()}\`)`，词典里却只有 `langZh` / `langEn`，`t()` 找不到键就回显键名。两侧词典改为 `langZH: "简体中文"` / `langEN: "English"`（语言名按惯例用自称，两种界面语言下都一样），并删除无人引用的 `langZh` / `langEn`

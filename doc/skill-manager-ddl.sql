@@ -2,6 +2,13 @@
 -- Skill Manager — Database DDL (SQLite)
 -- 技术选型：Tauri v2 + React (SPA) + SQLite
 -- 哈希方案：SHA-256 前 8 字节转 INTEGER（64 位有符号）
+--
+-- ⚠️ 历史快照（阶段一设计稿）：只含 tools / projects / skills /
+--    skill_installations / sync_logs 五张表。**当前 schema 的唯一真源是
+--    `src-tauri/src/db.rs` 的建表与迁移逻辑**（另有 markets、remote_skills、
+--    skill_conflicts、dismissed_updates、market_templates、projects 扩展列等，
+--    并对老库做 pragma_table_info 驱动的 ALTER 迁移）。改表结构请改 db.rs，
+--    不要照这份文件推理，也不要把它当作迁移脚本执行。
 -- =============================================================
 
 -- 开启外键约束（SQLite 默认关闭）

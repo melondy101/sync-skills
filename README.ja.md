@@ -40,15 +40,16 @@ Skill Manager はデスクトップ GUI を提供し、すべての Skill を一
 - **Skill スキャン** — ディレクトリを再帰的にスキャンし、`SKILL.md` を含むスキルディレクトリをすべて特定
 - **SSOT 同期** — `~/.skill-manager/ssot/` を中心としたハブ＆スポークモデルで各ツールに配布
 - **リバース同期** — SSOT から指定ツールディレクトリへプッシュし、ローカル変更を上書き
-- **コンフリクト管理** — ツール間のバージョンコンフリクトを検出し、diff プレビューと解決を提供
+- **コンフリクト管理** — ツール間のバージョンコンフリクトを検出し、diff プレビュー、手動解決、自動裁定（最終更新 / 優先ツール。根拠が不十分な場合は手動に委ねる）を提供
 - **変更の却下** — 特定のツールの変更を永続的に無視。内容が再度変更されるまで再通知しない
 - **プロジェクト別管理** — プロジェクトごとに独立した Skill セットを構成、編集対応
 - **差分検出** — LCS diff ビュー（並べて表示 / 統合の 2 モード）を内蔵し、ファイル単位の変更を正確に表示
-- **Skill マーケット** — GitHub / GitLab / Bitbucket リポジトリからスキルを閲覧・検索・ワンクリックインストール。マーケットソース管理と一括操作に対応
+- **Skill マーケット** — GitHub / GitLab（セルフホストインスタンス含む）/ Bitbucket / Azure DevOps リポジトリからスキルを閲覧・検索・ワンクリックインストール。マーケットソース管理と一括操作に対応（プライベートな Azure DevOps 組織は環境変数 `AZURE_DEVOPS_PAT` が必要）
 - **ファイル監視** — SSOT ツリーを監視し、ディスク変更時に自動同期（full-auto）または通知（semi-auto）
 - **アプリ内アップデート** — 新バージョンの検知・ダウンロード・インストールをワンクリックで実行
 - **オンボーディングとヘルスチェック** — 初回起動ウィザード、Lint による自動修復付きヘルスチェック、SKILL.md 内蔵エディタ
 - **キーボードショートカット** — 検索 / 移動 / 同期 / ソース管理をグローバルに、`?` で早見表を表示
+- **MCP サーバー** — 読み取り専用 stdio サーバー `skill-manager-mcp`（GUI と同じインデックスを参照）。設定パネルで Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf / Codex に `skill-manager` を登記・解除
 - **テーマ切替と多言語** — ライト / ダーク / システム追従、中文 / English / 日本語
 - **アクティビティログ** — すべての操作の完全な監査記録
 
@@ -102,8 +103,11 @@ pnpm tauri build
 
 ```bash
 pnpm install
+pnpm stage:sidecar   # 初回必須（下記参照）
 pnpm tauri dev
 ```
+
+`tauri.conf.json` の `bundle.externalBin` により、Tauri のビルドスクリプトは**すべての** cargo 実行時に `src-tauri/bin/skill-manager-mcp-<target-triple>[.exe]` の存在を検証します。そのため新規 clone ではまず `pnpm stage:sidecar` が必要です（この時点では生成物が無いので、プレースホルダーを書いて循環を断ちます）。初回ビルド後に同じコマンドを**もう一度**実行すると本物のサーバーバイナリに差し替わります。省略すると `pnpm tauri dev` は `resource path ... doesn't exist` で失敗します。
 
 ### リリース
 
@@ -172,7 +176,7 @@ sync-skills/
 | v0.4.0 | ✅ 完了 | 名前をアイデンティティとして、コンフリクト検出/解決、タイムスタンプ、プロジェクト編集、リバース同期、変更却下 |
 | v0.5.0 | ✅ 完了 | LockManager 統合、core_hash 変更検出 |
 | v0.6.0 | ✅ 完了 | アプリ内アップデート、オンボーディングウィザード、ヘルスチェック/Lint、内蔵エディタ、Market の一括操作、ファイルウォッチャーによる自動同期、GitLab マーケットソース、全ダイアログのフォーカストラップ/アクセシビリティ統一、グローバルキーボードショートカットと `?` 早見表、Market リストの描画性能、PRD §14 のパス規則を一元検証しフォームに即時表示、破損インデックスの自動回復、ワークスペース自動検出とワンクリックインポート、定時の更新検出（デフォルト無効）、full-auto 監視で実際に同期が走るよう修正 |
-| v0.7.0 | 🟡 進行中 | MCP 統合：`skill-manager-mcp` 読み取り専用 stdio サーバー（GUI と同じ SQLite インデックス上の 9 ツール）と、設定 ▸ MCP パネルで Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf に `skill-manager` を冪等に登記。残作業：Codex の TOML 設定、サーバー実行ファイルのバンドル。Bitbucket マーケットソースもこの段階で実装済み |
+| v0.7.0 | ✅ 完了 | MCP 統合：読み取り専用 stdio サーバー `skill-manager-mcp`（GUI と同じ SQLite インデックス上の 9 ツール）と、設定 ▸ MCP パネルで Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf の JSON および Codex の TOML（`toml_edit` でコメントを保持）に `skill-manager` を冪等に登記。サーバー実行ファイルはインストーラーに同梱（`bundle.externalBin` + `pnpm stage:sidecar`）。マーケットソースは Bitbucket Cloud・セルフホスト GitLab・Azure DevOps まで整備。コンフリクトの自動裁定（最終更新 / 優先ツール） |
 
 > 上のバージョン番号はロードマップ上のステージ名で、公開されているパッケージバージョン（最新タグは `v0.2.1`）とは独立しています。
 

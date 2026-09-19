@@ -40,15 +40,16 @@ Skill Manager provides a desktop GUI to manage all your skills in one place and 
 - **Skill Scanning** — Recursively scan directories to discover all `SKILL.md`-based skill directories
 - **SSOT Sync** — Hub-and-spoke model centered on `~/.skill-manager/ssot/`, distributing to all tools
 - **Reverse Sync** — Push SSOT content to a specific tool directory, overwriting local changes
-- **Conflict Management** — Detect version conflicts between tools with diff preview and resolution
+- **Conflict Management** — Detect version conflicts between tools, with diff preview, manual resolution and automatic adjudication (newest edit / preferred tool; ambiguous cases are left to you)
 - **Change Dismissal** — Persistently ignore specific tool changes until content changes again
 - **Project-level Management** — Configure independent skill sets per project, with edit support
 - **Diff Detection** — Built-in LCS diff view (side-by-side / unified) showing precise file-level changes
-- **Skill Market** — Browse, search, and one-click install skills from GitHub / GitLab / Bitbucket repos with built-in market source management
+- **Skill Market** — Browse, search, and one-click install skills from GitHub / GitLab (including self-hosted instances) / Bitbucket / Azure DevOps repos with built-in market source management (private Azure DevOps orgs need the `AZURE_DEVOPS_PAT` environment variable)
 - **File Watching** — Monitors the SSOT tree and auto-syncs on disk changes (full-auto) or notifies (semi-auto)
 - **App Self-update** — One-click detection, download, and install of new versions
 - **Onboarding & Health Check** — First-run wizard, built-in Lint checks with auto-fix, and an in-app SKILL.md editor
 - **Keyboard Shortcuts** — Global search / navigation / sync / source management, with a `?` cheat sheet
+- **MCP Server** — Read-only stdio server (`skill-manager-mcp`, sharing the GUI's index); the Settings panel registers / unregisters `skill-manager` in Claude Code, Claude Desktop, Cursor, Qoder, Gemini CLI, Windsurf and Codex
 - **Theme & i18n** — Light / Dark / Follow System, 中文 / English / 日本語
 - **Activity Logs** — Complete audit trail of all operations
 
@@ -102,8 +103,11 @@ Build artifacts (installers) are in `src-tauri/target/release/bundle/`.
 
 ```bash
 pnpm install
+pnpm stage:sidecar   # required on a fresh clone, see below
 pnpm tauri dev
 ```
+
+`bundle.externalBin` in `tauri.conf.json` makes Tauri's build script check for `src-tauri/bin/skill-manager-mcp-<target-triple>[.exe]` on **every** cargo invocation, so a fresh clone has to run `pnpm stage:sidecar` first — nothing is built yet at that point, so the script writes a placeholder to break the cycle. Run the same command **again** after the first build to swap the placeholder for the real server binary. Skipping the step fails `pnpm tauri dev` with `resource path ... doesn't exist`.
 
 ### Release
 
@@ -172,7 +176,7 @@ The full pre-commit checklist (type check / lint / unit tests, 6 commands across
 | v0.4.0 | ✅ Done | Name-as-identity, conflict detection/resolution, timestamps, project edit, reverse sync, change dismissal |
 | v0.5.0 | ✅ Done | LockManager integration, core_hash change detection |
 | v0.6.0 | ✅ Done | In-app update, onboarding wizard, health check / Lint, built-in editor, Market batch operations, file-watcher auto-sync, GitLab market sources, dialog-wide focus trap & a11y, global keyboard shortcuts with a `?` cheat sheet, Market list render performance, PRD §14 path rules enforced in one place with inline form feedback, corrupt-index self-healing, workspace discovery and one-click import, scheduled update checks (off by default), full-auto watcher now really syncs |
-| v0.7.0 | 🟡 In progress | MCP integration: `skill-manager-mcp`, a read-only stdio server (9 tools over the same SQLite index the GUI writes), plus a Settings ▸ MCP panel that idempotently registers `skill-manager` in Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf. Still ahead: Codex's TOML config and bundling the server binary with the installer. Bitbucket market sources landed in this stage |
+| v0.7.0 | ✅ Done | MCP integration: `skill-manager-mcp`, a read-only stdio server (9 tools over the same SQLite index the GUI writes), plus a Settings ▸ MCP panel that idempotently registers `skill-manager` in the JSON configs of Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf and in Codex's TOML (comments preserved through `toml_edit`), with the binary shipped inside the installer (`bundle.externalBin` + `pnpm stage:sidecar`); market sources completed with Bitbucket Cloud, self-hosted GitLab and Azure DevOps; automatic conflict adjudication (newest edit / preferred tool) |
 
 > The versions above are roadmap stage labels and are independent of the published package version (latest tag: `v0.2.1`).
 

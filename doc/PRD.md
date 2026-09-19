@@ -224,7 +224,7 @@ function scan(dir):
 
 ### 5.9 Skill `Market`（远程仓库）
 
-用户可从 GitHub 仓库浏览、搜索、一键安装 Skill。应用内置 5 个默认市场源，并支持用户添加自定义仓库。
+用户可从远程仓库浏览、搜索、一键安装 Skill。支持四家托管平台，统一走 `providers.rs` 的 `MarketProvider` seam：GitHub、GitLab（含自建实例，主机地址随 `markets.remote_url` 落库）、Bitbucket Cloud、Azure DevOps（私有组织需环境变量 `AZURE_DEVOPS_PAT`，不落盘）。应用内置 5 个默认市场源，并支持用户添加自定义仓库。
 
 **核心能力：**
 
@@ -717,6 +717,7 @@ Rust 后端通过 `#[tauri::command]` 暴露接口给 React 前端。
 |---------|------|------|------|
 | `list_conflicts` | `project_id?` | `Vec<ConflictView>` | 获取未解决冲突列表。 |
 | `resolve_conflict` | `conflict_id, keep_tool_name, project_id` | `Result<SyncResult>` | 裁决冲突，保留指定版本。 |
+| `auto_resolve_conflicts` | `strategy, preferred_tools?, project_id?` | `Vec<AutoResolveOutcome>` | 按策略批量裁决：`newest`（`SKILL.md` 修改时间）或 `preferred-tool`（工具列表顺序）。证据不足（时间戳不可读或并列、无匹配的首选工具）时不裁决，`reason` 说明原因。 |
 | `get_sync_logs` | `skill_id?, limit` | `Vec<SyncLog>` | 查询同步日志。 |
 
 #### 17.3.6 远程 `Market`
@@ -983,3 +984,4 @@ Rust 后端通过 `#[tauri::command]` 暴露接口给 React 前端。
 | 2026-08-18 | v1.2 | §5.10 移除“待确定事项 1-98”清单；市场 UI 实施后已全部决策并落地，改为指向 `docs/market-ui-redesign.md` §4 和 `docs/market-ui-impl-guide.md`。 |
 | 2026-09-12 | v1.3 | 结构与可读性优化：新增目录，统一 Markdown 排版和术语，修正核心表数量，补齐已实现的 Tauri Command。 |
 | 2026-09-19 | v1.4 | §11 改为逐项核对过的落地状态表 + 剩余开放项；`SSOT` 路径全部改为代码实际使用的 `~/.skill-manager/ssot/`；§17.3 补 `check_path` / `discover_workspaces` / `mcp_*` / `get_db_recovery`。 |
+| 2026-09-19 | v1.5 | §11 五项开放全部落地后收口（安装包携带 server 二进制、Codex TOML 登记、GitLab 自建实例、Azure DevOps、冲突自动裁决），M9 落点按代码更正为 `ops/mod.rs::check_single_skill`；§5.9 改为四家托管平台并写明凭据只走 `AZURE_DEVOPS_PAT`；§17.3 补 `auto_resolve_conflicts`。 |

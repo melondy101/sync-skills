@@ -23,6 +23,10 @@
 # 安装依赖（必须用 pnpm）
 pnpm install
 
+# 首次 clone 必须：为 bundle.externalBin 准备 src-tauri/bin/ 下的 server 二进制
+# （没有构建产物时写占位；首次构建后再跑一次换成真的）
+pnpm stage:sidecar
+
 # 启动开发环境（前端 Vite + Rust 后端 + 桌面窗口）
 pnpm tauri dev
 

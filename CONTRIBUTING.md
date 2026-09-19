@@ -10,6 +10,7 @@
 
 ```bash
 pnpm install        # 安装依赖
+pnpm stage:sidecar  # 首次必须：为 bundle.externalBin 准备 src-tauri/bin/ 下的 server 二进制（详见 AGENTS.md「构建 / 开发」）
 pnpm tauri dev      # 启动开发环境
 ```
 

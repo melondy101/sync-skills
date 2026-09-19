@@ -40,15 +40,16 @@ Skill Manager 提供一个桌面 GUI，让你在一个地方管理所有 Skill�
 - **Skill 扫描** — 递归扫描目录，识别所有包含 `SKILL.md` 的技能目录
 - **SSOT 同步** — 以 `~/.skill-manager/ssot/` 为中心，hub-and-spoke 模型分发到各工具
 - **反向同步** — 从 SSOT 推送到指定工具目录，覆盖本地更改
-- **冲突管理** — 检测不同工具间的版本冲突，支持 diff 预览和裁决
+- **冲突管理** — 检测不同工具间的版本冲突，支持 diff 预览、手动裁决与自动裁决（最新修改 / 首选工具，证据不足时留给人）
 - **变更忽略** — 持久化忽略特定工具的变更，hash 匹配则不再提示
 - **项目级管理** — 为不同项目配置独立的 Skill 集合，支持编辑
 - **差异检测** — 内置 LCS diff 视图（并排 / 统一两种模式），精确展示文件级变更
-- **Skill 市场** — 从 GitHub / GitLab / Bitbucket 仓库浏览、搜索、一键安装 Skill，内置市场源管理与批量操作
+- **Skill 市场** — 从 GitHub / GitLab（含自建实例）/ Bitbucket / Azure DevOps 仓库浏览、搜索、一键安装 Skill，内置市场源管理与批量操作（私有 Azure 组织需环境变量 `AZURE_DEVOPS_PAT`）
 - **文件监听** — 监听 SSOT 目录，磁盘变更后自动同步（full-auto）或提示（semi-auto）
 - **应用内更新** — 一键检测并下载安装新版本
 - **引导与健康检查** — 首次启动引导向导、内置 Lint 检查与自动修复、SKILL.md 内置编辑器
 - **键盘快捷键** — 全局搜索 / 导航 / 同步 / 源管理，`?` 随时查看速查表
+- **MCP 服务** — 对外提供只读 stdio server（`skill-manager-mcp`，与 GUI 共用同一份索引），设置面板一键把 `skill-manager` 登记 / 移除出 Claude Code、Claude Desktop、Cursor、Qoder、Gemini CLI、Windsurf 与 Codex 的 MCP 配置
 - **主题与多语言** — 亮色 / 暗色 / 跟随系统，中文 / English / 日本語
 - **活动日志** — 完整的操作审计记录
 
@@ -102,8 +103,11 @@ pnpm tauri build
 
 ```bash
 pnpm install
+pnpm stage:sidecar   # 首次必须：见下方说明
 pnpm tauri dev
 ```
+
+`tauri.conf.json` 的 `bundle.externalBin` 会让 tauri 的构建脚本在**每次** cargo 调用时校验 `src-tauri/bin/skill-manager-mcp-<target-triple>[.exe]` 是否存在，所以全新 clone 必须先跑一次 `pnpm stage:sidecar`（此时还没有构建产物，它会写一个占位文件打破这个环）；首次构建完成后**再跑一次**同样的命令，把占位换成真正的 server 二进制。跳过这一步的话 `pnpm tauri dev` 会报 `resource path ... doesn't exist`。
 
 ### 发布（Release）
 
@@ -172,7 +176,7 @@ sync-skills/
 | v0.4.0 | ✅ 已完成 | 名字即身份、冲突检测/裁决、时间戳、项目编辑、反向同步、变更忽略 |
 | v0.5.0 | ✅ 已完成 | LockManager 接入、core_hash 变更检测 |
 | v0.6.0 | ✅ 已完成 | 应用内更新、引导向导、健康检查/Lint、内置编辑器、市场批量操作、文件系统监听自动同步、GitLab 市场源、全站 Modal 无障碍统一、全局快捷键与 `?` 速查表、市场列表渲染优化、PRD §14 路径规则集中校验与表单提示、索引库损坏自愈、工作区自动发现与一键导入、定时检测更新（默认关闭）、全自动监听真正执行同步的修复 |
-| v0.7.0 | 🟡 进行中 | MCP 集成：`skill-manager-mcp` 只读 stdio server（9 个工具，与 GUI 共用 SQLite 索引）+ 设置面板「MCP 服务」把 `skill-manager` 一条幂等登记进 Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf；剩余：Codex 的 TOML 配置写入、把服务二进制打进安装包。Bitbucket 市场源同阶段落地 |
+| v0.7.0 | ✅ 已完成 | MCP 集成：`skill-manager-mcp` 只读 stdio server（9 个工具，与 GUI 共用 SQLite 索引）+ 设置面板「MCP 服务」把 `skill-manager` 幂等登记进 Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf 的 JSON 与 Codex 的 TOML（`toml_edit` 保留注释），二进制随安装包分发（`bundle.externalBin` + `pnpm stage:sidecar`）；市场源补齐 Bitbucket Cloud、GitLab 自建实例与 Azure DevOps；冲突自动裁决（最新修改 / 首选工具） |
 
 > 表中版本号是路线图阶段标号，与已发布的包版本相互独立（当前最新标签为 `v0.2.1`）。
 
