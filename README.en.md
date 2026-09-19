@@ -178,7 +178,7 @@ The full pre-commit checklist (type check / lint / unit tests, 6 commands across
 | v0.6.0 | ✅ Done | In-app update, onboarding wizard, health check / Lint, built-in editor, Market batch operations, file-watcher auto-sync, GitLab market sources, dialog-wide focus trap & a11y, global keyboard shortcuts with a `?` cheat sheet, Market list render performance, PRD §14 path rules enforced in one place with inline form feedback, corrupt-index self-healing, workspace discovery and one-click import, scheduled update checks (off by default), full-auto watcher now really syncs |
 | v0.7.0 | ✅ Done | MCP integration: `skill-manager-mcp`, a read-only stdio server (9 tools over the same SQLite index the GUI writes), plus a Settings ▸ MCP panel that idempotently registers `skill-manager` in the JSON configs of Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf and in Codex's TOML (comments preserved through `toml_edit`), with the binary shipped inside the installer (`bundle.externalBin` + `pnpm stage:sidecar`); market sources completed with Bitbucket Cloud, self-hosted GitLab and Azure DevOps; automatic conflict adjudication (newest edit / preferred tool) |
 
-> The versions above are roadmap stage labels and are independent of the published package version (latest tag: `v0.2.1`).
+> The versions above are roadmap stage labels and are independent of the published package version (latest tag: `v0.3.0`).
 
 ## License
 

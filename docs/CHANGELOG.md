@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+（暂无未发布条目）
+
+---
+
+## [0.3.0] - 2026-09-19
+
 ### Added
 - MarketProvider 抽象层：`providers.rs` 定义 `MarketProvider` trait，市场扫描/索引/安装统一走 provider 分发，不再把 GitHub 语义硬编码进 `ops/market.rs`
 - GitLab 适配器：`providers.rs::GitlabProvider` 走 gitlab.com REST v4（tree API 分页游标 + 单层失败降级），URL 解析接受 https / http / SSH 与子组路径；自建实例见下条

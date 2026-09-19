@@ -13,7 +13,7 @@
 **许可证**：AGPL-3.0-only  
 **上游仓库**：`github.com/huang-yi-dae/sync-skills`  
 
-最新发布标签为 `v0.2.1`；`main` 在其之上还有未发布的提交（MarketProvider 抽象层与 GitLab 适配、全站 modal 焦点 trap 统一、全局快捷键、市场卡片重渲染优化）。发版走 `git tag vX.Y.Z && git push origin vX.Y.Z`，由 `.github/workflows/release.yml` 出包。详见 [CHANGELOG.md](CHANGELOG.md)。
+最新发布标签为 `v0.3.0`（2026-09-19）。发版走 `git tag vX.Y.Z && git push origin vX.Y.Z`，由 `.github/workflows/release.yml` 出包；该 workflow 目前被 `02910d5`「temporarily remove workflows」临时移除、仓库里并不存在，所以推标签不会有任何构建产物——发版前需先把 `.github/workflows/` 恢复回去。详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 

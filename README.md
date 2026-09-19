@@ -178,7 +178,7 @@ sync-skills/
 | v0.6.0 | ✅ 已完成 | 应用内更新、引导向导、健康检查/Lint、内置编辑器、市场批量操作、文件系统监听自动同步、GitLab 市场源、全站 Modal 无障碍统一、全局快捷键与 `?` 速查表、市场列表渲染优化、PRD §14 路径规则集中校验与表单提示、索引库损坏自愈、工作区自动发现与一键导入、定时检测更新（默认关闭）、全自动监听真正执行同步的修复 |
 | v0.7.0 | ✅ 已完成 | MCP 集成：`skill-manager-mcp` 只读 stdio server（9 个工具，与 GUI 共用 SQLite 索引）+ 设置面板「MCP 服务」把 `skill-manager` 幂等登记进 Claude Code / Claude Desktop / Cursor / Qoder / Gemini CLI / Windsurf 的 JSON 与 Codex 的 TOML（`toml_edit` 保留注释），二进制随安装包分发（`bundle.externalBin` + `pnpm stage:sidecar`）；市场源补齐 Bitbucket Cloud、GitLab 自建实例与 Azure DevOps；冲突自动裁决（最新修改 / 首选工具） |
 
-> 表中版本号是路线图阶段标号，与已发布的包版本相互独立（当前最新标签为 `v0.2.1`）。
+> 表中版本号是路线图阶段标号，与已发布的包版本相互独立（当前最新标签为 `v0.3.0`）。
 
 ## 许可证
 
